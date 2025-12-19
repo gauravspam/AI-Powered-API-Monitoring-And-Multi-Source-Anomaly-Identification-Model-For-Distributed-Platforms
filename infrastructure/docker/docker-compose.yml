@@ -1,0 +1,196 @@
+version: "3.9"
+
+services:
+  #######################################################
+  # 1. Core Data Stores
+  #######################################################
+
+  opensearch:
+    image: opensearchproject/opensearch:latest
+    container_name: opensearch
+    environment:
+      discovery.type: single-node
+      # Reduce memory for local dev
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      plugins.security.disabled: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"   # OpenSearch API
+    networks:
+      - monitoring-net
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:latest
+    container_name: opensearch-dashboards
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+    depends_on:
+      - opensearch
+    ports:
+      - "5601:5601"   # Dashboards UI
+    networks:
+      - monitoring-net
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_USER: api_monitor
+      POSTGRES_PASSWORD: api_monitor_pass
+      POSTGRES_DB: api_monitoring
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - monitoring-net
+
+  #######################################################
+  # 2. Telemetry Collection & Aggregation
+  #######################################################
+
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: otel-collector
+    volumes:
+      - ./otel-config.yaml:/etc/otel/config.yaml:ro
+    command: ["--config=/etc/otel/config.yaml"]
+    depends_on:
+      - opensearch
+    ports:
+      - "4317:4317"   # gRPC OTLP
+      - "4318:4318"   # HTTP OTLP
+    networks:
+      - monitoring-net
+
+  fluent-bit:
+    image: fluent/fluent-bit:latest
+    container_name: fluent-bit
+    volumes:
+      - ./fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+    depends_on:
+      - fluentd
+    networks:
+      - monitoring-net
+
+  fluentd:
+    build: ./fluentd   # Dockerfile with fluent-plugin-opensearch installed
+    container_name: fluentd
+    volumes:
+      - ./fluentd.conf:/fluentd/etc/fluentd.conf:ro
+    depends_on:
+      - opensearch
+    networks:
+      - monitoring-net
+
+  #######################################################
+  # 3. Backend APIs (Java)
+  #######################################################
+
+  java-api:
+    build: ../../backend/java-apis
+    container_name: java-api
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: api_monitor
+      DB_PASS: api_monitor_pass
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: 9200
+    depends_on:
+      - postgres
+      - opensearch
+    ports:
+      - "8080:8080"
+    networks:
+      - monitoring-net
+    logging:
+      driver: "fluentd"
+      options:
+        fluentd-address: "fluentd:24224"
+        tag: "java-api"
+
+  #######################################################
+  # 4. ML / AI Microservices (Python)
+  #######################################################
+
+  msif-lstm-service:
+    build: ../../backend/python-ml/msif-lstm
+    container_name: msif-lstm-service
+    environment:
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: 9200
+      MODEL_NAME: msif_lstm
+    depends_on:
+      - opensearch
+    networks:
+      - monitoring-net
+
+  ple-gru-service:
+    build: ../../backend/python-ml/ple-gru
+    container_name: ple-gru-service
+    environment:
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: 9200
+      MODEL_NAME: ple_gru
+    depends_on:
+      - opensearch
+    networks:
+      - monitoring-net
+
+  #######################################################
+  # 5. Frontend (React Dashboard)
+  #######################################################
+
+  react-dashboard:
+    build: ../../frontend/react-dashboard
+    container_name: react-dashboard
+    environment:
+      REACT_APP_API_BASE_URL: "http://localhost:8080"
+    depends_on:
+      - java-api
+      - opensearch-dashboards
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring-net
+
+  #######################################################
+  # 6. Optional: Alerting/Notifier Service
+  #######################################################
+
+  alert-notifier:
+    build: ../../backend/python-ml/alert-notifier
+    container_name: alert-notifier
+    environment:
+      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_PORT: 9200
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: api_monitor
+      POSTGRES_PASSWORD: api_monitor_pass
+      SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL:-}"
+      PAGERDUTY_ROUTING_KEY: "${PAGERDUTY_ROUTING_KEY:-}"
+    depends_on:
+      - opensearch
+      - postgres
+    networks:
+      - monitoring-net
+
+#########################################################
+# Networks & Volumes
+#########################################################
+
+networks:
+  monitoring-net:
+    driver: bridge
+
+volumes:
+  opensearch-data:
+  postgres-data:
