@@ -5,7 +5,7 @@ services:
     environment:
       discovery.type: single-node
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-      plugins.security.disabled: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "Str0ng@ApiMon#2025"
     ulimits:
       memlock:
         soft: -1
@@ -21,7 +21,10 @@ services:
     image: opensearchproject/opensearch-dashboards:latest
     container_name: opensearch-dashboards
     environment:
-      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
+      OPENSEARCH_USERNAME: "admin"
+      OPENSEARCH_PASSWORD: "Str0ng@ApiMon#2025"
+      OPENSEARCH_SSL_VERIFICATIONMODE: "none"
     depends_on:
       - opensearch
     ports:
