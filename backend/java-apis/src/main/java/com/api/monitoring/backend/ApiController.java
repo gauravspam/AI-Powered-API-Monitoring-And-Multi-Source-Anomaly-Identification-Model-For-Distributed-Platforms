@@ -19,28 +19,7 @@ public class ApiController {
         return Map.of("status", "UP");
     }
 
-    @GetMapping("/api/overview")
-    public Map<String, Object> overview() {
-        return Map.of(
-            "totalRequests", 124500,
-            "errorRate", 0.8,
-            "anomaliesLast24h", 12,
-            "avgLatencyMs", 180
-        );
-    }
+    
 
-    @GetMapping("/api/anomalies")
-    public List<Map<String, Object>> anomalies() {
-        return List.of(
-            Map.of(
-                "id", "a1",
-                "service", "payments-api",
-                "environment", "prod",
-                "severity", "high",
-                "timestamp", "2025-12-20T10:15:00Z",
-                "message", "Spike in 5xx errors",
-                "score", 0.96
-            )
-        );
-    }
+    
 }
