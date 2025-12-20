@@ -10,3 +10,10 @@ management:
     web:
       exposure:
         include: health,info
+
+opensearch:
+  host: localhost
+  port: 9200
+  scheme: https
+  username: admin
+  password: Str0ng@ApiMon#2025   # from docker-compose.yml

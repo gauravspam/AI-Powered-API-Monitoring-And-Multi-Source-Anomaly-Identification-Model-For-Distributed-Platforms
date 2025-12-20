@@ -1,22 +1,21 @@
 ### GET /api/overview
 Response:
 {
-  "totalRequests": number,
-  "errorRate": number,          // percentage
-  "anomaliesLast24h": number,
-  "avgLatencyMs": number
+  "totalLogs": 12345,
+  "services": [
+    { "name": "demo-service", "count": 1000 },
+    { "name": "billing-api", "count": 500 }
+  ],
+  "lastLogTimestamp": 1766239768858
 }
 
 ### GET /api/anomalies
 Response:
 [
   {
-    "id": string,
-    "service": string,
-    "environment": "prod" | "staging" | "dev",
-    "severity": "low" | "medium" | "high",
-    "timestamp": string (ISO-8601),
-    "message": string,
-    "score": number
+  "service": "demo-service",
+  "level": "ERROR",
+  "message": "Request timeout",
+  "timestamp": 1766239768858
   }
 ]
