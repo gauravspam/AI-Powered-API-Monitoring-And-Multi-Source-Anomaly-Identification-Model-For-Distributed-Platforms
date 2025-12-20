@@ -23,7 +23,7 @@ services:
     environment:
       OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
       OPENSEARCH_USERNAME: "admin"
-      OPENSEARCH_PASSWORD: "Str0ng@ApiMon#2025"
+      OPENSEARCH_PASSWORD: "Str0ng@ApiMon#2025"  
       OPENSEARCH_SSL_VERIFICATIONMODE: "none"
     depends_on:
       - opensearch
