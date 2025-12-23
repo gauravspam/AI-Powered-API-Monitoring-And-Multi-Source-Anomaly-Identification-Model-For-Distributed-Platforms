@@ -10,7 +10,7 @@
 
 **Enterprise-grade API monitoring and anomaly detection platform for distributed microservices**
 
-[Features](#-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
+[Features](#-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [Documentation](#-documentation)
 
 </div>
 
@@ -81,7 +81,7 @@ This project builds an **intelligent, multi-source anomaly detection system** th
 ### Advanced Features
 - 🚨 **Smart Alerting** - Configurable alerts with multiple notification channels
 - 🔐 **Enterprise Security** - Role-based access control and data encryption
-- 📦 **Scalable Architecture** - Kubernetes-ready, horizontally scalable components
+- 📦 **Scalable Architecture** - Horizontally scalable components with Docker
 - 🔌 **API Extensibility** - REST APIs for custom integrations
 - 💾 **Data Persistence** - Multi-database support (PostgreSQL, MongoDB)
 
@@ -91,45 +91,21 @@ This project builds an **intelligent, multi-source anomaly detection system** th
 
 ### System Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    External Data Sources                         │
-│    ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
-│    │  Prometheus  │  │  Application │  │  Distributed │        │
-│    │   Metrics    │  │     Logs     │  │    Traces    │        │
-│    └──────────────┘  └──────────────┘  └──────────────┘        │
-└──────────────┬──────────────┬──────────────┬────────────────────┘
-               │              │              │
-               └──────────────┼──────────────┘
-                              │
-                    ┌─────────▼────────┐
-                    │  Data Ingestion  │
-                    │    & Processing  │
-                    └─────────┬────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-┌───────▼────────┐  ┌────────▼────────┐  ┌────────▼─────────┐
-│   Statistical  │  │  Isolation      │  │  LSTM-based      │
-│   Anomaly      │  │  Forest         │  │  Sequence        │
-│   Detection    │  │  Detector       │  │  Anomaly Model   │
-└───────┬────────┘  └────────┬────────┘  └────────┬─────────┘
-        │                     │                     │
-        └─────────────────────┼─────────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │  Correlation      │
-                    │  & Aggregation    │
-                    │  Engine           │
-                    └─────────┬─────────┘
-                              │
-        ┌─────────────────────┼──────────────────────┐
-        │                     │                      │
-   ┌────▼────┐         ┌─────▼──────┐        ┌─────▼────┐
-   │PostgreSQL│         │   Alert    │        │Dashboard │
-   │Database  │         │   Engine   │        │& UI      │
-   └──────────┘         └────────────┘        └──────────┘
-```
+![System Architecture Diagram](https://agi-prod-file-upload-public-main-use1.s3.amazonaws.com/8836b905-4a88-4d40-83e6-065f7bc53dd1)
+
+**Architecture Components Overview:**
+
+1. **Sources** - Multiple data sources including APIs, SaaS services, cloud-native services, and logs
+2. **Secret Injection** - Agent-based injection system (HashiCorp Vault integration)
+3. **Collector Agent Layer** - Fluent Bit for on-premises and cloud/SaaS environments
+4. **Control Log Aggregation** - Fluentd for centralized log collection
+5. **Log & Metric Storage** - OpenSearch for log storage and PostgreSQL for metadata/config
+6. **Logs, Metrics & Traces** - Aggregated data from multiple sources
+7. **Retraining** - Continuous model improvement with feedback loop
+8. **Anomaly Scores** - Multi-model approach (MSIF-LSTM, PLE-GRU) for anomaly detection
+9. **OpenSearch Dashboard** - Visualization and exploration
+10. **Alerts & Incident Response** - Alert generation and incident management
+11. **Notification Channels** - Slack, PagerDuty, Email for alerts
 
 ### Data Flow Diagram
 
@@ -194,7 +170,7 @@ This project builds an **intelligent, multi-source anomaly detection system** th
 | **Time-Series DB** | PostgreSQL, InfluxDB | Stores metrics and events with high-throughput writes |
 | **Message Queue** | Kafka/RabbitMQ | Handles asynchronous data flow between components |
 | **Frontend** | React, Redux | Interactive dashboard for visualization and alerting |
-| **Orchestration** | Kubernetes (K3s) | Container orchestration and scaling |
+| **Log Aggregation** | Fluentd, OpenSearch | Centralized logging and search |
 
 ---
 
@@ -207,9 +183,9 @@ This project builds an **intelligent, multi-source anomaly detection system** th
 | **Frontend** | React 18, Redux, Axios, Chart.js, Tailwind CSS |
 | **Databases** | PostgreSQL (primary), InfluxDB (time-series), MongoDB (logs) |
 | **Messaging** | Apache Kafka / RabbitMQ |
+| **Log Aggregation** | Fluentd, OpenSearch |
 | **Monitoring** | Prometheus, Grafana, ELK Stack |
 | **Containerization** | Docker, Docker Compose |
-| **Orchestration** | Kubernetes (K3s for local development) |
 | **Deployment** | CI/CD with GitHub Actions |
 
 ---
@@ -435,23 +411,6 @@ python3 app.py
 ```
 
 **ML Engine will start on**: `http://localhost:5000`
-
-#### Kubernetes Deployment (K3s)
-
-```bash
-cd infrastructure/k3s
-
-# Deploy to K3s cluster
-kubectl apply -f namespace.yaml
-kubectl apply -f config-maps.yaml
-kubectl apply -f secrets.yaml
-kubectl apply -f deployments.yaml
-kubectl apply -f services.yaml
-
-# Monitor deployment
-kubectl get pods -n api-monitoring
-kubectl logs -f deployment/backend -n api-monitoring
-```
 
 ---
 
@@ -738,32 +697,6 @@ docker-compose exec postgres psql -U postgres -d api_monitoring -c "VACUUM FULL 
 - **[Frontend README](./frontend/README.md)** - Frontend-specific setup and development
 - **[Infrastructure README](./infrastructure/README.md)** - Deployment and infrastructure guides
 - **[API Contracts](./docs/API_CONTRACTS.md)** - Complete API endpoint documentation
-- **[Contributing Guide](./CONTRIBUTING.md)** - Development workflow and guidelines
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please see our [Contributing Guide](./CONTRIBUTING.md) for details on:
-- Code style and standards
-- Testing requirements
-- Pull request process
-- Development workflow
-
----
-
-## 📞 Support
-
-For questions, issues, or suggestions:
-- 📧 Create an issue on GitHub
-- 💬 Check existing discussions
-- 🔍 Review documentation in `/docs`
 
 ---
 
