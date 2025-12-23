@@ -1,0 +1,139 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# IDE and Editor Files
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# Java Build Artifacts
+backend/**/build/
+backend/**/target/
+backend/**/.gradle/
+backend/**/gradle-app.setting
+backend/**/!gradle-wrapper.jar
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+hs_err_pid*
+
+# Node.js and Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/.npm/
+frontend/.yarn/
+frontend/.pnpm-store/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Python and ML Models
+ml-models/**/__pycache__/
+ml-models/**/*.py[cod]
+ml-models/**/*$*.py
+ml-models/**/.pytest_cache/
+ml-models/**/.mypy_cache/
+ml-models/**/.ruff_cache/
+ml-models/**/venv/
+ml-models/**/env/
+ml-models/**/.env
+ml-models/**/*.egg-info/
+ml-models/**/dist/
+ml-models/**/build/
+ml-models/**/*.pkl
+ml-models/**/*.h5
+ml-models/**/*.pt
+ml-models/**/*.onnx
+ml-models/**/models/*.pth
+ml-models/**/models/*.h5
+
+# Environment Variables
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+ml-models/.env
+*.env
+
+# Docker
+docker-compose.override.yml
+*.dockerignore
+
+# Logs
+logs/
+*.log
+*.log.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+*.swp
+*.swo
+
+# Secrets and Credentials
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+vault-token
+
+# Coverage Reports
+coverage/
+*.coverage
+.nyc_output/
+*.lcov
+
+# Test Results
+test-results/
+*.test-result.xml
+
+# OpenSearch Data (if stored locally)
+opensearch-data/
+
+# PostgreSQL Data (if stored locally)
+postgres-data/
+
+# Fluentd/Fluent Bit
+fluentd/logs/
+fluent-bit/logs/
+*.pos
+
+# MacOS
+.AppleDouble
+.LSOverride
+.LSOverride
