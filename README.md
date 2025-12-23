@@ -91,7 +91,7 @@ This project builds an **intelligent, multi-source anomaly detection system** th
 
 ### System Architecture
 
-![System Architecture Diagram](https://agi-prod-file-upload-public-main-use1.s3.amazonaws.com/8836b905-4a88-4d40-83e6-065f7bc53dd1)
+![System Architecture Diagram](/src/images/sys_arch.jpgsrc)
 
 **Architecture Components Overview:**
 
