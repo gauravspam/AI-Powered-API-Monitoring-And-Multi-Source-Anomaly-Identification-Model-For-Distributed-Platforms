@@ -91,7 +91,7 @@ This project builds an **intelligent, multi-source anomaly detection system** th
 
 ### System Architecture
 
-![System Architecture Diagram](/src/images/sys_arch.jpgsrc)
+![System Architecture Diagram](/src/images/sys_arch.jpg)
 
 **Architecture Components Overview:**
 
