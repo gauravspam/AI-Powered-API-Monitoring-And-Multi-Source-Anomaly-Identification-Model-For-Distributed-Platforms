@@ -1,32 +1,30 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import MainLayout from "./componets/MainLayout";
+import { createContext, useState, useMemo } from 'react';
+import { BrowserRouter } from 'react-router-dom';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { getTheme } from '@/theme';
+import { AppRoutes } from '@/routes/AppRoutes.jsx';
 
-import Dashboard from "./pages/Dashboard";
-import APIs from "./pages/APIs";
-import APIDetail from "./pages/APIDetail";
-import Anomalies from "./pages/Anomalies";
-import Predictions from "./pages/Predictions";
-import Alerts from "./pages/Alerts";
-import Logs from "./pages/Logs";
-import SystemHealth from "./pages/SystemHealth";
+export const ThemeContext = createContext({ toggleTheme: () => {} });
 
-const App = () => {
+function App() {
+  const [mode, setMode] = useState('light');
+
+  const theme = useMemo(() => getTheme(mode), [mode]);
+
+  const toggleTheme = () => {
+    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
+  };
+
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/apis" element={<APIs />} />
-          <Route path="/apis/:apiId" element={<APIDetail />} />
-          <Route path="/anomalies" element={<Anomalies />} />
-          <Route path="/predictions" element={<Predictions />} />
-          <Route path="/alerts" element={<Alerts />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/system-health" element={<SystemHealth />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <ThemeContext.Provider value={{ toggleTheme }}>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </ThemeProvider>
+    </ThemeContext.Provider>
   );
-};
+}
 
 export default App;
