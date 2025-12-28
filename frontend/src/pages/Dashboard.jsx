@@ -23,7 +23,7 @@ import StatusChip from '@/components/StatusChip';
 import { kpiCards, environmentSummary, recentAnomalies, trafficSeries } from '@/data/mockDashboard';
 
 export const Dashboard = () => {
-  const [loading, setLoading] = useState(false);
+  // const [loading, setLoading] = useState(false);
   const [selectedEnv, setSelectedEnv] = useState('All');
   const [selectedSeverity, setSelectedSeverity] = useState('All');
   const [filteredAnomalies, setFilteredAnomalies] = useState([]);
@@ -46,14 +46,14 @@ export const Dashboard = () => {
     setFilteredAnomalies(filtered);
   }, [selectedEnv, selectedSeverity]);
 
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
-    );
-  }
-  console.log("dashboard")
+  // if (loading) {
+  //   return (
+  //     <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+  //       <CircularProgress />
+  //     </Box>
+  //   );
+  // }
+
 
   return (
     <Container maxWidth="xl">

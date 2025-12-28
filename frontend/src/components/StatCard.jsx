@@ -24,12 +24,12 @@ export const StatCard = ({ label, value, unit, trend, trendDirection, icon: Icon
         <Box
           sx={{
             position: 'absolute',
-            right: -10,
-            top: -10,
+            right: -4,
+            top: -4,
             opacity: 0.1,
           }}
         >
-          <Icon sx={{ fontSize: 120 }} />
+          <Icon sx={{ fontSize: 80 }} />
         </Box>
       )}
       <Typography variant="body2" color="text.secondary" gutterBottom>
