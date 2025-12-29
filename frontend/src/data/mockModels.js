@@ -25,7 +25,7 @@ export const models = [
   },
   {
     id: 3,
-    name: 'MDN-EVL Forecaster',
+    name: 'MSIF-LSTM',
     version: 'v3.1.0',
     type: 'forecasting',
     status: 'online',
@@ -36,7 +36,7 @@ export const models = [
   },
   {
     id: 4,
-    name: 'Baseline Threshold',
+    name: 'PLE-GRU',
     version: 'v1.0.0',
     type: 'detection',
     status: 'online',
@@ -47,7 +47,7 @@ export const models = [
   },
   {
     id: 5,
-    name: 'Tail Event Predictor',
+    name: 'PLE-GRU',
     version: 'v2.0.2',
     type: 'forecasting',
     status: 'warming',
@@ -58,7 +58,7 @@ export const models = [
   },
   {
     id: 6,
-    name: 'Multi-Source Fusion',
+    name: 'MSIF-LSTM',
     version: 'v1.5.3',
     type: 'detection',
     status: 'online',
