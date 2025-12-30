@@ -17,3 +17,7 @@ opensearch:
   scheme: https
   username: admin
   password: Str0ng@ApiMon#2025   # from docker-compose.yml
+
+python:
+  service:
+    url: http://localhost:8000
