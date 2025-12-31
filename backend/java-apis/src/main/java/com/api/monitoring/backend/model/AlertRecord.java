@@ -16,7 +16,9 @@ public class AlertRecord {
     @Column(nullable = false)
     private String condition;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    
+    @Column()
+
     private Double threshold;
 
     @Column(nullable = false)

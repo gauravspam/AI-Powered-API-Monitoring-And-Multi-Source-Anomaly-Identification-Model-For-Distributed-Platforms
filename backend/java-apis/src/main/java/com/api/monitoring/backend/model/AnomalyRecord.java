@@ -20,7 +20,9 @@ public class AnomalyRecord {
     @Column
     private String severity;
 
-    @Column(name = "confidence_score", precision = 5, scale = 2)
+    
+    @Column()
+
     private Double confidenceScore;
 
     @Column(name = "metric_values", columnDefinition = "jsonb")

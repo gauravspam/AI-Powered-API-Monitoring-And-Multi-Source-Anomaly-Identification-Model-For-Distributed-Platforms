@@ -13,16 +13,20 @@ public class MetricRecord {
     @Column(name = "api_id", nullable = false)
     private Long apiId;
 
-    @Column(name = "cpu_usage", precision = 5, scale = 2)
+    @Column()
+
     private Double cpuUsage;
 
-    @Column(name = "memory_usage", precision = 5, scale = 2)
+    @Column()
+
     private Double memoryUsage;
 
-    @Column(name = "response_time_ms", precision = 10, scale = 2)
+    @Column()
+
     private Double responseTimeMs;
 
-    @Column(name = "error_rate", precision = 5, scale = 2)
+    @Column()
+
     private Double errorRate;
 
     @Column(name = "request_count")
@@ -35,7 +39,8 @@ public class MetricRecord {
     public MetricRecord() {
     }
 
-    public MetricRecord(Long apiId, Double cpuUsage, Double memoryUsage, Double responseTimeMs, Double errorRate, Integer requestCount, LocalDateTime timestamp) {
+    public MetricRecord(Long apiId, Double cpuUsage, Double memoryUsage, Double responseTimeMs, Double errorRate,
+            Integer requestCount, LocalDateTime timestamp) {
         this.apiId = apiId;
         this.cpuUsage = cpuUsage;
         this.memoryUsage = memoryUsage;
