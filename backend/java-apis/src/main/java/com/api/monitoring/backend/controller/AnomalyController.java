@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/v1/anomalies")
+@RequestMapping("/api/v1/anomaly")
 public class AnomalyController {
     private static final Logger logger = LoggerFactory.getLogger(AnomalyController.class);
 
