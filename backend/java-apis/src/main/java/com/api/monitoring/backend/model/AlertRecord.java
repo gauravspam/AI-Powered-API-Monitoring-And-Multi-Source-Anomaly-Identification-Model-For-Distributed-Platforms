@@ -1,15 +1,14 @@
-package main.java.com.api.monitoring.backend.model;
+package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "alerts")
 public class AlertRecord {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(name = "alert_name", nullable = false)
     private String alertName;
@@ -46,11 +45,11 @@ public class AlertRecord {
     }
 
     // Getters and Setters
-    public UUID getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(UUID id) {
+    public void setId(Long id) {
         this.id = id;
     }
 

@@ -18,8 +18,4 @@ public class ApiController {
     public Map<String, String> health() {
         return Map.of("status", "UP");
     }
-
-    
-
-    
 }

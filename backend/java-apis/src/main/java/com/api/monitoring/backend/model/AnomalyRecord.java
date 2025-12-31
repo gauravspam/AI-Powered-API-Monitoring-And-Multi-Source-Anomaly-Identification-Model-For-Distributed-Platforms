@@ -2,14 +2,13 @@ package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "anomalies")
 public class AnomalyRecord {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(name = "api_name", nullable = false)
     private String apiName;
@@ -17,9 +16,9 @@ public class AnomalyRecord {
     @Column(nullable = false)
     private LocalDateTime timestamp;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private Severity severity;
+    // Add more fields as needed, e.g., description, severity, etc.
+    @Column
+    private String severity;
 
     @Column(name = "confidence_score", precision = 5, scale = 2)
     private Double confidenceScore;
@@ -36,11 +35,36 @@ public class AnomalyRecord {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    // Additional fields for anomaly detection
+    @Column
+    private Integer stage;
+
+    @Column
+    private String model;
+
+    @Column(name = "anomaly_score")
+    private Double anomalyScore;
+
+    @Column(name = "stage2_score")
+    private Double stage2Score;
+
+    @Column(name = "final_anomaly_score")
+    private Double finalAnomalyScore;
+
+    @Column
+    private String status;
+
+    @Column
+    private Double confidence;
+
+    @Column
+    private Boolean acknowledged = false;
+
     // Constructors
     public AnomalyRecord() {
     }
 
-    public AnomalyRecord(String apiName, LocalDateTime timestamp, Severity severity, Double confidenceScore, String metricValues, String mlModelUsed) {
+    public AnomalyRecord(String apiName, LocalDateTime timestamp, String severity, Double confidenceScore, String metricValues, String mlModelUsed) {
         this.apiName = apiName;
         this.timestamp = timestamp;
         this.severity = severity;
@@ -51,11 +75,11 @@ public class AnomalyRecord {
     }
 
     // Getters and Setters
-    public UUID getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(UUID id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -75,11 +99,11 @@ public class AnomalyRecord {
         this.timestamp = timestamp;
     }
 
-    public Severity getSeverity() {
+    public String getSeverity() {
         return severity;
     }
 
-    public void setSeverity(Severity severity) {
+    public void setSeverity(String severity) {
         this.severity = severity;
     }
 
@@ -123,11 +147,67 @@ public class AnomalyRecord {
         this.updatedAt = updatedAt;
     }
 
-    // Enum for Severity
-    public enum Severity {
-        LOW,
-        MEDIUM,
-        HIGH,
-        CRITICAL
+    public Integer getStage() {
+        return stage;
+    }
+
+    public void setStage(Integer stage) {
+        this.stage = stage;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
+    }
+
+    public Double getAnomalyScore() {
+        return anomalyScore;
+    }
+
+    public void setAnomalyScore(Double anomalyScore) {
+        this.anomalyScore = anomalyScore;
+    }
+
+    public Double getStage2Score() {
+        return stage2Score;
+    }
+
+    public void setStage2Score(Double stage2Score) {
+        this.stage2Score = stage2Score;
+    }
+
+    public Double getFinalAnomalyScore() {
+        return finalAnomalyScore;
+    }
+
+    public void setFinalAnomalyScore(Double finalAnomalyScore) {
+        this.finalAnomalyScore = finalAnomalyScore;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Double getConfidence() {
+        return confidence;
+    }
+
+    public void setConfidence(Double confidence) {
+        this.confidence = confidence;
+    }
+
+    public Boolean getAcknowledged() {
+        return acknowledged;
+    }
+
+    public void setAcknowledged(Boolean acknowledged) {
+        this.acknowledged = acknowledged;
     }
 }

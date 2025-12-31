@@ -1,18 +1,17 @@
-package main.java.com.api.monitoring.backend.model;
+package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
-import java.util.UUID;
 
 @Entity
 @Table(name = "metrics")
 public class MetricRecord {
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
-    private UUID id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Column(name = "api_id", nullable = false)
-    private UUID apiId;
+    private Long apiId;
 
     @Column(name = "cpu_usage", precision = 5, scale = 2)
     private Double cpuUsage;
@@ -36,7 +35,7 @@ public class MetricRecord {
     public MetricRecord() {
     }
 
-    public MetricRecord(UUID apiId, Double cpuUsage, Double memoryUsage, Double responseTimeMs, Double errorRate, Integer requestCount, LocalDateTime timestamp) {
+    public MetricRecord(Long apiId, Double cpuUsage, Double memoryUsage, Double responseTimeMs, Double errorRate, Integer requestCount, LocalDateTime timestamp) {
         this.apiId = apiId;
         this.cpuUsage = cpuUsage;
         this.memoryUsage = memoryUsage;
@@ -47,19 +46,19 @@ public class MetricRecord {
     }
 
     // Getters and Setters
-    public UUID getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(UUID id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
-    public UUID getApiId() {
+    public Long getApiId() {
         return apiId;
     }
 
-    public void setApiId(UUID apiId) {
+    public void setApiId(Long apiId) {
         this.apiId = apiId;
     }
 
