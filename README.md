@@ -52,12 +52,15 @@
 
 ### Required Software 
 
-- Java 21 (OpenJDK)
-- Gradle 8.5
-- Docker 25.x
-- Docker Compose 2.24+
-- Git
-- PostgreSQL Client (psql)
+- **Java 21** (OpenJDK LTS) - `openjdk 21.0.9` or higher
+- **Gradle 9.0.0** or higher - Latest stable version
+- **Docker 29.x** - `29.1.3` or higher
+- **Docker Compose 2.39.x** - `2.39.1` or higher  
+- **Node.js 20.x** - For frontend development
+- **OpenSearch 2.x** - Latest stable (deployed via Docker)
+- **PostgreSQL 16.x** - Latest stable (deployed via Docker)
+- **Git** - For version control
+- **curl/wget** - For API testing
 
 ---
 
@@ -79,16 +82,16 @@ sudo apt install -y openjdk-21-jdk openjdk-21-jre
 java --version  # Verify: openjdk 21.0.x
 ```
 
-#### **Phase 3: Gradle 8.5 Installation**
+#### **Phase 3: Gradle 9.0.0 Installation**
 
 ```bash
-# Download Gradle 8.5
-wget https://services.gradle.org/distributions/gradle-8.5-bin.zip
+# Download Gradle 9.0.0 (Latest stable)
+wget https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
 
 # Install system-wide
 sudo rm -rf /opt/gradle* 2>/dev/null || true
-sudo unzip -o gradle-8.5-bin.zip -d /opt/
-sudo ln -sf /opt/gradle-8.5 /opt/gradle
+sudo unzip -o gradle-9.0.0-bin.zip -d /opt/
+sudo ln -sf /opt/gradle-9.0.0 /opt/gradle
 
 # Add to PATH
 echo 'export PATH=/opt/gradle/bin:$PATH' >> ~/.bashrc
@@ -96,26 +99,26 @@ echo 'export GRADLE_USER_HOME=$HOME/.gradle' >> ~/.bashrc
 source ~/.bashrc
 
 # Verify
-gradle --version  # Should show: Gradle 8.5
+gradle --version  # Should show: Gradle 9.0.0
 ```
 
 #### **Phase 4: Docker & Docker Compose**
 
 ```bash
-# Install Docker
+# Install Docker (Latest stable - 29.x)
 curl -fsSL https://get.docker.com | sudo sh
 
 # Add user to docker group
 sudo usermod -aG docker $USER
 newgrp docker
 
-# Install Docker Compose 2.24.0
-sudo curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+# Install Docker Compose 2.39.1 (Latest stable)
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.39.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
 sudo chmod +x /usr/local/bin/docker-compose
 
 # Verify
-docker --version      # Docker version 25.x
-docker-compose --version  # Docker Compose 2.24.0
+docker --version      # Should show: Docker version 29.x
+docker compose --version  # Should show: Docker Compose v2.39.1
 ```
 
 #### **Phase 5: Clone Repository**
@@ -146,58 +149,37 @@ git add .gitignore
 git commit -am "build: Add Gradle cache to gitignore [skip ci]" 2>/dev/null || true
 ```
 
-#### **Phase 6: Docker Compose Stack (PostgreSQL + OpenSearch + Fluentd)**
+#### **Phase 6: Node.js Installation (For Frontend Development)**
 
 ```bash
-# Create docker-compose.yml
-cat > docker-compose.yml << 'EOF'
-version: '3.8'
+# Install Node.js 20.x LTS
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
-services:
-  # PostgreSQL: Metrics storage
-  postgres:
-    image: postgres:15.6
-    container_name: postgres-anomaly
-    environment:
-      POSTGRES_DB: anomaly_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+# Verify
+node --version   # Should show: v20.x.x
+npm --version    # Should show: 10.x.x
+```
 
-  # OpenSearch: Log storage & search
-  opensearch:
-    image: opensearchproject/opensearch:2.7.0
-    container_name: opensearch-anomaly
-    environment:
-      - discovery.type=single-node
-      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=AnomalyMonitor@2026
-      - plugins.security.disabled=true
-    ports:
-      - "9200:9200"
-      - "9600:9600"
-    volumes:
-      - opensearch_data:/usr/share/opensearch/data
+#### **Phase 7: Docker Compose Stack Deployment**
 
-volumes:
-  postgres_data:
-  opensearch_data:
-EOF
+```bash
+# Navigate to infrastructure/docker directory
+cd infrastructure/docker
 
-# Start services
-docker-compose up -d
+# Start all services (PostgreSQL 16, OpenSearch 2.x, Fluentd, Backend, Dashboards)
+docker compose up -d
 
 # Wait for services to be ready
-echo "⏳ Waiting for services to start (30s)..."
-sleep 30
+echo "⏳ Waiting for services to start (60s)..."
+sleep 60
+
+# Verify all services are running
+docker compose ps
+
+# Check service health and logs
+docker compose logs api-monitoring-backend | tail -20
+```
 
 # Verify
 docker-compose ps  # Should show 2 services: postgres (healthy), opensearch (healthy)
@@ -492,7 +474,92 @@ Response: [{...alert records...}]
 ```
 
 ---
+## ⚙️ Version & Compatibility Matrix
 
+### System Requirements
+
+| Component | Version | Requirement | Status |
+|-----------|---------|-------------|--------|
+| **Operating System** | Linux/macOS/Windows | Any modern OS | ✅ |
+| **Docker** | 29.x+ | 29.1.3 or higher | ✅ |
+| **Docker Compose** | 2.39.x+ | 2.39.1 or higher | ✅ |
+
+### Language & Framework Versions
+
+| Component | Version | Details | Reference |
+|-----------|---------|---------|-----------|
+| **Java** | 21 LTS | OpenJDK 21.0.9+ | Backend runtime |
+| **Gradle** | 9.0.0+ | Latest stable | Backend build tool |
+| **Spring Boot** | 3.2.1 | Latest stable 3.x | REST API framework |
+| **Node.js** | 20.x LTS | 20.x.x or higher | Frontend build & runtime |
+| **npm** | 10.x | Included with Node.js 20.x | Frontend package manager |
+| **React** | 18+ | Latest stable | Frontend UI framework |
+| **Vite** | 5.x+ | Latest stable | Frontend build tool |
+
+### Database & Search Versions
+
+| Component | Version | Details | Reference |
+|-----------|---------|---------|-----------|
+| **PostgreSQL** | 16.x | Latest stable | Metrics database |
+| **OpenSearch** | 2.x | Latest stable | Log storage & search |
+| **OpenSearch Dashboards** | 2.x | Matches OpenSearch | Log visualization |
+| **Fluentd** | 1.16.x | Latest stable | Log aggregation |
+
+### Installation Commands
+
+#### Update Gradle Version (Backend)
+
+```bash
+# Method 1: Automatic via wrapper (Gradle 9.0.0 included)
+cd backend/java-apis
+./gradlew --version  # Should show: Gradle 9.0.0
+
+# Method 2: Manual update
+wget https://services.gradle.org/distributions/gradle-9.0.0-bin.zip
+unzip gradle-9.0.0-bin.zip
+sudo mv gradle-9.0.0 /opt/gradle
+```
+
+#### Update Node.js Version (Frontend)
+
+```bash
+# Install Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify
+node --version  # Should show: v20.x.x
+npm --version   # Should show: 10.x.x
+```
+
+#### Update OpenSearch Version (if modifying)
+
+```bash
+# In docker-compose.yml, modify:
+opensearch:
+  image: opensearchproject/opensearch:2.x  # Change 2.x to desired version
+  
+# Restart services
+docker compose down
+docker compose up -d
+```
+
+#### Update Docker & Docker Compose
+
+```bash
+# Docker 29.x
+curl -fsSL https://get.docker.com | sudo sh
+
+# Docker Compose 2.39.1
+sudo curl -L "https://github.com/docker/compose/releases/download/v2.39.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+sudo chmod +x /usr/local/bin/docker-compose
+
+# Verify
+docker --version       # Docker version 29.x
+docker compose --version  # Docker Compose v2.39.1
+```
+
+---
 ## 🐛 Troubleshooting
 
 ### Issue: PostgreSQL Connection Refused
@@ -565,7 +632,5 @@ sudo docker-compose up -d
 <div align="center">
   
 **Built with ❤️ for the DevOps and SRE community** <br>
-**Last Updated**: January 1, 2026  
-⭐ If you find this project helpful, please star it on GitHub!
 
 </div>
