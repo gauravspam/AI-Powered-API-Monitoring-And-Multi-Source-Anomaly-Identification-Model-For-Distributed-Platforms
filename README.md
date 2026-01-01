@@ -1,15 +1,6 @@
 # 🚀 AI-Powered API Monitoring & Multi-Source Anomaly Identification
+
 **Real-time API anomaly detection** using **Machine Learning** with distributed monitoring, log aggregation, and intelligent alerting.
-<div align="center">
-<br>
-
-![Project Banner](https://img.shields.io/badge/Status-Active%20Development-brightgreen?style=for-the-badge)
-![Python](https://img.shields.io/badge/Python-3.9+-blue?style=flat-square)
-![Java](https://img.shields.io/badge/Java-21+-red?style=flat-square)
-![React](https://img.shields.io/badge/React-18+-61DAFB?style=flat-square)
-
-<br>
-</div align="center">
 
 ---
 
