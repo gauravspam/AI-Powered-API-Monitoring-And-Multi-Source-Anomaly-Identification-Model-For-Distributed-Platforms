@@ -13,7 +13,7 @@ class MSIFLSTM:
     
     def build_model(self):
         self.model = Sequential([
-            Input(shape=(1, self.input_shape)),
+            Input(shape=(1, 10)),
             LSTM(128, activation='relu', return_sequences=True),
             Dropout(0.2),
             LSTM(64, activation='relu'),
