@@ -22,22 +22,6 @@ services:
       timeout: 10s
       retries: 5
 
-  opensearch-dashboards:
-    image: opensearchproject/opensearch-dashboards:latest
-    container_name: opensearch-dashboards
-    environment:
-      OPENSEARCH_HOSTS: '["https://opensearch:9200"]'
-      OPENSEARCH_USERNAME: "admin"
-      OPENSEARCH_PASSWORD: "Str0ng@ApiMon#2025"  
-      OPENSEARCH_SSL_VERIFICATIONMODE: "none"
-    depends_on:
-      opensearch:
-        condition: service_healthy
-    ports:
-      - "5601:5601"
-    networks:
-      - monitoring-net
-
   postgres:
     image: postgres:16
     container_name: postgres
