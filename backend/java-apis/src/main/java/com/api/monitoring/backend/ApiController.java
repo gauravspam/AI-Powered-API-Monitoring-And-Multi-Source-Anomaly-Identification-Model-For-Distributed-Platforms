@@ -2,8 +2,6 @@ package com.api.monitoring.backend;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -14,8 +12,8 @@ public class ApiController {
         return Map.of("message", "API Monitoring Backend is running");
     }
 
-    @GetMapping("/health")
-    public Map<String, String> health() {
-        return Map.of("status", "UP");
-    }
+    // @GetMapping("/api/health")
+    // public String health() {
+    //     return "OK";
+    // }
 }

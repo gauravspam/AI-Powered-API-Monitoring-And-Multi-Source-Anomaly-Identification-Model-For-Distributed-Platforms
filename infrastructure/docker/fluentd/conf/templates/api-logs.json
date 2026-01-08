@@ -1,0 +1,13 @@
+{
+  "index_patterns": ["api-logs-*"],
+  "template": {
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "service": { "type": "keyword" },
+        "level": { "type": "keyword" },
+        "message": { "type": "text" }
+      }
+    }
+  }
+}

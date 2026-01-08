@@ -27,10 +27,19 @@ management:
 opensearch:
   host: ${OPENSEARCH_HOST:opensearch}
   port: ${OPENSEARCH_PORT:9200}
-  scheme: ${OPENSEARCH_SCHEME:https}
-  username: ${OPENSEARCH_USERNAME:admin}
-  password: ${OPENSEARCH_PASSWORD:Str0ng@ApiMon#2025}
+  scheme: ${OPENSEARCH_SCHEME:http}
+  username: ""
+  password: ""
 
 python:
   service:
     url: http://ml-models:8000
+
+logging:
+  pattern:
+    level: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
+
+fluentd:
+  host: localhost  # Not host.docker.internal
+  port: 9880
+  path: /api-logs.${spring.application.name}

@@ -1,11 +1,13 @@
 services:
   opensearch:
-    image: opensearchproject/opensearch:latest
+    image: opensearchproject/opensearch:2.17.0
     container_name: opensearch
     environment:
-      discovery.type: single-node
-      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
-      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "Str0ng@ApiMon#2025"
+      - discovery.type=single-node
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
+      - network.host=0.0.0.0  # ADD THIS LINE
+      - http.host=0.0.0.0  
     ulimits:
       memlock:
         soft: -1
@@ -17,7 +19,7 @@ services:
     networks:
       - monitoring-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -k -u admin:Str0ng@ApiMon#2025 https://localhost:9200 || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:9200 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -47,44 +49,45 @@ services:
       context: ./fluentd
       dockerfile: Dockerfile
     container_name: fluentd
+    network_mode: "host"
     volumes:
-      - ./fluentd/conf:/fluentd/etc
+      - ./fluentd/conf:/fluentd/etc:ro
       - ./fluentd/logs:/var/log/fluentd
       - fluentd-buffer:/var/log/fluentd-buffer
     ports:
-      - "24224:24224"  # Forward protocol
+      - "24224:24224"
       - "24224:24224/udp"
-      - "9880:9880"     # HTTP input
-    networks:
-      - monitoring-net
-    depends_on:
-      opensearch:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
+      - "9880:9880"
+    # depends_on:
+    #   opensearch:
+    #     condition: service_healthy
+    #   postgres:
+    #     condition: service_healthy
     environment:
-      - FLUENTD_CONF=fluentd.conf
+      FLUENTD_CONF: fluentd.conf
+    restart: unless-stopped
+    extra_hosts:
+    - "opensearch:172.19.0.4"
 
   backend:
     build:
       context: ../../backend/java-apis
       dockerfile: Dockerfile
     container_name: api-monitoring-backend
+    network_mode: "host" 
     environment:
       SERVER_PORT: 8081
       SPRING_PROFILES_ACTIVE: docker
-      OPENSEARCH_HOST: opensearch
+      OPENSEARCH_HOST: localhost
       OPENSEARCH_PORT: 9200
-      OPENSEARCH_SCHEME: https
-      OPENSEARCH_USERNAME: admin
-      OPENSEARCH_PASSWORD: "Str0ng@ApiMon#2025"
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring
+      OPENSEARCH_SCHEME: http
+      OPENSEARCH_USERNAME: ""
+      OPENSEARCH_PASSWORD: ""
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/api_monitoring
       SPRING_DATASOURCE_USERNAME: api_monitor
       SPRING_DATASOURCE_PASSWORD: api_monitor_pass
     ports:
       - "8081:8081"
-    networks:
-      - monitoring-net
     depends_on:
       opensearch:
         condition: service_healthy
@@ -95,30 +98,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # ml-service commented out to speed up Docker boot time
-  # Uncomment when ML models are ready
-  # ml-service:
-  #   build:
-  #     context: ../../ml-models
-  #     dockerfile: Dockerfile
-  #   container_name: ml-service
-  #   environment:
-  #     - FLASK_ENV=development
-  #     - MODEL_PATH=/app/models
-  #     - OPENSEARCH_HOST=opensearch
-  #     - OPENSEARCH_PORT=9200
-  #     - OPENSEARCH_USERNAME=admin
-  #     - OPENSEARCH_PASSWORD=Str0ng@ApiMon#2025
-  #   ports:
-  #     - "5000:5000"
-  #   volumes:
-  #     - ./ml-models/models:/app/models
-  #   networks:
-  #     - monitoring-net
-  #   depends_on:
-  #     opensearch:
-  #       condition: service_healthy
 
 networks:
   monitoring-net:
