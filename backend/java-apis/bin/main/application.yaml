@@ -1,0 +1,33 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: api-monitoring-backend
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driverClassName: org.h2.Driver
+    username: sa
+    password: password
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+opensearch:
+  host: localhost
+  port: 9200
+  scheme: https
+  username: admin
+  password: Str0ng@ApiMon#2025   # from docker-compose.yml
+
+python:
+  service:
+    url: http://localhost:8000
