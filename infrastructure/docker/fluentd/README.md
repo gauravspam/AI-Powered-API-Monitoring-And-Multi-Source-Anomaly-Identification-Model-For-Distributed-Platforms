@@ -57,3 +57,25 @@ curl -X POST http://localhost:9880/api-logs.test \
 - Verify buffer directory: `docker exec fluentd ls -la /var/log/fluentd-buffer`
 - Test OpenSearch connection: `docker exec fluentd curl -k https://opensearch:9200 -u admin:Str0ng@ApiMon#2025`
 
+## OpenSearch only works from host, so bypass Docker networking completely:
+
+  ### Get your host's Docker bridge IP
+  `HOST_IP=$(docker inspect bridge | grep Gateway | cut -d'"' -f4 | head -1)
+  echo "Host Docker Gateway: $HOST_IP"`
+
+  ### Update fluent.conf to use host IP + port 9200
+  `sed -i "s/host \".*\"/host \"$HOST_IP\"/" ./fluentd/fluent.conf`
+
+  ### Verify
+  `cat ./fluentd/fluent.conf | grep host`
+
+  ### Restart fluentd
+  `docker-compose restart fluentd`
+
+  ### Test immediately
+  `sleep 10
+  curl -X POST 'http://localhost:9880/api-logs.backend' \
+    -H 'Content-Type: application/json' \
+    -d '{"message":"HOST IP TEST"}'`
+
+  `curl 'http://localhost:9200/_cat/indices/api-logs*?v'`

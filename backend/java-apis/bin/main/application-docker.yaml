@@ -27,7 +27,7 @@ management:
 opensearch:
   host: ${OPENSEARCH_HOST:opensearch}
   port: ${OPENSEARCH_PORT:9200}
-  scheme: ${OPENSEARCH_SCHEME:http}
+  scheme: http
   username: ""
   password: ""
 

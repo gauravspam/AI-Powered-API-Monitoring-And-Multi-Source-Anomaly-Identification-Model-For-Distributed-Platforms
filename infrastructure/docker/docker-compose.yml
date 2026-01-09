@@ -6,8 +6,10 @@ services:
       - discovery.type=single-node
       - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
       - DISABLE_SECURITY_PLUGIN=true
-      - network.host=0.0.0.0  # ADD THIS LINE
+      - network.host=0.0.0.0  
       - http.host=0.0.0.0  
+      - http.port=9200
+      - cluster.name=docker-cluster
     ulimits:
       memlock:
         soft: -1
@@ -39,51 +41,40 @@ services:
     networks:
       - monitoring-net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U api_monitor"]
+      test: ["CMD-SHELL", "pg_isready -U api_monitor -d api_monitoring"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   fluentd:
-    build:
-      context: ./fluentd
-      dockerfile: Dockerfile
+    image: fluent/fluentd:v1.16-debian-1-opensearch
+    command: fluentd -c /fluentd/etc/fluent.conf -v
     container_name: fluentd
-    network_mode: "host"
     volumes:
-      - ./fluentd/conf:/fluentd/etc:ro
-      - ./fluentd/logs:/var/log/fluentd
-      - fluentd-buffer:/var/log/fluentd-buffer
+      - ./fluentd:/fluentd/etc:ro
     ports:
-      - "24224:24224"
-      - "24224:24224/udp"
       - "9880:9880"
-    # depends_on:
-    #   opensearch:
-    #     condition: service_healthy
-    #   postgres:
-    #     condition: service_healthy
-    environment:
-      FLUENTD_CONF: fluentd.conf
+    depends_on:
+      - opensearch
+    networks:
+      - monitoring-net
     restart: unless-stopped
-    extra_hosts:
-    - "opensearch:172.19.0.4"
+    
 
   backend:
     build:
       context: ../../backend/java-apis
       dockerfile: Dockerfile
     container_name: api-monitoring-backend
-    network_mode: "host" 
+    networks:
+      - monitoring-net
     environment:
       SERVER_PORT: 8081
       SPRING_PROFILES_ACTIVE: docker
-      OPENSEARCH_HOST: localhost
+      OPENSEARCH_HOST: opensearch
       OPENSEARCH_PORT: 9200
       OPENSEARCH_SCHEME: http
-      OPENSEARCH_USERNAME: ""
-      OPENSEARCH_PASSWORD: ""
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/api_monitoring
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring
       SPRING_DATASOURCE_USERNAME: api_monitor
       SPRING_DATASOURCE_PASSWORD: api_monitor_pass
     ports:
@@ -94,10 +85,9 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+      test: ["CMD", "curl", "-f", "http://localhost:8081/actuator/health"]
+      start_period: 60s
+      retries: 5
 
 networks:
   monitoring-net:
