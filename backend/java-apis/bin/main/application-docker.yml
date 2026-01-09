@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: 8080
 
 spring:
   application:
@@ -40,6 +40,6 @@ logging:
     level: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
 
 fluentd:
-  host: localhost  # Not host.docker.internal
+  host: fluentd
   port: 9880
   path: /api-logs.${spring.application.name}

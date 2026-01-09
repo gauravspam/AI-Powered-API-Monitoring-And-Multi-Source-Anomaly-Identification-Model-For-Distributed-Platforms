@@ -1,21 +1,23 @@
 # Multi-stage build for Spring Boot Backend
 # Using Java 21 LTS for both build and runtime (stable and production-ready)
-FROM eclipse-temurin:21-jdk AS build
+
+FROM openjdk:21-jdk-slim AS build
+# FROM eclipse-temurin:21-jdk AS build
 
 # Install Gradle
 WORKDIR /opt
 RUN apt-get update && apt-get install -y wget unzip && rm -rf /var/lib/apt/lists/* && \
-    wget -q https://services.gradle.org/distributions/gradle-8.14.3-bin.zip && \
-    unzip gradle-8.14.3-bin.zip && \
-    rm gradle-8.14.3-bin.zip && \
-    mv gradle-8.14.3 gradle
+    wget -q https://services.gradle.org/distributions/gradle-8.8-bin.zip && \
+    unzip gradle-8.8-bin.zip && \
+    rm gradle-8.8-bin.zip && \
+    mv gradle-8.8 gradle
 
 ENV PATH=/opt/gradle/bin:$PATH
 
 WORKDIR /app
 
 # Copy Gradle files
-COPY build.gradle settings.gradle ./
+COPY build/libs/*.jar app.jar
 COPY gradle ./gradle
 
 # Download dependencies (cached layer)

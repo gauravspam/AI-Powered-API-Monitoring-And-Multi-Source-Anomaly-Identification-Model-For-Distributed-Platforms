@@ -27,10 +27,38 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    implementation 'org.opensearch.client:opensearch-rest-high-level-client:2.13.0'
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.18.1'
-    runtimeOnly 'com.h2database:h2'
+    implementation 'org.postgresql:postgresql'
+    implementation 'org.flywaydb:flyway-core'
+
+    // Fluentd logger
+    implementation 'org.fluentd:fluent-logger:0.3.4'
+
+    // Lombok
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    // OpenSearch Java Client (RestHighLevelClient + related)
+    implementation 'org.opensearch.client:opensearch-rest-high-level-client:2.11.1'
+    implementation 'org.opensearch.client:opensearch-java:2.11.1'
+    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+    implementation 'org.apache.httpcomponents:httpcore:4.4.16'
+
+    // OpenSearch Java Client (RestHighLevelClient + related)
+    implementation 'org.opensearch.client:opensearch-rest-high-level-client:2.11.1'
+    implementation 'org.opensearch.client:opensearch-java:2.11.1'
+    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+    implementation 'org.apache.httpcomponents:httpcore:4.4.16'
+
+    // Test H2 database
+    testImplementation 'com.h2database:h2:2.2.224'
+
+    // Testcontainers (optional but recommended)
+    testImplementation 'org.testcontainers:postgresql:1.19.8'
+    testImplementation 'org.testcontainers:junit-jupiter:1.19.8'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 

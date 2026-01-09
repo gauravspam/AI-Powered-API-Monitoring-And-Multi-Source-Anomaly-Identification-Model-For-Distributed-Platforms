@@ -1,0 +1,108 @@
+spring:
+  application:
+    name: api-monitoring-backend
+    version: 1.0.0
+
+
+  datasource:
+    url: jdbc:postgresql://postgres:5432/api_monitoring
+    username: api_monitor
+    password: api_monitor_pwd
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        use_sql_comments: true
+        jdbc:
+          batch_size: 20
+          fetch_size: 50
+        order_inserts: true
+        order_updates: true
+    show-sql: false
+    open-in-view: false
+
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+    schemas: public
+    out-of-order: false
+
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+      indent-output: true
+    default-property-inclusion: non_null
+    time-zone: UTC
+
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+  compression:
+    enabled: true
+    min-response-size: 1024
+
+
+logging:
+  level:
+    root: INFO
+    com.api.monitoring: DEBUG
+    org.springframework.web: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+  file:
+    name: logs/api-monitoring.log
+    max-size: 10MB
+    max-history: 30
+
+
+fluentd:
+  enabled: true
+  host: fluentd
+  port: 9880
+  tag: api-logs
+  queue-limit-size: 256
+  flush-interval: 3000
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+
+app:
+  name: API-Powered API Monitoring
+  version: 1.0.0
+  environment: docker
+  ml:
+    enabled: false
+    model-path: /models/msif-lstm-ple-gru.pkl
+  api:
+    response-timeout-ms: 5000
+    anomaly-threshold: 0.7
