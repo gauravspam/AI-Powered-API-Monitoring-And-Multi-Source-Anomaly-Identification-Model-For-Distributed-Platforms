@@ -1,41 +1,209 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Container,
   Grid,
   Typography,
   Box,
   Paper,
-  CircularProgress,
   List,
   ListItem,
-  ListItemText,
   Divider,
   Select,
   MenuItem,
   FormControl,
   InputLabel,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import {
+  Speed as SpeedIcon,
+  ErrorOutline as ErrorIcon,
+  Warning as WarningIcon,
+  Timer as TimerIcon,
+  Refresh as RefreshIcon,
+} from '@mui/icons-material';
 import StatCard from '@/components/StatCard';
 import AnomalyTable from '@/components/AnomalyTable';
 import MetricChart from '@/components/MetricChart';
 import EnvironmentFilter from '@/components/EnvironmentFilter';
 import StatusChip from '@/components/StatusChip';
-import { kpiCards, environmentSummary, recentAnomalies, trafficSeries } from '@/data/mockDashboard';
+import api from '@/api/http';
+
+// Icon mapping for KPI cards
+const iconMap = {
+  "Total Requests": SpeedIcon,
+  "Error Rate": ErrorIcon,
+  "Anomaly Rate": WarningIcon,
+  "Avg Latency": TimerIcon,
+};
+
+// Module-level cache that persists across navigation
+const cache = {
+  kpiCards: [],
+  environmentSummary: [],
+  recentAnomalies: [],
+  trafficSeries: [],
+  lastFetch: 0,
+  prefetchStarted: false,
+};
+
+// Request throttling config
+const THROTTLE_MS = 5000;
+const POLL_INTERVAL_MS = 30000;
+
+// Prefetch data on module load
+const prefetchData = async () => {
+  if (cache.prefetchStarted) return;
+  cache.prefetchStarted = true;
+
+  try {
+    const [kpiRes, envRes, anomaliesRes, trafficRes] = await Promise.allSettled([
+      api.get('/dashboard/kpi'),
+      api.get('/dashboard/env-summary'),
+      api.get('/dashboard/anomalies'),
+      api.get('/dashboard/traffic'),
+    ]);
+
+    if (kpiRes.status === 'fulfilled' && kpiRes.value?.data) {
+      cache.kpiCards = kpiRes.value.data.map((card) => ({
+        ...card,
+        icon: iconMap[card.label] || SpeedIcon,
+      }));
+    }
+
+    if (envRes.status === 'fulfilled' && envRes.value?.data) {
+      cache.environmentSummary = envRes.value.data;
+    }
+
+    if (anomaliesRes.status === 'fulfilled' && anomaliesRes.value?.data) {
+      cache.recentAnomalies = anomaliesRes.value.data;
+    }
+
+    if (trafficRes.status === 'fulfilled' && trafficRes.value?.data) {
+      cache.trafficSeries = trafficRes.value.data;
+    }
+
+    cache.lastFetch = Date.now();
+  } catch (error) {
+    console.error('Prefetch error:', error);
+  }
+};
+
+// Start prefetch immediately on module load
+prefetchData();
 
 export const Dashboard = () => {
-  // const [loading, setLoading] = useState(false);
   const [selectedEnv, setSelectedEnv] = useState('All');
   const [selectedSeverity, setSelectedSeverity] = useState('All');
-  const [filteredAnomalies, setFilteredAnomalies] = useState([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // useEffect(() => {
-  //   // Simulate loading
-  //   // setTimeout(() => setLoading(false), 800);
-  //   setLoading(false)
+  // Initialize from cache immediately
+  const [kpiCards, setKpiCards] = useState(cache.kpiCards);
+  const [environmentSummary, setEnvironmentSummary] = useState(cache.environmentSummary);
+  const [recentAnomalies, setRecentAnomalies] = useState(cache.recentAnomalies);
+  const [trafficSeries, setTrafficSeries] = useState(cache.trafficSeries);
 
-  // }, []);
+  // Smart update detection using length checks
+  const shouldUpdate = useCallback((cachedData, newData) => {
+    if (!Array.isArray(cachedData) || !Array.isArray(newData)) return true;
+    return cachedData.length !== newData.length;
+  }, []);
 
+  // Fetch with throttling and auto-retry
+  const fetchDashboardData = useCallback(async (bypassThrottle = false) => {
+    const now = Date.now();
+    
+    // Throttle check
+    if (!bypassThrottle && now - cache.lastFetch < THROTTLE_MS) {
+      return;
+    }
+
+    if (bypassThrottle) {
+      setRefreshing(true);
+    }
+
+    try {
+      const [kpiRes, envRes, anomaliesRes, trafficRes] = await Promise.allSettled([
+        api.get('/dashboard/kpi'),
+        api.get('/dashboard/env-summary'),
+        api.get('/dashboard/anomalies'),
+        api.get('/dashboard/traffic'),
+      ]);
+
+      // Update KPI data if changed
+      if (kpiRes.status === 'fulfilled' && kpiRes.value?.data) {
+        const newKpiData = kpiRes.value.data.map((card) => ({
+          ...card,
+          icon: iconMap[card.label] || SpeedIcon,
+        }));
+        if (shouldUpdate(cache.kpiCards, newKpiData)) {
+          cache.kpiCards = newKpiData;
+          setKpiCards(newKpiData);
+        }
+      }
+
+      // Update environment summary if changed
+      if (envRes.status === 'fulfilled' && envRes.value?.data) {
+        if (shouldUpdate(cache.environmentSummary, envRes.value.data)) {
+          cache.environmentSummary = envRes.value.data;
+          setEnvironmentSummary(envRes.value.data);
+        }
+      }
+
+      // Update anomalies if changed
+      if (anomaliesRes.status === 'fulfilled' && anomaliesRes.value?.data) {
+        if (shouldUpdate(cache.recentAnomalies, anomaliesRes.value.data)) {
+          cache.recentAnomalies = anomaliesRes.value.data;
+          setRecentAnomalies(anomaliesRes.value.data);
+        }
+      }
+
+      // Update traffic data if changed
+      if (trafficRes.status === 'fulfilled' && trafficRes.value?.data) {
+        if (shouldUpdate(cache.trafficSeries, trafficRes.value.data)) {
+          cache.trafficSeries = trafficRes.value.data;
+          setTrafficSeries(trafficRes.value.data);
+        }
+      }
+
+      cache.lastFetch = now;
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+      
+      // Auto-retry on server restart (connection errors)
+      if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
+        setTimeout(() => fetchDashboardData(false), 5000);
+      }
+    } finally {
+      if (bypassThrottle) {
+        setRefreshing(false);
+      }
+    }
+  }, [shouldUpdate]);
+
+  // Initial fetch and polling
   useEffect(() => {
+    // Fetch immediately if cache is stale
+    const now = Date.now();
+    if (now - cache.lastFetch >= THROTTLE_MS) {
+      fetchDashboardData(false);
+    }
+
+    // Background polling every 30s
+    const pollInterval = setInterval(() => {
+      fetchDashboardData(false);
+    }, POLL_INTERVAL_MS);
+
+    return () => clearInterval(pollInterval);
+  }, [fetchDashboardData]);
+
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
+    fetchDashboardData(true);
+  }, [fetchDashboardData]);
+
+  // Filter anomalies based on environment and severity (memoized)
+  const filteredAnomalies = useMemo(() => {
     let filtered = recentAnomalies;
     if (selectedEnv !== 'All') {
       filtered = filtered.filter((a) => a.environment === selectedEnv);
@@ -43,26 +211,31 @@ export const Dashboard = () => {
     if (selectedSeverity !== 'All') {
       filtered = filtered.filter((a) => a.severity === selectedSeverity);
     }
-    setFilteredAnomalies(filtered);
-  }, [selectedEnv, selectedSeverity]);
+    return filtered;
+  }, [selectedEnv, selectedSeverity, recentAnomalies]);
 
-  // if (loading) {
-  //   return (
-  //     <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-  //       <CircularProgress />
-  //     </Box>
-  //   );
-  // }
-
+  // Memoized handlers
+  const handleEnvChange = useCallback((e) => setSelectedEnv(e.target.value), []);
+  const handleSeverityChange = useCallback((e) => setSelectedSeverity(e.target.value), []);
+  const handleRowClick = useCallback((params) => console.log(params.row), []);
 
   return (
     <Container maxWidth="xl">
-      <Typography variant="h4" gutterBottom fontWeight="bold">
-        Dashboard
-      </Typography>
-      <Typography variant="body1" color="text.secondary" paragraph>
-        Real-time monitoring and anomaly detection across distributed platforms
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom fontWeight="bold">
+            Dashboard
+          </Typography>
+          <Typography variant="body1" color="text.secondary" paragraph>
+            Real-time monitoring and anomaly detection across distributed platforms
+          </Typography>
+        </Box>
+        <Tooltip title="Refresh data">
+          <IconButton onClick={handleRefresh} disabled={refreshing}>
+            <RefreshIcon sx={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       {/* KPI Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -131,7 +304,7 @@ export const Dashboard = () => {
               <Select
                 value={selectedSeverity}
                 label="Severity"
-                onChange={(e) => setSelectedSeverity(e.target.value)}
+                onChange={handleSeverityChange}
               >
                 <MenuItem value="All">All Severities</MenuItem>
                 <MenuItem value="critical">Critical</MenuItem>
@@ -142,11 +315,11 @@ export const Dashboard = () => {
             </FormControl>
             <EnvironmentFilter
               value={selectedEnv}
-              onChange={(e) => setSelectedEnv(e.target.value)}
+              onChange={handleEnvChange}
             />
           </Box>
         </Box>
-        <AnomalyTable rows={filteredAnomalies} onRowClick={(params) => console.log(params.row)} />
+        <AnomalyTable rows={filteredAnomalies} onRowClick={handleRowClick} />
       </Paper>
     </Container>
   );
