@@ -79,3 +79,17 @@ curl -X POST http://localhost:9880/api-logs.test \
     -d '{"message":"HOST IP TEST"}'`
 
   `curl 'http://localhost:9200/_cat/indices/api-logs*?v'`
+
+# POST LOG FROM FLUENTD TO OPENSEARCH`
+
+#### ✅ ENTIRE PIPELINE IS WORKING!
+#### Backend → Fluentd → OpenSearch
+
+
+`curl -X POST 'http://localhost:9880/api-logs.backend' \
+  -H 'Content-Type: application/json' \
+  -d '{"timestamp":"2026-01-09T19:20:00Z","level":"INFO","message":"✅ PIPELINE WORKING"}'`
+  
+`curl 'http://localhost:9200/_cat/indices/api-logs*?v'`
+
+`curl 'http://localhost:9200/api-logs-2026.01.09/_search?pretty&q=message:WORKING' | grep -A 10 '"message"'`
