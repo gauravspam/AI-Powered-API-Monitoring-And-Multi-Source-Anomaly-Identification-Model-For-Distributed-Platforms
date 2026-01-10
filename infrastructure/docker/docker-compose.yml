@@ -49,10 +49,10 @@ services:
       retries: 5
 
   fluentd:
-    image: fluent/fluentd:v1.16-debian-1-opensearch
+    image: fluent/fluentd:v1.16-debian-1
     container_name: fluentd
     volumes:
-      - ./fluent.conf:/fluentd/etc/fluent.conf
+      - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf
       - ./fluent-plugins:/fluentd/plugins
     environment:
       FLUENT_UID: 0
@@ -66,18 +66,20 @@ services:
       - monitoring-net
 
   backend:
-    build:
+    build: 
       context: ../../backend/java-apis
       dockerfile: Dockerfile
     container_name: api-monitoring-backend
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring
       SPRING_DATASOURCE_USERNAME: api_monitor
       SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
       FLUENTD_HOST: fluentd
-      FLUENTD_PORT: 9880
+      FLUENTD_PORT: "9880"
       OPENSEARCH_HOST: opensearch
-      OPENSEARCH_PORT: 9200
+      OPENSEARCH_PORT: "9200"
+      OPENSEARCH_SCHEME: http
     ports:
       - "8080:8080"
     depends_on:

@@ -9,27 +9,32 @@ spring:
     driverClassName: org.postgresql.Driver
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
   jpa:
     database-platform: org.hibernate.dialect.PostgreSQL10Dialect
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
   endpoint:
     health:
       show-details: always
+      show-components: always
 
 opensearch:
-  host: ${OPENSEARCH_HOST:opensearch}
+  host: ${OPENSEARCH_HOST:localhost}
   port: ${OPENSEARCH_PORT:9200}
-  scheme: http
-  username: ""
-  password: ""
+  scheme: ${OPENSEARCH_SCHEME:http}
+  username: ${OPENSEARCH_USERNAME:admin}
+  password: ${OPENSEARCH_PASSWORD:admin}
 
 python:
   service:
@@ -43,6 +48,3 @@ fluentd:
   host: fluentd
   port: 9880
   path: /api-logs.${spring.application.name}
-
-flyway:
-  enabled: false

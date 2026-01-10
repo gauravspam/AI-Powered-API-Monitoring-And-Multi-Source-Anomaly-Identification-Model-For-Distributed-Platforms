@@ -1,61 +1,29 @@
-# Multi-stage build for Spring Boot Backend
-# Using Java 21 LTS for both build and runtime (stable and production-ready)
+FROM eclipse-temurin:21-jdk AS build
 
-FROM openjdk:21-jdk-slim AS build
-# FROM eclipse-temurin:21-jdk AS build
-
-# Install Gradle
 WORKDIR /opt
 RUN apt-get update && apt-get install -y wget unzip && rm -rf /var/lib/apt/lists/* && \
     wget -q https://services.gradle.org/distributions/gradle-8.8-bin.zip && \
-    unzip gradle-8.8-bin.zip && \
-    rm gradle-8.8-bin.zip && \
-    mv gradle-8.8 gradle
-
+    unzip gradle-8.8-bin.zip && rm gradle-8.8-bin.zip && mv gradle-8.8 gradle
 ENV PATH=/opt/gradle/bin:$PATH
 
 WORKDIR /app
 
-# Copy Gradle files
-COPY build/libs/*.jar app.jar
-COPY gradle ./gradle
-
-# Download dependencies (cached layer)
-RUN gradle dependencies --no-daemon || true
-
-# Copy source code
+# Essential configs only
+COPY build.gradle settings.gradle ./
 COPY src ./src
 
-# Build the application
+# Build (uses global Gradle)
 RUN gradle build --no-daemon -x test
 
-# Runtime stage - Use Java 21 JRE (LTS)
+# Runtime
 FROM eclipse-temurin:21-jre
-
-# Install curl for health check
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
-
-# Create non-root user
 RUN groupadd -r spring && useradd -r -g spring spring
-
-# Copy built JAR from build stage
 COPY --from=build /app/build/libs/*.jar app.jar
-
-# Change ownership
 RUN chown spring:spring app.jar
-
-# Switch to non-root user
-USER spring:spring
-
-# Expose port
+USER spring
 EXPOSE 8081
-
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD curl -f http://localhost:8081/health || exit 1
-
-# Run the application
-ENTRYPOINT ["java", "-jar", "app.jar"]
-
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
