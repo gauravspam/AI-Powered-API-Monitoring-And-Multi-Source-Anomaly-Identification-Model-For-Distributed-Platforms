@@ -1,4 +1,5 @@
 // Mock data for Services page
+// http://localhost:8080/api/services
 
 export const services = [
   {

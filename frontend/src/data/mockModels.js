@@ -1,6 +1,6 @@
 // Mock data for Models page
-
-export const models = [
+// http://localhost:8080/api/models
+const models = [
   {
     id: 1,
     name: 'MSIF-LSTM',

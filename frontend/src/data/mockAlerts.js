@@ -1,6 +1,6 @@
 // Mock data for Alerts page
-
-export const alerts = [
+// http://localhost:8080/api/alerts
+const alerts = [
   {
     id: 1,
     title: 'Critical Latency Spike Detected',
