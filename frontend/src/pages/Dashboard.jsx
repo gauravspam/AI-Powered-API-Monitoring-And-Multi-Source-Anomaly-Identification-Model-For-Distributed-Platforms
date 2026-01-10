@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Container,
   Grid,
@@ -38,55 +38,68 @@ const iconMap = {
 };
 
 // Module-level cache that persists across navigation
-const cache = {
-  kpiCards: [],
-  environmentSummary: [],
-  recentAnomalies: [],
-  trafficSeries: [],
-  lastFetch: 0,
-  prefetchStarted: false,
+let cachedDashboard = {
+  kpiCards: null,
+  environmentSummary: null,
+  recentAnomalies: null,
+  trafficSeries: null,
+  timestamp: null,
 };
 
-// Request throttling config
+// Pre-fetch data as soon as module loads
+let initialFetchPromise = null;
+let prefetchFailed = false;
+
 const THROTTLE_MS = 5000;
 const POLL_INTERVAL_MS = 30000;
 
-// Prefetch data on module load
-const prefetchData = async () => {
-  if (cache.prefetchStarted) return;
-  cache.prefetchStarted = true;
-
-  try {
-    const [kpiRes, envRes, anomaliesRes, trafficRes] = await Promise.allSettled([
-      api.get('/dashboard/kpi'),
-      api.get('/dashboard/env-summary'),
-      api.get('/dashboard/anomalies'),
-      api.get('/dashboard/traffic'),
-    ]);
-
-    if (kpiRes.status === 'fulfilled' && kpiRes.value?.data) {
-      cache.kpiCards = kpiRes.value.data.map((card) => ({
+const prefetchData = () => {
+  if (!initialFetchPromise && !cachedDashboard.kpiCards) {
+    initialFetchPromise = Promise.all([
+      api.get('/dashboard/kpi').catch(() => ({ data: [] })),
+      api.get('/dashboard/env-summary').catch(() => ({ data: [] })),
+      api.get('/dashboard/anomalies').catch(() => ({ data: [] })),
+      api.get('/dashboard/traffic').catch(() => ({ data: [] })),
+    ]).then(([kpiRes, envRes, anomaliesRes, trafficRes]) => {
+      const kpiData = (kpiRes.data || []).map((card) => ({
         ...card,
         icon: iconMap[card.label] || SpeedIcon,
       }));
-    }
+      const envData = envRes.data || [];
+      const anomaliesData = anomaliesRes.data || [];
+      const trafficData = trafficRes.data || [];
 
-    if (envRes.status === 'fulfilled' && envRes.value?.data) {
-      cache.environmentSummary = envRes.value.data;
-    }
+      // Check if we got actual data
+      if (
+        kpiData.length === 0 &&
+        envData.length === 0 &&
+        anomaliesData.length === 0 &&
+        trafficData.length === 0
+      ) {
+        prefetchFailed = true;
+      }
 
-    if (anomaliesRes.status === 'fulfilled' && anomaliesRes.value?.data) {
-      cache.recentAnomalies = anomaliesRes.value.data;
-    }
-
-    if (trafficRes.status === 'fulfilled' && trafficRes.value?.data) {
-      cache.trafficSeries = trafficRes.value.data;
-    }
-
-    cache.lastFetch = Date.now();
-  } catch (error) {
-    console.error('Prefetch error:', error);
+      const data = {
+        kpiCards: kpiData,
+        environmentSummary: envData,
+        recentAnomalies: anomaliesData,
+        trafficSeries: trafficData,
+        timestamp: Date.now(),
+      };
+      cachedDashboard = data;
+      return data;
+    }).catch(() => {
+      prefetchFailed = true;
+      return {
+        kpiCards: [],
+        environmentSummary: [],
+        recentAnomalies: [],
+        trafficSeries: [],
+        timestamp: Date.now(),
+      };
+    });
   }
+  return initialFetchPromise;
 };
 
 // Start prefetch immediately on module load
@@ -96,12 +109,17 @@ export const Dashboard = () => {
   const [selectedEnv, setSelectedEnv] = useState('All');
   const [selectedSeverity, setSelectedSeverity] = useState('All');
   const [refreshing, setRefreshing] = useState(false);
+  
+  // Initialize state from cache
+  const [kpiCards, setKpiCards] = useState(cachedDashboard.kpiCards || []);
+  const [environmentSummary, setEnvironmentSummary] = useState(cachedDashboard.environmentSummary || []);
+  const [recentAnomalies, setRecentAnomalies] = useState(cachedDashboard.recentAnomalies || []);
+  const [trafficSeries, setTrafficSeries] = useState(cachedDashboard.trafficSeries || []);
 
-  // Initialize from cache immediately
-  const [kpiCards, setKpiCards] = useState(cache.kpiCards);
-  const [environmentSummary, setEnvironmentSummary] = useState(cache.environmentSummary);
-  const [recentAnomalies, setRecentAnomalies] = useState(cache.recentAnomalies);
-  const [trafficSeries, setTrafficSeries] = useState(cache.trafficSeries);
+  // Refs for lifecycle management
+  const isMountedRef = useRef(true);
+  const pollIntervalRef = useRef(null);
+  const lastFetchTime = useRef(cachedDashboard.timestamp || 0);
 
   // Smart update detection using length checks
   const shouldUpdate = useCallback((cachedData, newData) => {
@@ -109,97 +127,130 @@ export const Dashboard = () => {
     return cachedData.length !== newData.length;
   }, []);
 
-  // Fetch with throttling and auto-retry
-  const fetchDashboardData = useCallback(async (bypassThrottle = false) => {
-    const now = Date.now();
-    
-    // Throttle check
-    if (!bypassThrottle && now - cache.lastFetch < THROTTLE_MS) {
-      return;
-    }
-
-    if (bypassThrottle) {
-      setRefreshing(true);
-    }
-
+  // Fetch with throttling
+  const fetchDashboardData = useCallback(async (isPolling = false) => {
     try {
-      const [kpiRes, envRes, anomaliesRes, trafficRes] = await Promise.allSettled([
-        api.get('/dashboard/kpi'),
-        api.get('/dashboard/env-summary'),
-        api.get('/dashboard/anomalies'),
-        api.get('/dashboard/traffic'),
+      // Throttle: Don't fetch if last fetch was less than 5 seconds ago (unless manual refresh)
+      if (isPolling && Date.now() - lastFetchTime.current < THROTTLE_MS) {
+        return;
+      }
+
+      const [kpiRes, envRes, anomaliesRes, trafficRes] = await Promise.all([
+        api.get('/dashboard/kpi').catch(() => ({ data: [] })),
+        api.get('/dashboard/env-summary').catch(() => ({ data: [] })),
+        api.get('/dashboard/anomalies').catch(() => ({ data: [] })),
+        api.get('/dashboard/traffic').catch(() => ({ data: [] })),
       ]);
 
-      // Update KPI data if changed
-      if (kpiRes.status === 'fulfilled' && kpiRes.value?.data) {
-        const newKpiData = kpiRes.value.data.map((card) => ({
-          ...card,
-          icon: iconMap[card.label] || SpeedIcon,
-        }));
-        if (shouldUpdate(cache.kpiCards, newKpiData)) {
-          cache.kpiCards = newKpiData;
-          setKpiCards(newKpiData);
+      if (!isMountedRef.current) return;
+
+      lastFetchTime.current = Date.now();
+
+      const newKpiData = (kpiRes.data || []).map((card) => ({
+        ...card,
+        icon: iconMap[card.label] || SpeedIcon,
+      }));
+      const newEnvData = envRes.data || [];
+      const newAnomaliesData = anomaliesRes.data || [];
+      const newTrafficData = trafficRes.data || [];
+
+      // Fast shallow comparison - only update if lengths differ
+      const kpiChanged = shouldUpdate(kpiCards, newKpiData);
+      const envChanged = shouldUpdate(environmentSummary, newEnvData);
+      const anomaliesChanged = shouldUpdate(recentAnomalies, newAnomaliesData);
+      const trafficChanged = shouldUpdate(trafficSeries, newTrafficData);
+
+      if (kpiChanged || envChanged || anomaliesChanged || trafficChanged || !isPolling) {
+        // Batch state updates
+        if (kpiChanged) setKpiCards(newKpiData);
+        if (envChanged) setEnvironmentSummary(newEnvData);
+        if (anomaliesChanged) setRecentAnomalies(newAnomaliesData);
+        if (trafficChanged) setTrafficSeries(newTrafficData);
+
+        cachedDashboard = {
+          kpiCards: newKpiData,
+          environmentSummary: newEnvData,
+          recentAnomalies: newAnomaliesData,
+          trafficSeries: newTrafficData,
+          timestamp: Date.now(),
+        };
+
+        if (isPolling && (kpiChanged || envChanged || anomaliesChanged || trafficChanged)) {
+          console.log('Dashboard updated with new data');
         }
       }
-
-      // Update environment summary if changed
-      if (envRes.status === 'fulfilled' && envRes.value?.data) {
-        if (shouldUpdate(cache.environmentSummary, envRes.value.data)) {
-          cache.environmentSummary = envRes.value.data;
-          setEnvironmentSummary(envRes.value.data);
-        }
-      }
-
-      // Update anomalies if changed
-      if (anomaliesRes.status === 'fulfilled' && anomaliesRes.value?.data) {
-        if (shouldUpdate(cache.recentAnomalies, anomaliesRes.value.data)) {
-          cache.recentAnomalies = anomaliesRes.value.data;
-          setRecentAnomalies(anomaliesRes.value.data);
-        }
-      }
-
-      // Update traffic data if changed
-      if (trafficRes.status === 'fulfilled' && trafficRes.value?.data) {
-        if (shouldUpdate(cache.trafficSeries, trafficRes.value.data)) {
-          cache.trafficSeries = trafficRes.value.data;
-          setTrafficSeries(trafficRes.value.data);
-        }
-      }
-
-      cache.lastFetch = now;
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-      
-      // Auto-retry on server restart (connection errors)
-      if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
-        setTimeout(() => fetchDashboardData(false), 5000);
-      }
-    } finally {
-      if (bypassThrottle) {
-        setRefreshing(false);
-      }
+    } catch (err) {
+      console.error('Error fetching dashboard data:', err);
     }
-  }, [shouldUpdate]);
+  }, [kpiCards, environmentSummary, recentAnomalies, trafficSeries, shouldUpdate]);
 
-  // Initial fetch and polling
-  useEffect(() => {
-    // Fetch immediately if cache is stale
-    const now = Date.now();
-    if (now - cache.lastFetch >= THROTTLE_MS) {
-      fetchDashboardData(false);
+  const startPolling = useCallback(() => {
+    if (!pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(() => {
+        fetchDashboardData(true);
+      }, POLL_INTERVAL_MS);
     }
-
-    // Background polling every 30s
-    const pollInterval = setInterval(() => {
-      fetchDashboardData(false);
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(pollInterval);
   }, [fetchDashboardData]);
+
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  // Component mount and initial data loading
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    const loadData = async () => {
+      // If prefetch failed or returned empty data, retry
+      if (
+        prefetchFailed ||
+        (cachedDashboard.kpiCards && cachedDashboard.kpiCards.length === 0)
+      ) {
+        // Reset flags
+        initialFetchPromise = null;
+        prefetchFailed = false;
+        await fetchDashboardData(false);
+      } else if (initialFetchPromise) {
+        // Use prefetched data if available
+        try {
+          const data = await initialFetchPromise;
+          if (isMountedRef.current && data) {
+            setKpiCards(data.kpiCards);
+            setEnvironmentSummary(data.environmentSummary);
+            setRecentAnomalies(data.recentAnomalies);
+            setTrafficSeries(data.trafficSeries);
+          }
+        } catch (err) {
+          // If prefetch failed, try again
+          await fetchDashboardData(false);
+        }
+      } else {
+        // No prefetch, fetch normally
+        await fetchDashboardData(false);
+      }
+    };
+
+    loadData();
+    startPolling();
+
+    return () => {
+      isMountedRef.current = false;
+      stopPolling();
+    };
+  }, [fetchDashboardData, startPolling, stopPolling]);
 
   // Manual refresh handler
   const handleRefresh = useCallback(() => {
-    fetchDashboardData(true);
+    setRefreshing(true);
+    lastFetchTime.current = 0; // Reset throttle to allow immediate fetch
+    fetchDashboardData(false).finally(() => {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    });
   }, [fetchDashboardData]);
 
   // Filter anomalies based on environment and severity (memoized)
