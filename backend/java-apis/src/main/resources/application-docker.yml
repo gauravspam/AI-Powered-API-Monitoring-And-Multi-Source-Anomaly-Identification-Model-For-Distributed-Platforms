@@ -43,3 +43,6 @@ fluentd:
   host: fluentd
   port: 9880
   path: /api-logs.${spring.application.name}
+
+flyway:
+  enabled: false
