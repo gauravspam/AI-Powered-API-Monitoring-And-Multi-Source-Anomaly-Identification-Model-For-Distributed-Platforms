@@ -77,14 +77,14 @@ services:
       SPRING_PROFILES_ACTIVE: docker
 
       # DataSource - for app runtime
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring?currentSchema=public
+      SPRING_DATASOURCE_URL: jdbc:postgresql://172.19.0.1:5432/api_monitoring?currentSchema=public
       SPRING_DATASOURCE_USERNAME: api_monitor
       SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
 
       # Flyway
       SPRING_FLYWAY_ENABLED: "true"
       SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
-      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/api_monitoring?currentSchema=public
+      SPRING_FLYWAY_URL: jdbc:postgresql://172.19.0.1:5432/api_monitoring?currentSchema=public
       SPRING_FLYWAY_USER: api_monitor
       SPRING_FLYWAY_PASSWORD: api_monitor_pwd
       SPRING_FLYWAY_LOCATIONS: classpath:db/migration
