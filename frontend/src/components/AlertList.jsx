@@ -10,7 +10,7 @@ const severityMap = {
 
 export const AlertList = ({ alerts, onSelect, onAcknowledge, onResolve }) => {
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} >
       {alerts.map((alert) => (
         <Paper
           key={alert.id}
@@ -29,28 +29,26 @@ export const AlertList = ({ alerts, onSelect, onAcknowledge, onResolve }) => {
             sx={{ mb: 1 }}
             action={
               <Box sx={{ display: 'flex', gap: 1 }}>
-                {alert.status === 'open' && (
-                  <Button
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAcknowledge(alert.id);
-                    }}
-                  >
-                    Acknowledge
-                  </Button>
-                )}
-                {alert.status !== 'resolved' && (
-                  <Button
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onResolve(alert.id);
-                    }}
-                  >
-                    Resolve
-                  </Button>
-                )}
+                <Button
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAcknowledge(alert.id);
+                  }}
+                  sx={{ visibility: alert.status === 'open' ? 'visible' : 'hidden' }}
+                >
+                  Acknowledge
+                </Button>
+                <Button
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onResolve(alert.id);
+                  }}
+                  sx={{ visibility: alert.status !== 'resolved' ? 'visible' : 'hidden' }}
+                >
+                  Resolve
+                </Button>
               </Box>
             }
           >
