@@ -1,7 +1,6 @@
 // Mock data for Services page
-// http://localhost:8080/api/services
 
-export const services = [
+const services = [
   {
     id: 1,
     name: 'auth-service',
@@ -133,3 +132,4 @@ export const services = [
     tags: ['orders', 'business-critical'],
   },
 ];
+module.exports = { services };

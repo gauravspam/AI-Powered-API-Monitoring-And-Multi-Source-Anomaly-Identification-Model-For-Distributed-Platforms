@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -12,13 +12,62 @@ import {
   Drawer,
   IconButton,
   Chip,
+  Button,
+  Tooltip,
 } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
-import { Close as CloseIcon } from '@mui/icons-material';
+import { Close as CloseIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import StatusChip from '@/components/StatusChip';
 import EnvironmentFilter from '@/components/EnvironmentFilter';
-import { services } from '@/data/mockServices';
-import { recentAnomalies } from '@/data/mockDashboard';
+import api from '@/api/http';
+
+// ==================== CACHING LAYER ====================
+// Cache storage outside component to persist across unmounts
+let cachedData = {
+  services: null,
+  anomalies: null,
+  timestamp: null,
+};
+
+// Pre-fetch data as soon as module loads (even before component mounts)
+let initialFetchPromise = null;
+let prefetchFailed = false;
+
+const prefetchData = () => {
+  if (!initialFetchPromise && !cachedData.services) {
+    initialFetchPromise = Promise.all([
+      api.get('/services').catch(() => ({ data: [] })),
+      api.get('/dashboard/anomalies').catch(() => ({ data: [] })),
+    ]).then(([servicesResponse, anomaliesResponse]) => {
+      const services = servicesResponse.data || [];
+      const anomalies = anomaliesResponse.data || [];
+
+      // Check if we got actual data
+      if (services.length === 0 && anomalies.length === 0) {
+        prefetchFailed = true;
+      }
+
+      const data = {
+        services: services,
+        anomalies: anomalies,
+        timestamp: Date.now(),
+      };
+      cachedData = data;
+      return data;
+    }).catch(() => {
+      prefetchFailed = true;
+      return {
+        services: [],
+        anomalies: [],
+        timestamp: Date.now(),
+      };
+    });
+  }
+  return initialFetchPromise;
+};
+
+// Start prefetching immediately when module loads
+prefetchData();
 
 const columns = [
   { field: 'name', headerName: 'Service', width: 180 },
@@ -65,43 +114,183 @@ const columns = [
   },
 ];
 
+// ==================== COMPONENT ====================
+
 export const Services = () => {
+  // State management - only for UI state
   const [searchText, setSearchText] = useState('');
   const [selectedEnv, setSelectedEnv] = useState('All');
   const [selectedStatus, setSelectedStatus] = useState('All');
   const [selectedService, setSelectedService] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [services, setServices] = useState(cachedData.services || []);
+  const [anomalies, setAnomalies] = useState(cachedData.anomalies || []);
 
+  // Refs for managing lifecycle and throttling
+  const pollIntervalRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const lastFetchTime = useRef(cachedData.timestamp || 0);
+
+  // Fetch services and anomalies data
+  const fetchServicesData = useCallback(async (isPolling = false) => {
+    try {
+      // Throttle: Don't fetch if last fetch was less than 5 seconds ago (unless manual refresh)
+      if (isPolling && Date.now() - lastFetchTime.current < 5000) {
+        return;
+      }
+
+      const [servicesResponse, anomaliesResponse] = await Promise.all([
+        api.get('/services').catch(() => ({ data: [] })),
+        api.get('/dashboard/anomalies').catch(() => ({ data: [] })),
+      ]);
+
+      // Don't update if component unmounted
+      if (!isMountedRef.current) return;
+
+      lastFetchTime.current = Date.now();
+      const newServices = servicesResponse.data || [];
+      const newAnomalies = anomaliesResponse.data || [];
+
+      // Fast shallow comparison - only update if lengths differ
+      const shouldUpdate =
+        newAnomalies.length !== anomalies.length ||
+        newServices.length !== services.length;
+
+      if (shouldUpdate || !isPolling) {
+        setServices(newServices);
+        setAnomalies(newAnomalies);
+
+        // Update module-level cache
+        cachedData = {
+          services: newServices,
+          anomalies: newAnomalies,
+          timestamp: Date.now(),
+        };
+
+        if (isPolling && shouldUpdate) {
+          console.log(`Services updated: ${newServices.length} services, ${newAnomalies.length} anomalies`);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching services data:', err);
+    }
+  }, [anomalies.length, services.length]);
+
+  // Start background polling
+  const startPolling = useCallback(() => {
+    if (!pollIntervalRef.current) {
+      pollIntervalRef.current = setInterval(() => {
+        fetchServicesData(true);
+      }, 30000); // 30 seconds
+    }
+  }, [fetchServicesData]);
+
+  // Stop background polling
+  const stopPolling = useCallback(() => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  // Setup subscriptions and initial data on mount
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    const loadData = async () => {
+      // EDGE CASE 1: If prefetch failed or returned empty data (server was down), retry
+      if (prefetchFailed || (cachedData.services && cachedData.services.length === 0)) {
+        // Reset flags to allow retry
+        initialFetchPromise = null;
+        prefetchFailed = false;
+        console.log('Retrying initial fetch (server may have been down)...');
+        await fetchServicesData(false);
+      } else if (initialFetchPromise) {
+        // Use prefetched data if available
+        try {
+          const data = await initialFetchPromise;
+          if (isMountedRef.current && data) {
+            setServices(data.services);
+            setAnomalies(data.anomalies);
+          }
+        } catch (err) {
+          // If prefetch failed, try again
+          await fetchServicesData(false);
+        }
+      } else {
+        // No prefetch available, fetch normally
+        await fetchServicesData(false);
+      }
+    };
+
+    loadData();
+    startPolling();
+
+    return () => {
+      isMountedRef.current = false;
+      stopPolling();
+    };
+  }, [fetchServicesData, startPolling, stopPolling]);
+
+  // Manual refresh handler
+  const handleRefresh = useCallback(() => {
+    lastFetchTime.current = 0; // Reset throttle to allow immediate fetch
+    fetchServicesData(false);
+  }, [fetchServicesData]);
+
+  // Memoized filtered services
   const filteredServices = useMemo(() => {
-    return services.filter((service) => {
-      const matchesSearch = service.name.toLowerCase().includes(searchText.toLowerCase());
-      const matchesEnv = selectedEnv === 'All' || service.environment === selectedEnv;
-      const matchesStatus = selectedStatus === 'All' || service.status === selectedStatus;
-      return matchesSearch && matchesEnv && matchesStatus;
-    });
-  }, [searchText, selectedEnv, selectedStatus]);
+    if (services.length === 0) return [];
 
-  const handleRowClick = (params) => {
+    const lowerSearch = searchText.toLowerCase();
+    const isAllEnv = selectedEnv === 'All';
+    const isAllStatus = selectedStatus === 'All';
+
+    // Fast path: no filters
+    if (isAllEnv && isAllStatus && !lowerSearch) {
+      return services;
+    }
+
+    return services.filter((service) => {
+      if (!isAllEnv && service.environment !== selectedEnv) return false;
+      if (!isAllStatus && service.status !== selectedStatus) return false;
+      if (lowerSearch && !service.name.toLowerCase().includes(lowerSearch)) return false;
+      return true;
+    });
+  }, [searchText, selectedEnv, selectedStatus, services]);
+
+  // Memoized service anomalies
+  const serviceAnomalies = useMemo(() => {
+    if (!selectedService || anomalies.length === 0) return [];
+    return anomalies.filter((a) => a.serviceName === selectedService.name);
+  }, [selectedService, anomalies]);
+
+  // Callback for row click
+  const handleRowClick = useCallback((params) => {
     setSelectedService(params.row);
     setDrawerOpen(true);
-  };
-
-  const serviceAnomalies = useMemo(() => {
-    if (!selectedService) return [];
-    return recentAnomalies.filter((a) => a.serviceName === selectedService.name);
-  }, [selectedService]);
+  }, []);
 
   return (
     <Container maxWidth="xl">
-      <Typography variant="h4" gutterBottom fontWeight="bold">
-        Services
-      </Typography>
-      <Typography variant="body1" color="text.secondary" paragraph>
-        Monitor and manage API services across distributed environments
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom fontWeight="bold">
+            Services
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Monitor and manage API services across distributed environments
+          </Typography>
+        </Box>
+        <Tooltip title="Refresh services">
+          <IconButton onClick={handleRefresh} color="primary">
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Paper sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
           <TextField
             label="Search services"
             variant="outlined"

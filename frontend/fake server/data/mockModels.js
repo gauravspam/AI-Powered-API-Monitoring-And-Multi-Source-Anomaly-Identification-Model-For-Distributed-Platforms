@@ -1,5 +1,5 @@
 // Mock data for Models page
-// http://localhost:8080/api/models
+
 const models = [
   {
     id: 1,
@@ -68,3 +68,4 @@ const models = [
     accuracy: 95.1,
   },
 ];
+module.exports = { models };

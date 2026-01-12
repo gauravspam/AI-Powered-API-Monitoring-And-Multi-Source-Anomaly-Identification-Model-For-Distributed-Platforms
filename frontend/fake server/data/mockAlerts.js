@@ -1,5 +1,5 @@
 // Mock data for Alerts page
-// http://localhost:8080/api/alerts
+
 const alerts = [
   {
     id: 1,
@@ -98,3 +98,4 @@ const alerts = [
     source: 'MSIF-LSTM',
   },
 ];
+module.exports = { alerts };
