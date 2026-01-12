@@ -7,7 +7,6 @@ import Logs from '@/pages/Logs';
 import Models from '@/pages/Models';
 import Settings from '@/pages/Settings';
 import NotFound from '@/pages/NotFound';
-import AppRoutes from "@/routes/AppRoutes.jsx";
 
 export const AppRoutes = () => {
   return (
