@@ -1,38 +1,56 @@
 package com.api.monitoring.backend.service;
 
-import org.opensearch.action.index.IndexRequest;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.client.RequestOptions;
-import org.opensearch.client.RestHighLevelClient;
-import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.search.builder.SearchSourceBuilder;
+import com.api.monitoring.backend.dto.TrafficMetricsDTO; // ← ADD THIS
 import org.springframework.stereotype.Service;
-
-import java.io.IOException;
-import java.util.Map;
 
 @Service
 public class OpenSearchLogService {
 
-    private final RestHighLevelClient client;
+  // ... existing code ...
 
-    public OpenSearchLogService(RestHighLevelClient client) {
-        this.client = client;
-    }
+  public long getTotalRequests() {
+    return 10000L; // Placeholder
+  }
 
-    public void indexTestLog(Map<String, Object> doc) throws IOException {
-        IndexRequest request = new IndexRequest("api-logs-test")
-                .source(doc);
-        client.index(request, RequestOptions.DEFAULT);
-    }
+  public double getSuccessRate() {
+    return 97.5; // Placeholder: 97.5%
+  }
 
-    public SearchResponse findAllTestLogs() throws IOException {
-        SearchRequest request = new SearchRequest("api-logs-test");
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder()
-                .query(QueryBuilders.matchAllQuery())
-                .size(100);
-        request.source(sourceBuilder);
-        return client.search(request, RequestOptions.DEFAULT);
-    }
+  public double getErrorRate() {
+    return 2.5; // Placeholder: 2.5%
+  }
+
+  public double getAvgLatency() {
+    return 120.0; // Placeholder: 120ms
+  }
+
+  public double getP95Latency() {
+    return 250.0; // Placeholder: 250ms
+  }
+
+  public double getP99Latency() {
+    return 450.0; // Placeholder: 450ms
+  }
+
+  public TrafficMetricsDTO getTrafficMetrics() {
+    TrafficMetricsDTO traffic = new TrafficMetricsDTO();
+    traffic.setCurrent(450);
+    traffic.setPeak(2000);
+    traffic.setAverage(850);
+    traffic.setPercentileP95(1500);
+    traffic.setTrend("STABLE");
+    return traffic;
+  }
+
+  public int getCurrentRPS() {
+    return 450; // Placeholder
+  }
+
+  public int getPeakRPS() {
+    return 2000; // Placeholder
+  }
+
+  public int getAverageRPS() {
+    return 850; // Placeholder
+  }
 }
