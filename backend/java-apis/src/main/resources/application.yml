@@ -3,7 +3,6 @@ spring:
     name: api-monitoring-backend
     version: 1.0.0
 
-
   datasource:
     url: jdbc:postgresql://postgres:5432/api_monitoring
     username: api_monitor
@@ -15,7 +14,6 @@ spring:
       connection-timeout: 30000
       idle-timeout: 600000
       max-lifetime: 1800000
-
 
   jpa:
     hibernate:
@@ -33,14 +31,12 @@ spring:
     show-sql: false
     open-in-view: false
 
-
   flyway:
     enabled: false
     baseline-on-migrate: true
     locations: classpath:db/migration
     schemas: public
     out-of-order: false
-
 
   jackson:
     serialization:
@@ -49,7 +45,6 @@ spring:
     default-property-inclusion: non_null
     time-zone: UTC
 
-
 server:
   port: 8080
   servlet:
@@ -57,7 +52,6 @@ server:
   compression:
     enabled: true
     min-response-size: 1024
-
 
 logging:
   level:
@@ -71,7 +65,6 @@ logging:
     max-size: 10MB
     max-history: 30
 
-
 fluentd:
   enabled: true
   host: fluentd
@@ -80,6 +73,12 @@ fluentd:
   queue-limit-size: 256
   flush-interval: 3000
 
+# web:
+#   cors:
+#     allowed-origins: "http://localhost:3000"
+#     allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+#     allowed-headers: "*"
+#     allow-credentials: true
 
 management:
   endpoints:
@@ -94,7 +93,6 @@ management:
     export:
       prometheus:
         enabled: true
-
 
 app:
   name: API-Powered API Monitoring

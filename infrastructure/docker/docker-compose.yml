@@ -16,7 +16,7 @@ services:
     networks:
       - monitoring-net
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,7 +45,7 @@ services:
     networks:
       - monitoring-net
     healthcheck:
-      test: [ "CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1" ]
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 >/dev/null || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -68,23 +68,23 @@ services:
       - monitoring-net
 
   backend:
-    build: 
+    build:
       context: ../../backend/java-apis
       dockerfile: Dockerfile
     container_name: api-monitoring-backend
-    
+
     environment:
       SPRING_PROFILES_ACTIVE: docker
 
       # DataSource - for app runtime
-      SPRING_DATASOURCE_URL: jdbc:postgresql://172.19.0.1:5432/api_monitoring?currentSchema=public
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring?currentSchema=public
       SPRING_DATASOURCE_USERNAME: api_monitor
       SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
 
       # Flyway
       SPRING_FLYWAY_ENABLED: "true"
       SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
-      SPRING_FLYWAY_URL: jdbc:postgresql://172.19.0.1:5432/api_monitoring?currentSchema=public
+      SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/api_monitoring?currentSchema=public
       SPRING_FLYWAY_USER: api_monitor
       SPRING_FLYWAY_PASSWORD: api_monitor_pwd
       SPRING_FLYWAY_LOCATIONS: classpath:db/migration
@@ -115,7 +115,7 @@ services:
     networks:
       - monitoring-net
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -127,7 +127,7 @@ services:
       dockerfile: Dockerfile
     container_name: api-monitoring-frontend
     ports:
-      - "3000:3000"
+      - "3000:80"
     environment:
       - REACT_APP_API_URL=http://localhost:8080
       - REACT_APP_OPENSEARCH_URL=http://localhost:9200

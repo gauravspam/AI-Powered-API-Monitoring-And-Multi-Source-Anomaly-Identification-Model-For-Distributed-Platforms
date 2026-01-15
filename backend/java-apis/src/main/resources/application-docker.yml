@@ -5,7 +5,7 @@ spring:
   application:
     name: api-monitoring-backend
   datasource:
-    url: ${SPRING_DATASOURCE_URL}
+    url: postgresql://postgres:5432/apimonitoring #${SPRING_DATASOURCE_URL}
     driverClassName: org.postgresql.Driver
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
