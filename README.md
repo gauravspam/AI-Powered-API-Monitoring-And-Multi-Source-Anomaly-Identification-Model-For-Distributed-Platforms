@@ -1,8 +1,7 @@
 # AI-Powered API Monitoring & Multi-Source Anomaly Identification System
 
-**Distributed Platform Observability with Ensemble Machine Learning**
+> **Enterprise-grade API monitoring and anomaly detection platform for distributed microservices**
 
----
 
 ## 📋 Summary
 
@@ -21,11 +20,8 @@ and a **hybrid weighted ensemble** to capture both gradual system degradation an
 Microservices architectures generate massive volumes of API traffic across distributed systems. Detecting anomalies in real-time—such as:
 
 - **Performance degradation** (slow response times)
-
 - **Traffic anomalies** (unusual request patterns)
-
 - **Error rate spikes** (sudden increases in failures)
-
 - **Resource exhaustion** (high CPU/memory usage)
 
 
@@ -39,82 +35,68 @@ Microservices architectures generate massive volumes of API traffic across distr
 This project builds an **intelligent, multi-source anomaly detection system** that:
 
 - **Aggregates data** from multiple sources (APIs, logs, metrics, traces)
-
 - **Applies ML models** (MSIF-LSTM, PLE-GRU, Hybrid weighted ensemble) for real-time anomaly detection
-
 - **Visualizes insights** through an interactive dashboard
-
 - **Triggers alerts** when anomalies are detected
-
 - **Enables root-cause analysis** through correlated data streams
 
 ---
 
 ## 🚀 What Makes This Different
 
-## **The Multi-Source Advantage**
+### **The Multi-Source Advantage**
 
 Most published anomaly detection research papers (90%+) focus on **single data modality**:
 
 - Logs-only approaches (no metric correlation)
-    
 - Metrics-only systems (missing context)
-    
 - Traces-only analysis (incomplete picture)
     
 
 **This system combines all three**:
-
 
 - Logs (event context)
 - Metrics (latency, errors, throughput)
 - Traces (distributed path analysis)
 
 
-## **Three Specialized ML Models**
+### **Three Specialized ML Models**
 
 Published research typically uses:
 
 - Single LSTM (slow at capturing pattern deviations)
-    
-- Isolation Forest (high false positive rate)
-    
+- Isolation Forest (high false positive rate) 
 - Generic ensemble without domain logic
     
+---
 
 **This system implements domain-specific models**:
 
-## **1. MSIF-LSTM (40% weight) - Multivariate Sensor Fusion LSTM**
+## **1. MSIF-LSTM (35-60% weight) - Multi-Source Information Fusion LSTM**
 
-- **Purpose**: Detects gradual anomalies and trend degradation
-    
-- **What it captures**: "API latency slowly increasing from 250ms to 800ms over 1 hour"
-    
-- **Input features**: 5 metrics (latency, status, request rate, error rate, response size)
-    
-- **Strength**: Excellent at catching degradation patterns humans overlook
+- **Architecture**: 5 parallel LSTM encoders (128 units each, one per metric), Temporal LSTM layer (64 units)
+- **Purpose**: Detect trend-based anomalies by fusing multiple independent API metrics into a unified anomaly score    
+- **What it captures**: Complex multi-metric correlations and sudden trend changes across latency, status codes, request rates, error rates, and response sizes    
+- **Input features**: 5 metrics (latency, status, request rate, error rate, response size)    
+- **Strength**: Excels at detecting sudden spikes like "latency 50ms → 500ms + errors 0.1% → 5%" that traditional threshold-based monitoring misses
     
 
-## **2. PLE-GRU (60% weight) - Periodic LSTM with GRU**
+## **2. PLE-GRU (40-65% weight) - Probability Label Estimation GRU**
 
-- **Purpose**: Detects deviation from normal periodic patterns
-    
-- **What it captures**: "3 AM should have 10 requests/min, but we got 500 (53x spike)"
-    
-- **Input features**: 5 metrics + hour-of-day + day-of-week
-    
-- **Strength**: Catches unusual traffic patterns, bot attacks, scheduled job failures
+- **Architecture**: GRU encoder (64 units), Softmax classifier for 4 labels
+- **Purpose**: Estimate probability distribution of anomaly labels by learning periodic patterns and time-based behaviors
+- **What it captures**: Daily/weekly patterns, business hours traffic spikes, weekend behavior, holiday anomalies, and cyclical trends  
+- **Input features**: Time-of-day features - *hour_of_day (0-23), day_of_week (0-6), is_weekend (boolean), is_holiday (boolean)*
+- **Strength**: Learns "Friday 3PM traffic spike = normal" vs "Monday 3AM same spike = anomaly" with high confidence, reducing false positives during expected peak periods
     
 
-## **3. Hybrid Ensemble (Weighted Voting)**
+## **3. Context-Aware Hybrid (100% final weight) - Dynamic Fusion Model**
 
-- **Formula**: `score = 0.4 × MSIF + 0.6 × PLE`
-    
-- **Confidence**: `1 - |MSIF - PLE|` (low disagreement = high confidence)
-    
-- **Result**: Single, unified anomaly probability (0-1)
-    
-
+- **Architecture**: Input Layer (2 model scores + 4 context features), Context Embedding Layer, Dynamic Weight Generator, Weighted Fusion Layer, Confidence Estimator, Output Layer
+- **Purpose**: Dynamically weight MSIF-LSTM and PLE-GRU predictions based on operational context to produce final anomaly score
+- **What it captures**: Context-specific routing logic considering time-of-day, endpoint type, traffic level, and service health state
+- **Input features**:  MSIF-LSTM score (0-1), PLE-GRU score (0-1), Context vector: `time_of_day`, `endpoint_type`, `traffic_level`, `service_health` 
+- **Strength**: Adapts to changing contexts automatically, avoiding "one-size-fits-all" thresholds that cause alert fatigue or missed anomalies
 
 ---
 
@@ -145,51 +127,36 @@ Published research typically uses:
 
 ## **1. Multimodal Data Ingestion**
 
-- Real-time HTTP request/response capture
-    
-- Automatic trace_id propagation (distributed tracing)
-    
-- Status code semantics (2xx/4xx/5xx patterns)
-    
-- Response time percentiles (p50/p95/p99)
-    
-- Error context & exception messages
-    
+- Real-time HTTP request/response capture    
+- Automatic trace_id propagation (distributed tracing)    
+- Status code semantics (2xx/4xx/5xx patterns)    
+- Response time percentiles (p50/p95/p99)    
+- Error context & exception messages    
 - User agent & remote IP logging
     
 
 ## **2. Real-Time Scoring**
 
-- **Latency**: <5 seconds per prediction batch
-    
-- **Throughput**: 1000+ endpoints/5-minute cycle
-    
-- **Confidence**: Per-model agreement metric
-    
+- **Latency**: <5 seconds per prediction batch    
+- **Throughput**: 1000+ endpoints/5-minute cycle    
+- **Confidence**: Per-model agreement metric   
 - **Severity mapping**: LOW (0-0.5) → MEDIUM (0.5-0.7) → HIGH (0.7-0.85) → CRITICAL (0.85-1.0)
     
 
 ## **3. Intelligent Alerting**
 
-- **Threshold configuration**: Per-endpoint, per-severity
-    
-- **Alert types**: Slack, Email, both
-    
-- **Incident lifecycle**: OPEN → ACKNOWLEDGED → RESOLVED
-    
-- **Deduplication**: Same anomaly within 15 min = one incident
-    
+- **Threshold configuration**: Per-endpoint, per-severity    
+- **Alert types**: Slack, Email, both   
+- **Incident lifecycle**: OPEN → ACKNOWLEDGED → RESOLVED   
+- **Deduplication**: Same anomaly within 15 min = one incident   
 - **Escalation**: Auto-create Slack thread with dashboard link
     
 
 ## **4. Root Cause Analysis**
 
-- **Model attribution**: Which model triggered alert (MSIF/PLE/both)?
-    
-- **Feature importance**: Which metric caused the anomaly?
-    
-- **Time correlation**: Related incidents across services
-    
+- **Model attribution**: Which model triggered alert (MSIF/PLE/both)?   
+- **Feature importance**: Which metric caused the anomaly?   
+- **Time correlation**: Related incidents across services   
 - **Historical context**: Similar past incidents for patterns
     
 
@@ -215,45 +182,33 @@ _Benchmarks based on synthetic distributed system dataset (500K+ events)_
 
 ## **E-Commerce Platform**
 
-- Detect payment API slowdowns before customer complaints
-    
-- Alert on unusual traffic patterns (DDoS mitigation)
-    
-- Track database connection pool exhaustion
-    
+- Detect payment API slowdowns before customer complaints    
+- Alert on unusual traffic patterns (DDoS mitigation)    
+- Track database connection pool exhaustion    
 - Incident: 50ms spike → $5K/min revenue loss
     
 
 ## **SaaS Analytics Service**
 
-- Monitor data pipeline latency (trending degradation)
-    
-- Detect failed batch jobs (0 records processed)
-    
-- Alert on schema validation errors
-    
+- Monitor data pipeline latency (trending degradation)    
+- Detect failed batch jobs (0 records processed)    
+- Alert on schema validation errors    
 - Incident: Query slowdown cascades through 50 services
     
 
 ## **Financial Transactions**
 
-- Detect authorization service failures
-    
-- Alert on unusual error rates (fraud detection system issue)
-    
-- Correlation: Order service slow + Auth service timeout = cascade
-    
+- Detect authorization service failures   
+- Alert on unusual error rates (fraud detection system issue)  
+- Correlation: Order service slow + Auth service timeout = cascade    
 - Incident: 2% transaction failure → manual investigation
     
 
 ## **Real-Time Gaming**
 
-- Detect player connection timeouts (periodic spike at peak hours)
-    
-- Alert on matchmaking service anomalies
-    
-- Track server resource exhaustion
-    
+- Detect player connection timeouts (periodic spike at peak hours)    
+- Alert on matchmaking service anomalies    
+- Track server resource exhaustion    
 - Incident: Latency spike → player churn metric
     
 
@@ -262,105 +217,11 @@ _Benchmarks based on synthetic distributed system dataset (500K+ events)_
 ## 🔒 Security & Compliance
 
 - **Secrets Management**: HashiCorp Vault (encrypted at rest)
-    
-- **Audit Logging**: Immutable incident history
-    
-- **Data Retention**: Configurable retention policies
-    
-- **PII Handling**: Automatic redaction of sensitive data
-    
+   
+- **Audit Logging**: Immutable incident history    
+- **Data Retention**: Configurable retention policies    
+- **PII Handling**: Automatic redaction of sensitive data    
 - **Compliance**: Ready for SOC2, HIPAA compliance
     
 ---
 
-## 🤝 Architecture Design Principles
-
-## **1. Separation of Concerns**
-
-- Backend API layer (Spring Boot)
-    
-- ML inference layer (Python Flask)
-    
-- Data persistence (PostgreSQL)
-    
-- Search & analytics (OpenSearch)
-    
-- Event aggregation (Fluentd)
-    
-
-## **2. Scalability**
-
-- Horizontal: Add more API replicas, ML service replicas
-    
-- Vertical: Increase container resource limits
-    
-- Future: Kubernetes auto-scaling (HPA based on queue depth)
-    
-
-## **3. Observability**
-
-- Distributed tracing with trace_id
-    
-- Structured logging (JSON format)
-    
-- Prometheus metrics (latency, throughput, errors)
-    
-- Dashboard with real-time visualization
-    
-
-## **4. Reliability**
-
-- Health checks on all services
-    
-- Circuit breaker pattern (ML service fallback)
-    
-- Automatic retries with exponential backoff
-    
-- Data replication (PostgreSQL primary-replica)
-    
-
----
-
-## 🎓 Research Foundation
-
-This system synthesizes insights from:
-
-- **Multi-source anomaly detection** (Bogatinovski et al., 2021)
-    
-- **Ensemble LSTM methods** (Lee et al., 2023)
-    
-- **Periodic pattern detection** (Temporal + spatial characteristics)
-    
-- **Distributed system observability** (Real-world case studies)
-    
-
-**Novel contribution**: First practical system combining all three modalities (logs + metrics + traces) with domain-aware ensemble (MSIF-LSTM + PLE-GRU) for distributed platforms.
-
----
-
-## 📞 Support & Contribution
-
-- **Issues**: GitHub Issues for bug reports
-    
-- **Discussions**: GitHub Discussions for architecture questions
-    
-- **Contributing**: Fork → Feature branch → Pull request
-    
-
----
-
-## 🙋 FAQ
-
-**Q: Why MSIF-LSTM + PLE-GRU instead of just one model?**  
-A: MSIF captures gradual degradation; PLE catches sudden deviations. Together, they cover 95%+ of real-world scenarios. Single models miss either trend changes or anomalous spikes.
-
-**Q: How does it handle false positives?**  
-A: Confidence scoring (model agreement), severity thresholds, and multi-metric correlation dramatically reduce false alerts. 3% false positive rate vs. 18% for Isolation Forest.
-
-**Q: Can it scale to 1000+ microservices?**  
-A: Yes. Horizontal scaling of ML replicas, batching predictions, and read replicas of PostgreSQL enable production scale.
-
-**Q: What about model retraining?**  
-A: Scheduled weekly retraining on recent data. Drift detection alerts if patterns change. Can be tuned per environment.
-
----
