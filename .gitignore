@@ -139,3 +139,35 @@ fluent-bit/logs/
 .AppleDouble
 .LSOverride
 .LSOverride
+
+# Backend Service (Java/Spring Boot)
+backend-service/build/
+backend-service/.gradle/
+backend-service/out/
+backend-service/*.log
+backend-service/.idea/
+
+# ML Service (Python/Flask)
+ml-service/__pycache__/
+ml-service/*.pyc
+ml-service/.pytest_cache/
+ml-service/venv/
+ml-service/venv*/
+ml-service/.env
+ml-service/models/saved/*.h5
+ml-service/models/saved/*.pkl
+ml-service/.ipynb_checkpoints/
+ml-service/notebooks/.ipynb_checkpoints/
+
+# Infrastructure
+infrastructure/.terraform/
+infrastructure/*.tfstate
+infrastructure/*.tfstate.backup
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db

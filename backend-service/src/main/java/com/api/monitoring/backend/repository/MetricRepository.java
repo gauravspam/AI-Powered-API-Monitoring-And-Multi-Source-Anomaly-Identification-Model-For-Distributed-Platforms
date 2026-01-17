@@ -2,14 +2,33 @@ package com.api.monitoring.backend.repository;
 
 import com.api.monitoring.backend.model.MetricRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
-import java.util.List;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.stereotype.Repository;
+
 import java.time.LocalDateTime;
+import java.util.List;
 
+@Repository
 public interface MetricRepository extends JpaRepository<MetricRecord, Long> {
-    List<MetricRecord> findByApiId(Long apiId);
 
-    List<MetricRecord> findByApiIdAndTimestampBetween(Long apiId, LocalDateTime start, LocalDateTime end);
+    /**
+     * Find metrics by API ID after a certain timestamp
+     */
+    List<MetricRecord> findByApiIdAndTimestampAfter(Long apiId, LocalDateTime timestamp);
 
-    // NEW: For AnomalyDetectionJob - get all recent metrics
+    /**
+     * Find metrics after a certain timestamp (for all APIs)
+     */
     List<MetricRecord> findByTimestampAfter(LocalDateTime timestamp);
+
+    /**
+     * Get distinct API IDs
+     */
+    @Query("SELECT DISTINCT m.apiId FROM MetricRecord m")
+    List<Long> findDistinctApiIds();
+
+    /**
+     * Count total metrics
+     */
+    long count();
 }

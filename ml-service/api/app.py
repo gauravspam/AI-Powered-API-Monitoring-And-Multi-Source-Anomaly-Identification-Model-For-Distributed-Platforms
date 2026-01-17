@@ -1,100 +1,57 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+"""
+Flask ML Service for Anomaly Detection
+Provides /api/predict endpoint for Java backend
+"""
 import logging
-from model_inference import AnomalyDetectionEngine
-from datetime import datetime
+import sys
+from pathlib import Path
 
-app = FastAPI(title="AI Anomaly Detection API", version="1.0.0")
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from config.settings import config
+from models.hybrid_fusion import HybridAnomalyDetector
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-
-engine = AnomalyDetectionEngine()
-
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class LogEntry(BaseModel):
-    api_name: str
-    response_time: float
-    status_code: int
-    request_count: int
-    error_rate: float
-    cpu_usage: float
-    memory_usage: float
-    network_io: float
-    disk_io: float
-    hour_of_day: int = None
-    day_of_week: int = None
-    timestamp: str = None
+def create_app():
+    """Create and configure Flask application"""
+    app = Flask(__name__)
 
-class BatchLogEntry(BaseModel):
-    logs: List[LogEntry]
-
-@app.get("/health")
-def health_check():
-    return {
-        "status": "healthy",
-        "models_loaded": True,
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.post("/api/detect-anomaly")
-def detect_single(log_entry: LogEntry):
-    try:
-        log_dict = log_entry.dict()
-        result = engine.detect_anomaly(log_dict)
-        
-        result['api_name'] = log_entry.api_name
-        result['timestamp'] = log_entry.timestamp or datetime.now().isoformat()
-        
-        return {
-            "success": True,
-            "data": result
+    # Enable CORS
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Content-Type"]
         }
-    except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    })
 
-@app.post("/api/detect-batch")
-def detect_batch(batch: BatchLogEntry):
-    try:
-        results = []
-        
-        for log_entry in batch.logs:
-            log_dict = log_entry.dict()
-            result = engine.detect_anomaly(log_dict)
-            result['api_name'] = log_entry.api_name
-            result['timestamp'] = log_entry.timestamp or datetime.now().isoformat()
-            results.append(result)
-        
-        return {
-            "success": True,
-            "total_processed": len(results),
-            "data": results
-        }
-    except Exception as e:
-        logger.error(f"Batch error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+    # Initialize detector
+    logger.info("Initializing HybridAnomalyDetector...")
+    app.detector = HybridAnomalyDetector()
+    logger.info("ML Service initialized successfully")
 
-@app.get("/api/model-info")
-def model_info():
-    return {
-        "stage1_model": "MSIF-LSTM",
-        "stage2_model": "PLE-GRU",
-        "confidence_threshold_stage1": 0.3,
-        "confidence_threshold_stage2": 0.7,
-        "features": 10,
-        "description": "Two-stage anomaly detection system"
-    }
+    # Register routes
+    from api.routes import register_routes
+    register_routes(app)
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    return app
+
+if __name__ == '__main__':
+    app = create_app()
+    logger.info(f"Starting ML Service on {config.HOST}:{config.PORT}")
+    app.run(
+        host=config.HOST,
+        port=config.PORT,
+        debug=config.DEBUG
+    )
+

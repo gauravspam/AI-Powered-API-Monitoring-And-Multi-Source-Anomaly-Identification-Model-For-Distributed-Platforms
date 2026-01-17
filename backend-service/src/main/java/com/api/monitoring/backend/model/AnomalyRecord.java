@@ -1,13 +1,19 @@
 package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
-import java.time.LocalDateTime;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.springframework.data.annotation.CreatedDate;
+import org.springframework.data.annotation.LastModifiedDate;
+import org.springframework.data.jpa.domain.support.AuditingEntityListener;
+
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "anomalies")
+@EntityListeners(AuditingEntityListener.class)  // ✅ Enable JPA Auditing
 public class AnomalyRecord {
+    
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -18,12 +24,10 @@ public class AnomalyRecord {
     @Column(nullable = false)
     private LocalDateTime timestamp;
 
-    // Add more fields as needed, e.g., description, severity, etc.
     @Column
     private String severity;
 
-    @Column()
-
+    @Column
     private Double confidenceScore;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -33,9 +37,13 @@ public class AnomalyRecord {
     @Column(name = "ml_model_used")
     private String mlModelUsed;
 
-    @Column(name = "created_at", nullable = false)
+    // ✅ JPA Auditing: Auto-populated on entity creation
+    @CreatedDate
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    // ✅ JPA Auditing: Auto-populated on entity update
+    @LastModifiedDate
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
@@ -85,7 +93,7 @@ public class AnomalyRecord {
         this.confidenceScore = confidenceScore;
         this.metricValues = metricValues;
         this.mlModelUsed = mlModelUsed;
-        this.createdAt = LocalDateTime.now();
+        // ✅ No need to manually set createdAt - JPA Auditing handles it
     }
 
     // Getters and Setters

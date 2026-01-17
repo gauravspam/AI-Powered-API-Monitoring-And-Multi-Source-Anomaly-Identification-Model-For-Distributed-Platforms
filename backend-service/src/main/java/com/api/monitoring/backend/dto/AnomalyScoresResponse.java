@@ -3,26 +3,24 @@ package com.api.monitoring.backend.dto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.Map;
 
-/**
- * NEW: Response DTO for time-series feature-based predictions
- * Complements existing AnomalyResponse (which is for single log entries)
- * This is for MSIF-LSTM + PLE-GRU predictions on feature windows
- */
 public class AnomalyScoresResponse {
 
-    @JsonProperty("msif_lstm_score")
+    // ✅ Match Python service field names
+    @JsonProperty("msifScore")
     private Double msifLstmScore;
 
-    @JsonProperty("ple_gru_score")
+    @JsonProperty("pleScore")
     private Double pleGruScore;
 
-    @JsonProperty("ple_probability_dist")
-    private Map<String, Double> pleProbabilityDist;
-
-    @JsonProperty("hybrid_score")
+    @JsonProperty("hybridScore")
     private Double hybridScore;
 
     private Double confidence;
+    
+    private String severity;
+
+    @JsonProperty("ple_probability_dist")
+    private Map<String, Double> pleProbabilityDist;
 
     @JsonProperty("weights_used")
     private Map<String, Double> weightsUsed;
@@ -37,28 +35,9 @@ public class AnomalyScoresResponse {
     @JsonProperty("model_versions")
     private Map<String, String> modelVersions;
 
-    // Constructors
     public AnomalyScoresResponse() {
     }
 
-    public AnomalyScoresResponse(
-            Double msifLstmScore,
-            Double pleGruScore,
-            Map<String, Double> pleProbabilityDist,
-            Double hybridScore,
-            Double confidence,
-            Map<String, Double> weightsUsed,
-            String fusionMethod) {
-        this.msifLstmScore = msifLstmScore;
-        this.pleGruScore = pleGruScore;
-        this.pleProbabilityDist = pleProbabilityDist;
-        this.hybridScore = hybridScore;
-        this.confidence = confidence;
-        this.weightsUsed = weightsUsed;
-        this.fusionMethod = fusionMethod;
-    }
-
-    // Getters & Setters
     public Double getMsifLstmScore() {
         return msifLstmScore;
     }
@@ -97,6 +76,14 @@ public class AnomalyScoresResponse {
 
     public void setConfidence(Double confidence) {
         this.confidence = confidence;
+    }
+
+    public String getSeverity() {
+        return severity;
+    }
+
+    public void setSeverity(String severity) {
+        this.severity = severity;
     }
 
     public Map<String, Double> getWeightsUsed() {
