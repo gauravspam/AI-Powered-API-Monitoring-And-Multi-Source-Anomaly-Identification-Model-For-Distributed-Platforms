@@ -1,5 +1,7 @@
 package com.api.monitoring.backend.config;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Configuration;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.impl.client.BasicCredentialsProvider;
@@ -8,14 +10,13 @@ import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
 import java.security.KeyStoreException;
-
 
 import javax.net.ssl.SSLContext;
 import java.security.KeyManagementException;
 import java.security.NoSuchAlgorithmException;
 
+@ConditionalOnProperty(name = "opensearch.enabled", havingValue = "true", matchIfMissing = false)
 @Configuration
 public class OpenSearchConfig {
 
@@ -35,7 +36,8 @@ public class OpenSearchConfig {
     private String password;
 
     @Bean(destroyMethod = "close")
-    public RestHighLevelClient openSearchClient() throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException {
+    public RestHighLevelClient openSearchClient()
+            throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException {
         var credentialsProvider = new BasicCredentialsProvider();
         credentialsProvider.setCredentials(AuthScope.ANY,
                 new UsernamePasswordCredentials(username, password));
@@ -48,7 +50,6 @@ public class OpenSearchConfig {
                 RestClient.builder(new org.apache.http.HttpHost(host, port, scheme))
                         .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder
                                 .setDefaultCredentialsProvider(credentialsProvider)
-                                .setSSLContext(sslContext))
-        );
+                                .setSSLContext(sslContext)));
     }
 }
