@@ -20,7 +20,6 @@ public class AnomalyRecord {
     @Column
     private String severity;
 
-    
     @Column()
 
     private Double confidenceScore;
@@ -62,11 +61,21 @@ public class AnomalyRecord {
     @Column
     private Boolean acknowledged = false;
 
+    @Column(name = "msif_lstm_score")
+    private Double msifLstmScore;
+
+    @Column(name = "ple_gru_score")
+    private Double pleGruScore;
+
+    @Column(name = "hybrid_score")
+    private Double hybridScore;
+
     // Constructors
     public AnomalyRecord() {
     }
 
-    public AnomalyRecord(String apiName, LocalDateTime timestamp, String severity, Double confidenceScore, String metricValues, String mlModelUsed) {
+    public AnomalyRecord(String apiName, LocalDateTime timestamp, String severity, Double confidenceScore,
+            String metricValues, String mlModelUsed) {
         this.apiName = apiName;
         this.timestamp = timestamp;
         this.severity = severity;
@@ -211,5 +220,29 @@ public class AnomalyRecord {
 
     public void setAcknowledged(Boolean acknowledged) {
         this.acknowledged = acknowledged;
+    }
+
+    public Double getMsifLstmScore() {
+        return msifLstmScore;
+    }
+
+    public void setMsifLstmScore(Double msifLstmScore) {
+        this.msifLstmScore = msifLstmScore;
+    }
+
+    public Double getPleGruScore() {
+        return pleGruScore;
+    }
+
+    public void setPleGruScore(Double pleGruScore) {
+        this.pleGruScore = pleGruScore;
+    }
+
+    public Double getHybridScore() {
+        return hybridScore;
+    }
+
+    public void setHybridScore(Double hybridScore) {
+        this.hybridScore = hybridScore;
     }
 }

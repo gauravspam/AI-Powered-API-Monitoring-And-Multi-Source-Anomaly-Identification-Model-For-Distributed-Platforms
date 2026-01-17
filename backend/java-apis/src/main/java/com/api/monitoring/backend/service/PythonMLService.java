@@ -3,6 +3,10 @@ package com.api.monitoring.backend.service;
 import com.api.monitoring.backend.dto.AnomalyResponse;
 import com.api.monitoring.backend.dto.LogEntryRequest;
 import com.api.monitoring.backend.dto.ModelInfoResponse;
+import com.api.monitoring.backend.dto.AnomalyScoresResponse;
+import com.api.monitoring.backend.dto.FeatureWindow;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
@@ -139,7 +143,105 @@ public class PythonMLService {
         }
     }
 
-    // ... rest of your methods stay EXACTLY THE SAME ...
+    /**
+     * NEW: Call Python ML service with time-series feature windows
+     * This is for scheduled anomaly detection jobs (Phase 2)
+     * Existing detectAnomaly() and detectBatchAnomalies() remain unchanged
+     */
+    private static final Logger logger = LoggerFactory.getLogger(PythonMLService.class);
+
+    public AnomalyScoresResponse predictWithFeatures(
+            FeatureWindow featureWindow,
+            String traceId) {
+        long startTime = System.currentTimeMillis();
+
+        try {
+            logger.info("[{}] Calling ML service /predict for endpoint: {} method: {}",
+                    traceId, featureWindow.getEndpoint(), featureWindow.getMethod());
+
+            // Build request
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-Trace-ID", traceId);
+            HttpEntity<FeatureWindow> request = new HttpEntity<>(featureWindow, headers);
+
+            // Call NEW endpoint: /api/predict (different from /api/detect-anomaly)
+            String url = pythonServiceUrl + "/api/predict";
+
+            // Retry logic: 3 attempts with 2s delay
+            ResponseEntity<Map> response = null;
+            int maxRetries = 3;
+            int retryDelay = 2000; // 2 seconds
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    response = restTemplate.postForEntity(url, request, Map.class);
+                    break; // Success, exit retry loop
+                } catch (RestClientException e) {
+                    logger.warn("[{}] Attempt {}/{} failed: {}", traceId, attempt, maxRetries, e.getMessage());
+                    if (attempt < maxRetries) {
+                        Thread.sleep(retryDelay);
+                        retryDelay *= 2; // Exponential backoff: 2s, 4s, 8s
+                    } else {
+                        throw e; // Final attempt failed
+                    }
+                }
+            }
+
+            // Parse response
+            if (response != null && response.getBody() != null) {
+                Map<String, Object> body = response.getBody();
+
+                AnomalyScoresResponse scores = new AnomalyScoresResponse();
+                scores.setMsifLstmScore(getDoubleValue(body, "msif_lstm_score"));
+                scores.setPleGruScore(getDoubleValue(body, "ple_gru_score"));
+                scores.setHybridScore(getDoubleValue(body, "hybrid_score"));
+                scores.setConfidence(getDoubleValue(body, "confidence"));
+                scores.setFusionMethod(getStringValue(body, "fusion_method"));
+                scores.setContext(getStringValue(body, "context"));
+
+                // Set processing time
+                long processingTime = System.currentTimeMillis() - startTime;
+                scores.setProcessingTimeMs(processingTime);
+
+                logger.info("[{}] ML predictions received in {}ms: MSIF={} PLE={} Hybrid={}",
+                        traceId, processingTime,
+                        String.format("%.2f", scores.getMsifLstmScore()),
+                        String.format("%.2f", scores.getPleGruScore()),
+                        String.format("%.2f", scores.getHybridScore()));
+
+                return scores;
+            }
+
+            throw new RuntimeException("Python service returned null response");
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            logger.error("[{}] Retry interrupted: {}", traceId, e.getMessage());
+            return getFallbackScores(featureWindow, traceId);
+        } catch (Exception e) {
+            logger.error("[{}] ML service failed: {}", traceId, e.getMessage(), e);
+            return getFallbackScores(featureWindow, traceId);
+        }
+    }
+
+    /**
+     * NEW: Fallback when ML service is unavailable
+     * Returns conservative default scores
+     */
+    private AnomalyScoresResponse getFallbackScores(FeatureWindow featureWindow, String traceId) {
+        logger.warn("[{}] Using fallback scores (ML service unavailable)", traceId);
+
+        AnomalyScoresResponse fallback = new AnomalyScoresResponse();
+        fallback.setMsifLstmScore(0.0);
+        fallback.setPleGruScore(0.0);
+        fallback.setHybridScore(0.0);
+        fallback.setConfidence(0.0);
+        fallback.setFusionMethod("fallback_default");
+        fallback.setContext("ML service unavailable");
+
+        return fallback;
+    }
 
     private Map<String, Object> buildRequestBody(LogEntryRequest logEntry) {
         Map<String, Object> body = new HashMap<>();
