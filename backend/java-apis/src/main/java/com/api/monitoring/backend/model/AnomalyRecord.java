@@ -2,6 +2,8 @@ package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "anomalies")
@@ -24,6 +26,7 @@ public class AnomalyRecord {
 
     private Double confidenceScore;
 
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "metric_values", columnDefinition = "jsonb")
     private String metricValues;
 
