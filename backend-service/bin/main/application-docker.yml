@@ -1,36 +1,30 @@
-server:
-    port: 8080
-
 spring:
     application:
         name: api-monitoring-backend
     datasource:
-        url: postgresql://postgres:5432/apimonitoring #${SPRING_DATASOURCE_URL}
-        driverClassName: org.postgresql.Driver
-        username: ${SPRING_DATASOURCE_USERNAME}
-        password: ${SPRING_DATASOURCE_PASSWORD}
+        url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:api_monitoring}
+        username: ${POSTGRES_USER:api_monitor}
+        password: ${POSTGRES_PASSWORD:monitor123}
+        driver-class-name: org.postgresql.Driver
+    jpa:
+        hibernate:
+            ddl-auto: validate
+        show-sql: true
+        properties:
+            hibernate:
+                dialect: org.hibernate.dialect.PostgreSQLDialect
+                format_sql: false
     flyway:
         enabled: true
         locations: classpath:db/migration
         baseline-on-migrate: true
-    jpa:
-        database-platform: org.hibernate.dialect.PostgreSQL10Dialect
-        hibernate:
-            ddl-auto: update
-        show-sql: false
 
-management:
-    endpoints:
-        web:
-            exposure:
-                include: health,info,metrics
-    endpoint:
-        health:
-            show-details: always
-            show-components: always
+server:
+    port: 8080
 
 opensearch:
-    host: ${OPENSEARCH_HOST:localhost}
+    enabled: true
+    host: ${OPENSEARCH_HOST:opensearch}
     port: ${OPENSEARCH_PORT:9200}
     scheme: ${OPENSEARCH_SCHEME:http}
     username: ${OPENSEARCH_USERNAME:admin}

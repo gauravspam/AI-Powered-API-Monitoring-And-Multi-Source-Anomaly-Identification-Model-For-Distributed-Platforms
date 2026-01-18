@@ -10,15 +10,17 @@ import org.opensearch.client.RestClient;
 import org.opensearch.client.RestHighLevelClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
-import java.security.KeyStoreException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import jakarta.annotation.PostConstruct;
 import javax.net.ssl.SSLContext;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
 
 @ConditionalOnProperty(name = "opensearch.enabled", havingValue = "true", matchIfMissing = false)
 @Configuration
 public class OpenSearchConfig {
+
+    private static final Logger logger = LoggerFactory.getLogger(OpenSearchConfig.class);
 
     @Value("${opensearch.host}")
     private String host;
@@ -35,21 +37,40 @@ public class OpenSearchConfig {
     @Value("${opensearch.password}")
     private String password;
 
-    @Bean(destroyMethod = "close")
-    public RestHighLevelClient openSearchClient()
-            throws NoSuchAlgorithmException, KeyManagementException, KeyStoreException {
-        var credentialsProvider = new BasicCredentialsProvider();
-        credentialsProvider.setCredentials(AuthScope.ANY,
-                new UsernamePasswordCredentials(username, password));
+    @PostConstruct
+    public void init() {
+        logger.info("========================================");
+        logger.info("OpenSearchConfig @PostConstruct called!");
+        logger.info("Host: {}, Port: {}, Scheme: {}", host, port, scheme);
+        logger.info("========================================");
+    }
 
-        SSLContext sslContext = SSLContexts.custom()
-                .loadTrustMaterial((chain, authType) -> true) // trust all (dev only)
-                .build();
+    @Bean(name = "openSearchClient", destroyMethod = "close")
+    public RestHighLevelClient openSearchClient() {
+        try {
+            logger.info("=== BEAN METHOD: Creating OpenSearch RestHighLevelClient ===");
+            logger.info("Host: {}, Port: {}, Scheme: {}", host, port, scheme);
+            
+            var credentialsProvider = new BasicCredentialsProvider();
+            credentialsProvider.setCredentials(AuthScope.ANY,
+                    new UsernamePasswordCredentials(username, password));
 
-        return new RestHighLevelClient(
-                RestClient.builder(new org.apache.http.HttpHost(host, port, scheme))
-                        .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder
-                                .setDefaultCredentialsProvider(credentialsProvider)
-                                .setSSLContext(sslContext)));
+            SSLContext sslContext = SSLContexts.custom()
+                    .loadTrustMaterial((chain, authType) -> true)
+                    .build();
+
+            RestHighLevelClient client = new RestHighLevelClient(
+                    RestClient.builder(new org.apache.http.HttpHost(host, port, scheme))
+                            .setHttpClientConfigCallback(httpClientBuilder -> httpClientBuilder
+                                    .setDefaultCredentialsProvider(credentialsProvider)
+                                    .setSSLContext(sslContext)));
+            
+            logger.info("✓ OpenSearch RestHighLevelClient created successfully");
+            return client;
+            
+        } catch (Exception e) {
+            logger.error("✗ Failed to create OpenSearch client", e);
+            throw new RuntimeException("Failed to initialize OpenSearch client", e);
+        }
     }
 }
