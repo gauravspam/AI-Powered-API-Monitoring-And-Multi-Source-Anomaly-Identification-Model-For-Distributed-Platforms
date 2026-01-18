@@ -171,3 +171,38 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+venv/
+*.pyc
+__pycache__/
+# Python
+venv/
+env/
+.venv/
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/

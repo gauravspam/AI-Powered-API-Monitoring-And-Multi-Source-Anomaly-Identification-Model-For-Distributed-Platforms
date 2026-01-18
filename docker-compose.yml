@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: api-monitoring-postgres
+    environment:
+      POSTGRES_DB: api_monitoring
+      POSTGRES_USER: api_monitor
+      POSTGRES_PASSWORD: api_monitor_pwd
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - monitoring-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U api_monitor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend-service:
+    build:
+      context: ./backend-service
+      dockerfile: Dockerfile
+    container_name: api-monitoring-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring
+      SPRING_DATASOURCE_USERNAME: api_monitor
+      SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
+      PYTHON_SERVICE_URL: http://ml-service:9000
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - monitoring-network
+
+  ml-service:
+    build:
+      context: ./ml-service
+      dockerfile: Dockerfile
+    container_name: api-monitoring-ml
+    ports:
+      - "9000:9000"
+    environment:
+      FLASK_ENV: production
+      ML_SERVICE_PORT: 9000
+    networks:
+      - monitoring-network
+
+volumes:
+  postgres_data:
+
+networks:
+  monitoring-network:
+    driver: bridge
