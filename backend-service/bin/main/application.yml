@@ -1,0 +1,84 @@
+spring:
+    application:
+        name: api-monitoring-backend
+        version: 1.0.0
+
+    datasource:
+        url: jdbc:postgresql://localhost:5432/api_monitoring
+        username: api_monitor
+        password: api_monitor_pwd
+        driver-class-name: org.postgresql.Driver
+        hikari:
+            maximum-pool-size: 10
+            minimum-idle: 5
+            connection-timeout: 30000
+            idle-timeout: 600000
+            max-lifetime: 1800000
+
+    jpa:
+        hibernate:
+            ddl-auto: update
+        properties:
+            hibernate:
+                dialect: org.hibernate.dialect.PostgreSQLDialect
+                format_sql: true
+                use_sql_comments: true
+                jdbc:
+                    batch_size: 20
+                    fetch_size: 50
+                order_inserts: true
+                order_updates: true
+        show-sql: false
+        open-in-view: false
+
+    flyway:
+        enabled: false
+
+    jackson:
+        serialization:
+            write-dates-as-timestamps: false
+            indent-output: true
+        default-property-inclusion: non_null
+        time-zone: UTC
+
+server:
+    port: 8080
+
+logging:
+    level:
+        root: INFO
+        com.api.monitoring: DEBUG
+        org.springframework.web: INFO
+    pattern:
+        console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+fluentd:
+    enabled: false
+    host: localhost
+    port: 9880
+
+management:
+    endpoints:
+        web:
+            exposure:
+                include: health,metrics,prometheus
+
+# OpenSearch Configuration
+opensearch:
+    host: localhost
+    port: 9200
+    scheme: http
+    username: admin
+    password: admin
+    enabled: false
+
+# Python ML Service
+python:
+    service:
+        url: http://localhost:9000
+
+app:
+    ml:
+        enabled: true
+    api:
+        anomaly-threshold: 0.7
