@@ -1,12 +1,19 @@
 package com.api.monitoring.backend.service;
 
-import com.api.monitoring.backend.dto.TrafficMetricsDTO; // ← ADD THIS
+import com.api.monitoring.backend.dto.LogDTO;
+import com.api.monitoring.backend.dto.TrafficMetricsDTO;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class OpenSearchLogService {
 
-  // ... existing code ...
+  private static final Logger logger = LoggerFactory.getLogger(OpenSearchLogService.class);
 
   public long getTotalRequests() {
     return 10000L; // Placeholder
@@ -52,5 +59,38 @@ public class OpenSearchLogService {
 
   public int getAverageRPS() {
     return 850; // Placeholder
+  }
+
+  // New methods for LogsController
+  public String indexLog(LogDTO logDTO) {
+    String logId = UUID.randomUUID().toString();
+    logDTO.setLogId(logId);
+    logger.info("Indexed log: {} - {}", logId, logDTO.getMessage());
+    // TODO: Actually index to OpenSearch via REST API
+    return logId;
+  }
+
+  public List<LogDTO> getRecentLogs(int limit) {
+    // TODO: Query OpenSearch for recent logs
+    logger.debug("Fetching {} recent logs from OpenSearch", limit);
+    return new ArrayList<>();
+  }
+
+  public List<LogDTO> searchLogs(String query, int limit) {
+    // TODO: Search OpenSearch with query
+    logger.debug("Searching logs with query: {}", query);
+    return new ArrayList<>();
+  }
+
+  public List<LogDTO> getLogsByService(String serviceName, int limit) {
+    // TODO: Filter logs by service name
+    logger.debug("Fetching logs for service: {}", serviceName);
+    return new ArrayList<>();
+  }
+
+  public List<LogDTO> getLogsByLevel(String level, int limit) {
+    // TODO: Filter logs by level
+    logger.debug("Fetching logs with level: {}", level);
+    return new ArrayList<>();
   }
 }

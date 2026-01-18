@@ -11,24 +11,14 @@ import java.util.List;
 @Repository
 public interface MetricRepository extends JpaRepository<MetricRecord, Long> {
 
-    /**
-     * Find metrics by API ID after a certain timestamp
-     */
+    // Existing methods (used by AnomalyService)
     List<MetricRecord> findByApiIdAndTimestampAfter(Long apiId, LocalDateTime timestamp);
-
-    /**
-     * Find metrics after a certain timestamp (for all APIs)
-     */
     List<MetricRecord> findByTimestampAfter(LocalDateTime timestamp);
-
-    /**
-     * Get distinct API IDs
-     */
+    
     @Query("SELECT DISTINCT m.apiId FROM MetricRecord m")
     List<Long> findDistinctApiIds();
-
-    /**
-     * Count total metrics
-     */
-    long count();
+    
+    // New methods (for MetricsController)
+    List<MetricRecord> findByApiId(Long apiId);
+    List<MetricRecord> findTop100ByOrderByTimestampDesc();
 }

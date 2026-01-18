@@ -8,22 +8,25 @@ ENV PATH=/opt/gradle/bin:$PATH
 
 WORKDIR /app
 
-# Essential configs only
+# Copy Gradle files
 COPY build.gradle settings.gradle ./
+
+# Copy ALL source code
 COPY src ./src
 
-# Build (uses global Gradle)
+# Build the application
 RUN gradle build --no-daemon -x test
 
-# Runtime
+# Runtime stage
 FROM eclipse-temurin:21-jre
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN groupadd -r spring && useradd -r -g spring spring
+# Copy the built JAR
 COPY --from=build /app/build/libs/*.jar app.jar
 RUN chown spring:spring app.jar
 USER spring
 EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8081/health || exit 1
+    CMD curl -f http://localhost:8081/health || exit 1
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
