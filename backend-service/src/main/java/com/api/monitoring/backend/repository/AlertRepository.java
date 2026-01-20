@@ -1,4 +1,4 @@
-package main.java.com.api.monitoring.backend.repository;
+package com.api.monitoring.backend.repository;
 
 import com.api.monitoring.backend.model.AlertRecord;
 import org.springframework.data.jpa.repository.JpaRepository;

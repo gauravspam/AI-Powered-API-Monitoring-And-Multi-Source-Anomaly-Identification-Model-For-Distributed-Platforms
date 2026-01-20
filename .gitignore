@@ -37,6 +37,7 @@ backend/**/!gradle-wrapper.jar
 *.nar
 hs_err_pid*
 .factorypath
+previous-compilation-data.bin
 
 # Node.js and Frontend
 frontend/node_modules/
