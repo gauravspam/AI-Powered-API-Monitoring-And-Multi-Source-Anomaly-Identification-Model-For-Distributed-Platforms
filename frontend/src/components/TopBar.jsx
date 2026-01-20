@@ -9,6 +9,7 @@ import {
   MenuItem,
   Box,
   useTheme,
+  Divider,
 } from '@mui/material';
 
   
@@ -17,13 +18,20 @@ import {
   Search as SearchIcon,
   Brightness4,
   Brightness7,
+  Person as PersonIcon,
+  Settings as SettingsIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
 import { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ThemeContext } from '@/App';
+import { AuthContext } from '@/contexts/AuthContext';
 
 export const TopBar = ({ drawerWidth, onMenuClick }) => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { toggleTheme } = useContext(ThemeContext);
+  const { user, logout } = useContext(AuthContext);
   const [anchorEl, setAnchorEl] = useState(null);
 
   const handleMenuOpen = (event) => {
@@ -32,6 +40,32 @@ export const TopBar = ({ drawerWidth, onMenuClick }) => {
 
   const handleMenuClose = () => {
     setAnchorEl(null);
+  };
+
+  const handleLogout = async () => {
+    handleMenuClose();
+    await logout();
+  };
+
+  const handleProfile = () => {
+    handleMenuClose();
+    navigate('/settings');
+  };
+
+  // Get user initials for avatar
+  const getUserInitials = () => {
+    if (user?.name) {
+      return user.name
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    if (user?.email) {
+      return user.email[0].toUpperCase();
+    }
+    return 'A';
   };
 
   return (
@@ -110,16 +144,41 @@ export const TopBar = ({ drawerWidth, onMenuClick }) => {
           onClick={handleMenuOpen}
           color="inherit"
         >
-          <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>A</Avatar>
+          <Avatar sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}>
+            {getUserInitials()}
+          </Avatar>
         </IconButton>
         <Menu
           anchorEl={anchorEl}
           open={Boolean(anchorEl)}
           onClose={handleMenuClose}
+          transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+          anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         >
-          <MenuItem onClick={handleMenuClose}>Profile</MenuItem>
-          <MenuItem onClick={handleMenuClose}>Settings</MenuItem>
-          <MenuItem onClick={handleMenuClose}>Logout</MenuItem>
+          {user && (
+            <Box sx={{ px: 2, py: 1.5, minWidth: 200 }}>
+              <Typography variant="subtitle2" fontWeight="bold" noWrap>
+                {user.name || 'User'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {user.email}
+              </Typography>
+            </Box>
+          )}
+          <Divider sx={{ my: 1 }} />
+          <MenuItem onClick={handleProfile}>
+            <PersonIcon sx={{ mr: 1.5, fontSize: 20 }} />
+            Profile
+          </MenuItem>
+          <MenuItem onClick={handleProfile}>
+            <SettingsIcon sx={{ mr: 1.5, fontSize: 20 }} />
+            Settings
+          </MenuItem>
+          <Divider sx={{ my: 1 }} />
+          <MenuItem onClick={handleLogout}>
+            <LogoutIcon sx={{ mr: 1.5, fontSize: 20 }} />
+            Logout
+          </MenuItem>
         </Menu>
       </Toolbar>
     </AppBar>

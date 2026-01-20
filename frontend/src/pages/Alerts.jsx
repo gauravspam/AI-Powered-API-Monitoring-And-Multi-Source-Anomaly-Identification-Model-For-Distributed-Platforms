@@ -205,7 +205,7 @@ export const Alerts = () => {
 
   const handleAcknowledge = useCallback(async (alertId) => {
     try {
-      await api.post(`/api/alerts/${alertId}/acknowledge`).catch(() => {
+      await api.post(`/alerts/${alertId}/acknowledge`).catch(() => {
         console.log('Acknowledge API not available, updating locally');
       });
 
@@ -233,7 +233,7 @@ export const Alerts = () => {
 
   const handleResolve = useCallback(async (alertId) => {
     try {
-      await api.post(`/api/alerts/${alertId}/resolve`).catch(() => {
+      await api.post(`/alerts/${alertId}/resolve`).catch(() => {
         console.log('Resolve API not available, updating locally');
       });
 

@@ -1,3 +1,30 @@
+new server start
+first two commands to start the mock server
+```bash
+docker build -t my-js .
+docker run -d -p 8080:8080 --name mock my-js
+```
+
+to start and stop the mock server
+```bash
+docker stop mock-server
+docker start mock-server
+```
+
+
+when you dont need mock server delet with this commands
+```bash
+docker rm -f mock-server
+docker rmi my-js-server
+```
+
+
+
+
+
+
+
+
 
 first two commands to start the mock server
 ```bash
