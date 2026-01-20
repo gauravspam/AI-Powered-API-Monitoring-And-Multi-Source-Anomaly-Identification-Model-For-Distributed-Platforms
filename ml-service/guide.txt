@@ -1,0 +1,39 @@
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# 1. Generate data (2-3 min)
+python scripts/generate_sample_data.py --samples 10000 --output data/training_data.csv
+
+# 2. Train models (5-10 min)
+python scripts/train_models.py --data-path data/training_data.csv --output-dir trained_models --epochs 50
+
+# 3. Start API (keep terminal open)
+python api/app.py
+
+# 4. Test (new terminal)
+curl http://localhost:5000/health | python -m json.tool
+
+# Health
+curl http://localhost:9000/health
+
+# Normal prediction
+curl -X POST http://localhost:9000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"response_time": 200, "status_code": 200, "request_count": 100, "error_rate": 0.01, "cpu_usage": 40, "memory_usage": 50, "network_io": 250, "disk_io": 150, "hour_of_day": 14, "day_of_week": 2}'
+
+# Critical anomaly
+curl -X POST http://localhost:9000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"response_time": 8000, "status_code": 503, "request_count": 50, "error_rate": 0.25, "cpu_usage": 90, "memory_usage": 95, "network_io": 9000, "disk_io": 8500, "hour_of_day": 3, "day_of_week": 1}'
+
+# Batch prediction
+curl -X POST http://localhost:9000/predict-batch \
+  -H "Content-Type: application/json" \
+  -d '{"predictions": [{"response_time": 200, "status_code": 200, "request_count": 100, "error_rate": 0.01, "cpu_usage": 40, "memory_usage": 50, "network_io": 250, "disk_io": 150, "hour_of_day": 14, "day_of_week": 2}, {"response_time": 8000, "status_code": 503, "request_count": 50, "error_rate": 0.25, "cpu_usage": 90, "memory_usage": 95, "network_io": 9000, "disk_io": 8500, "hour_of_day": 3, "day_of_week": 1}]}'
+
+# Metrics
+curl http://localhost:9000/metrics
+
+# Stats
+curl http://localhost:9000/stats
