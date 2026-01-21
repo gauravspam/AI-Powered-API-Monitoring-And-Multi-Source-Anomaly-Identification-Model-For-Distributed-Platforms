@@ -56,6 +56,9 @@ dependencies {
     // Test H2 database
     testImplementation 'com.h2database:h2:2.2.224'
 
+    // Hibernate Types for JSON/JSONB support
+    implementation 'io.hypersistence:hypersistence-utils-hibernate-60:3.7.3'
+
     // Testcontainers (optional but recommended)
     testImplementation 'org.testcontainers:postgresql:1.19.8'
     testImplementation 'org.testcontainers:junit-jupiter:1.19.8'

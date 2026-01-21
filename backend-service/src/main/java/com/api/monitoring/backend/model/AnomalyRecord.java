@@ -1,259 +1,192 @@
 package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
+import lombok.*;
+import java.time.LocalDateTime;
+import java.util.Map;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
-import org.springframework.data.annotation.CreatedDate;
-import org.springframework.data.annotation.LastModifiedDate;
-import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
-import java.time.LocalDateTime;
-
+/**
+ * AnomalyRecord Entity: Represents ML anomaly detection results
+ * Table: anomaly_detections
+ */
 @Entity
-@Table(name = "anomalies")
-@EntityListeners(AuditingEntityListener.class)  // ✅ Enable JPA Auditing
+@Table(name = "anomaly_detections", indexes = {
+        @Index(name = "idx_anomaly_detections_endpoint", columnList = "endpoint"),
+        @Index(name = "idx_anomaly_detections_severity", columnList = "severity_level"),
+        @Index(name = "idx_anomaly_detections_status", columnList = "status"),
+        @Index(name = "idx_anomaly_detections_created_at", columnList = "created_at DESC"),
+        @Index(name = "idx_anomaly_detections_trace_id", columnList = "trace_id"),
+        @Index(name = "idx_anomaly_detections_api_log_id", columnList = "api_log_id"),
+        @Index(name = "idx_anomaly_detections_severity_status", columnList = "severity_level, status, created_at DESC")
+})
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
+@EqualsAndHashCode(of = "id")
+@ToString(exclude = "additionalContext")
 public class AnomalyRecord {
-    
+
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "anomaly_detections_id_seq")
+    @SequenceGenerator(name = "anomaly_detections_id_seq", sequenceName = "anomaly_detections_id_seq", allocationSize = 1)
     private Long id;
 
-    @Column(name = "api_name", nullable = false)
-    private String apiName;
+    @Column(name = "api_log_id")
+    private Long apiLogId;
 
-    @Column(nullable = false)
-    private LocalDateTime timestamp;
+    @Column(name = "endpoint", nullable = false, length = 500)
+    private String endpoint;
 
-    @Column
+    @Column(name = "http_method", nullable = false, length = 10)
+    private String method;
+
+    @Column(name = "msif_lstm_score", nullable = false)
+    private Double msifLstmScore;
+
+    @Column(name = "ple_gru_score", nullable = false)
+    private Double pleGruScore;
+
+    @Column(name = "hybrid_ensemble_score", nullable = false)
+    private Double hybridEnsembleScore;
+
+    @Column(name = "confidence_score", nullable = false)
+    private Double confidence;
+
+    @Column(name = "severity_level", nullable = false, length = 50)
     private String severity;
 
-    @Column
-    private Double confidenceScore;
+    @Column(name = "anomaly_type", length = 100)
+    private String anomalyType;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "metric_values", columnDefinition = "jsonb")
-    private String metricValues;
+    @Column(name = "fusion_method", nullable = false, length = 100)
+    private String fusionMethod;
 
-    @Column(name = "ml_model_used")
-    private String mlModelUsed;
+    @Column(name = "ml_model_version", length = 50)
+    private String mlServiceVersion;
 
-    // ✅ JPA Auditing: Auto-populated on entity creation
-    @CreatedDate
+    @Column(name = "ml_processing_time_ms")
+    private Long mlProcessingTimeMs;
+
+    @Column(name = "status", nullable = false, length = 50)
+    @Builder.Default
+    private String status = "ACTIVE";
+
+    @Column(name = "is_acknowledged")
+    @Builder.Default
+    private Boolean isAcknowledged = false;
+
+    @Column(name = "acknowledged_by", length = 255)
+    private String acknowledgedBy;
+
+    @Column(name = "acknowledged_at")
+    private LocalDateTime acknowledgedAt;
+
+    @Column(name = "acknowledgement_note", columnDefinition = "TEXT")
+    private String acknowledgementNote;
+
+    @Column(name = "is_resolved")
+    @Builder.Default
+    private Boolean isResolved = false;
+
+    @Column(name = "resolved_by", length = 255)
+    private String resolvedBy;
+
+    @Column(name = "resolved_at")
+    private LocalDateTime resolvedAt;
+
+    @Column(name = "resolution_note", columnDefinition = "TEXT")
+    private String resolutionNote;
+
+    @Column(name = "is_false_positive")
+    @Builder.Default
+    private Boolean isFalsePositive = false;
+
+    @Column(name = "marked_false_positive_by", length = 255)
+    private String markedFalsePositiveBy;
+
+    @Column(name = "marked_false_positive_at")
+    private LocalDateTime markedFalsePositiveAt;
+
+    @Column(name = "trace_id", length = 255)
+    private String traceId;
+
+    @Column(name = "service_name", length = 255)
+    private String serviceName;
+
+    @Column(name = "environment", length = 50)
+    private String environment;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    // ✅ JPA Auditing: Auto-populated on entity update
-    @LastModifiedDate
+    @Column(name = "created_by", length = 255)
+    private String createdBy;
+
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    // Additional fields for anomaly detection
-    @Column
-    private Integer stage;
+    @Column(name = "updated_by", length = 255)
+    private String updatedBy;
 
-    @Column
-    private String model;
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
-    @Column(name = "anomaly_score")
-    private Double anomalyScore;
+    @Column(name = "deleted_by", length = 255)
+    private String deletedBy;
 
-    @Column(name = "stage2_score")
-    private Double stage2Score;
+    // ✅ FIXED: Use Hibernate 6 native JSONB support
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "additional_context", columnDefinition = "jsonb")
+    private Map<String, Object> additionalContext;
 
-    @Column(name = "final_anomaly_score")
-    private Double finalAnomalyScore;
-
-    @Column
-    private String status;
-
-    @Column
-    private Double confidence;
-
-    @Column
-    private Boolean acknowledged = false;
-
-    @Column(name = "msif_lstm_score")
-    private Double msifLstmScore;
-
-    @Column(name = "ple_gru_score")
-    private Double pleGruScore;
-
-    @Column(name = "hybrid_score")
-    private Double hybridScore;
-
-    // Constructors
-    public AnomalyRecord() {
+    @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
     }
 
-    public AnomalyRecord(String apiName, LocalDateTime timestamp, String severity, Double confidenceScore,
-            String metricValues, String mlModelUsed) {
-        this.apiName = apiName;
-        this.timestamp = timestamp;
-        this.severity = severity;
-        this.confidenceScore = confidenceScore;
-        this.metricValues = metricValues;
-        this.mlModelUsed = mlModelUsed;
-        // ✅ No need to manually set createdAt - JPA Auditing handles it
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 
-    // Getters and Setters
-    public Long getId() {
-        return id;
+    public void acknowledge(String username) {
+        this.isAcknowledged = true;
+        this.acknowledgedBy = username;
+        this.acknowledgedAt = LocalDateTime.now();
     }
 
-    public void setId(Long id) {
-        this.id = id;
+    public void resolve() {
+        this.isResolved = true;
+        this.resolvedBy = "SYSTEM";
+        this.resolvedAt = LocalDateTime.now();
+        this.status = "RESOLVED";
     }
 
-    public String getApiName() {
-        return apiName;
+    public void markAsFalsePositive(String username) {
+        this.isFalsePositive = true;
+        this.markedFalsePositiveBy = username;
+        this.markedFalsePositiveAt = LocalDateTime.now();
+        this.status = "FALSE_POSITIVE";
     }
 
-    public void setApiName(String apiName) {
-        this.apiName = apiName;
+    public void delete(String deletedBy) {
+        this.deletedAt = LocalDateTime.now();
+        this.deletedBy = deletedBy;
     }
 
-    public LocalDateTime getTimestamp() {
-        return timestamp;
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
-    }
-
-    public String getSeverity() {
-        return severity;
-    }
-
-    public void setSeverity(String severity) {
-        this.severity = severity;
-    }
-
-    public Double getConfidenceScore() {
-        return confidenceScore;
-    }
-
-    public void setConfidenceScore(Double confidenceScore) {
-        this.confidenceScore = confidenceScore;
-    }
-
-    public String getMetricValues() {
-        return metricValues;
-    }
-
-    public void setMetricValues(String metricValues) {
-        this.metricValues = metricValues;
-    }
-
-    public String getMlModelUsed() {
-        return mlModelUsed;
-    }
-
-    public void setMlModelUsed(String mlModelUsed) {
-        this.mlModelUsed = mlModelUsed;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
-    }
-
-    public Integer getStage() {
-        return stage;
-    }
-
-    public void setStage(Integer stage) {
-        this.stage = stage;
-    }
-
-    public String getModel() {
-        return model;
-    }
-
-    public void setModel(String model) {
-        this.model = model;
+    public boolean isCriticalUnacknowledged() {
+        return !isAcknowledged && ("CRITICAL".equals(severity) || "HIGH".equals(severity));
     }
 
     public Double getAnomalyScore() {
-        return anomalyScore;
-    }
-
-    public void setAnomalyScore(Double anomalyScore) {
-        this.anomalyScore = anomalyScore;
-    }
-
-    public Double getStage2Score() {
-        return stage2Score;
-    }
-
-    public void setStage2Score(Double stage2Score) {
-        this.stage2Score = stage2Score;
-    }
-
-    public Double getFinalAnomalyScore() {
-        return finalAnomalyScore;
-    }
-
-    public void setFinalAnomalyScore(Double finalAnomalyScore) {
-        this.finalAnomalyScore = finalAnomalyScore;
-    }
-
-    public String getStatus() {
-        return status;
-    }
-
-    public void setStatus(String status) {
-        this.status = status;
-    }
-
-    public Double getConfidence() {
-        return confidence;
-    }
-
-    public void setConfidence(Double confidence) {
-        this.confidence = confidence;
-    }
-
-    public Boolean getAcknowledged() {
-        return acknowledged;
-    }
-
-    public void setAcknowledged(Boolean acknowledged) {
-        this.acknowledged = acknowledged;
-    }
-
-    public Double getMsifLstmScore() {
-        return msifLstmScore;
-    }
-
-    public void setMsifLstmScore(Double msifLstmScore) {
-        this.msifLstmScore = msifLstmScore;
-    }
-
-    public Double getPleGruScore() {
-        return pleGruScore;
-    }
-
-    public void setPleGruScore(Double pleGruScore) {
-        this.pleGruScore = pleGruScore;
-    }
-
-    public Double getHybridScore() {
-        return hybridScore;
-    }
-
-    public void setHybridScore(Double hybridScore) {
-        this.hybridScore = hybridScore;
+        return hybridEnsembleScore;
     }
 }

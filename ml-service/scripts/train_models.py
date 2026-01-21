@@ -1,14 +1,23 @@
 """
-Complete Training Pipeline for AI-Powered Anomaly Detection System
+Complete Training Pipeline for AI-Powered Anomaly Detection System (v2.0)
 
-Orchestrates the entire training workflow:
+Orchestrates the entire training workflow with production-grade refinements:
 1. Load and preprocess data
 2. Train DataPreprocessor (scaler, statistics)
-3. Train MSIF-LSTM model
-4. Train PLE-GRU model
-5. Save all artifacts
-6. Evaluate models
-7. Generate model registry
+3. Train MSIF-LSTM model (v2.0 with class imbalance handling)
+4. Train PLE-GRU model (v2.0 with class imbalance handling)
+5. Evaluate both models with comprehensive metrics (PR-AUC, ROC-AUC, F1)
+6. Save all artifacts and generate model registry
+7. Compare model performance
+
+v2.0 Refinements:
+✅ Automatic class weight calculation for imbalanced data
+✅ Learning rate scheduling for stable training
+✅ Comprehensive evaluation metrics (PR-AUC, ROC-AUC, F1, Specificity)
+✅ Confusion matrix analysis
+✅ Threshold-based predictions for imbalanced scenarios
+✅ Enhanced logging throughout pipeline
+✅ Model comparison and registry generation
 
 Usage:
     python scripts/train_models.py \
@@ -16,7 +25,8 @@ Usage:
         --output-dir trained_models \
         --epochs 50 \
         --batch-size 32 \
-        --validation-split 0.2
+        --validation-split 0.2 \
+        --test-split 0.1
 
 Output:
     trained_models/
@@ -48,7 +58,7 @@ from src.model_registry import ModelRegistry
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description='Train AI-Powered Anomaly Detection Models'
+        description='Train AI-Powered Anomaly Detection Models (v2.0)'
     )
 
     parser.add_argument(
@@ -247,9 +257,9 @@ def train_msif(X_train: np.ndarray,
               output_dir: str,
               preprocessor: DataPreprocessor,
               epochs: int,
-              batch_size: int) -> dict:
+              batch_size: int) -> tuple:
     """
-    Train MSIF-LSTM model
+    Train MSIF-LSTM model (v2.0)
 
     Args:
         X_train: Training features (raw)
@@ -262,11 +272,11 @@ def train_msif(X_train: np.ndarray,
         batch_size: Batch size
 
     Returns:
-        Training history dict
+        (training_history, model_instance)
     """
 
     logger.info("=" * 60)
-    logger.info("Training MSIF-LSTM Model")
+    logger.info("Training MSIF-LSTM Model (v2.0)")
     logger.info("=" * 60)
 
     # Normalize features
@@ -275,22 +285,23 @@ def train_msif(X_train: np.ndarray,
 
     logger.info(f"Normalized data shapes: train={X_train_norm.shape}, val={X_val_norm.shape}")
 
-    # Build and train model
+    # Build and train model with v2.0 refinements
     msif = MSIFLSTM()
-    msif.build_model()
+    msif.build_model(use_lr_schedule=True)  # ✅ LR scheduling enabled
 
     history = msif.train(
         X_train_norm, y_train,
         X_val_norm, y_val,
         epochs=epochs,
-        batch_size=batch_size
+        batch_size=batch_size,
+        auto_class_weight=True  # ✅ Auto-handles imbalance
     )
 
     # Save model
     msif.save(output_dir)
 
     logger.info("✅ MSIF-LSTM training complete")
-    return history
+    return history, msif
 
 
 def train_ple(X_train: np.ndarray,
@@ -300,9 +311,9 @@ def train_ple(X_train: np.ndarray,
              output_dir: str,
              preprocessor: DataPreprocessor,
              epochs: int,
-             batch_size: int) -> dict:
+             batch_size: int) -> tuple:
     """
-    Train PLE-GRU model
+    Train PLE-GRU model (v2.0)
 
     Args:
         X_train: Training features (raw)
@@ -315,11 +326,11 @@ def train_ple(X_train: np.ndarray,
         batch_size: Batch size
 
     Returns:
-        Training history dict
+        (training_history, model_instance)
     """
 
     logger.info("=" * 60)
-    logger.info("Training PLE-GRU Model")
+    logger.info("Training PLE-GRU Model (v2.0)")
     logger.info("=" * 60)
 
     # Normalize features
@@ -328,22 +339,23 @@ def train_ple(X_train: np.ndarray,
 
     logger.info(f"Normalized data shapes: train={X_train_norm.shape}, val={X_val_norm.shape}")
 
-    # Build and train model
+    # Build and train model with v2.0 refinements
     ple = PLEGRU()
-    ple.build_model()
+    ple.build_model(use_lr_schedule=True)  # ✅ LR scheduling enabled
 
     history = ple.train(
         X_train_norm, y_train,
         X_val_norm, y_val,
         epochs=epochs,
-        batch_size=batch_size
+        batch_size=batch_size,
+        auto_class_weight=True  # ✅ Auto-handles imbalance
     )
 
     # Save model
     ple.save(output_dir)
 
     logger.info("✅ PLE-GRU training complete")
-    return history
+    return history, ple
 
 
 def evaluate_models(X_test: np.ndarray,
@@ -351,14 +363,10 @@ def evaluate_models(X_test: np.ndarray,
                    output_dir: str,
                    preprocessor: DataPreprocessor) -> dict:
     """
-    Evaluate trained models on test set
+    Evaluate trained models on test set with comprehensive metrics (v2.0)
 
-    Computes:
-    - Accuracy
-    - Precision
-    - Recall
-    - F1 Score
-    - AUC-ROC
+    NEW: Uses model.evaluate() method with PR-AUC, ROC-AUC, F1, Specificity
+    Computes confusion matrix and threshold analysis
 
     Args:
         X_test: Test features (raw)
@@ -367,11 +375,11 @@ def evaluate_models(X_test: np.ndarray,
         preprocessor: DataPreprocessor
 
     Returns:
-        Evaluation metrics dict
+        Evaluation metrics dict with both models
     """
 
     logger.info("=" * 60)
-    logger.info("Evaluating Models")
+    logger.info("Evaluating Models (v2.0 - Comprehensive Metrics)")
     logger.info("=" * 60)
 
     try:
@@ -385,61 +393,96 @@ def evaluate_models(X_test: np.ndarray,
         # Normalize test data
         X_test_norm = np.array([preprocessor.normalize_features(x) for x in X_test])
 
-        # Get predictions
-        msif_scores = msif.predict(X_test_norm)
-        ple_scores = ple.predict(X_test_norm)
+        # NEW: Use model.evaluate() method with comprehensive metrics
+        # Default threshold 0.5 for balanced view
+        logger.info("")
+        logger.info("Evaluating MSIF-LSTM...")
+        msif_results = msif.evaluate(X_test_norm, y_test, threshold=0.5)
+
+        logger.info("")
+        logger.info("Evaluating PLE-GRU...")
+        ple_results = ple.evaluate(X_test_norm, y_test, threshold=0.5)
 
         # Hybrid predictions
+        logger.info("")
+        logger.info("Evaluating Hybrid Ensemble...")
         detector = HybridAnomalyDetector(output_dir)
         hybrid_scores = np.array([
             detector.predict(X_test_norm[i:i+1])['hybrid_score']
             for i in range(len(X_test_norm))
         ])
 
-        # Threshold for binary classification (0.5)
-        threshold = 0.5
-        msif_pred = (msif_scores > threshold).astype(int)
-        ple_pred = (ple_scores > threshold).astype(int)
-        hybrid_pred = (hybrid_scores > threshold).astype(int)
-
-        # Compute metrics
+        # NEW: Evaluate hybrid with comprehensive metrics
         from sklearn.metrics import (
             accuracy_score,
+            auc,
+            confusion_matrix,
             f1_score,
+            precision_recall_curve,
             precision_score,
             recall_score,
             roc_auc_score,
         )
 
-        metrics = {
-            'msif': {
-                'accuracy': accuracy_score(y_test, msif_pred),
-                'precision': precision_score(y_test, msif_pred, zero_division=0),
-                'recall': recall_score(y_test, msif_pred, zero_division=0),
-                'f1': f1_score(y_test, msif_pred, zero_division=0),
-                'auc': roc_auc_score(y_test, msif_scores)
-            },
-            'ple': {
-                'accuracy': accuracy_score(y_test, ple_pred),
-                'precision': precision_score(y_test, ple_pred, zero_division=0),
-                'recall': recall_score(y_test, ple_pred, zero_division=0),
-                'f1': f1_score(y_test, ple_pred, zero_division=0),
-                'auc': roc_auc_score(y_test, ple_scores)
-            },
-            'hybrid': {
-                'accuracy': accuracy_score(y_test, hybrid_pred),
-                'precision': precision_score(y_test, hybrid_pred, zero_division=0),
-                'recall': recall_score(y_test, hybrid_pred, zero_division=0),
-                'f1': f1_score(y_test, hybrid_pred, zero_division=0),
-                'auc': roc_auc_score(y_test, hybrid_scores)
-            }
+        hybrid_pred = (hybrid_scores > 0.5).astype(int)
+        hybrid_accuracy = accuracy_score(y_test, hybrid_pred)
+        hybrid_precision = precision_score(y_test, hybrid_pred, zero_division=0)
+        hybrid_recall = recall_score(y_test, hybrid_pred, zero_division=0)
+        hybrid_f1 = f1_score(y_test, hybrid_pred, zero_division=0)
+
+        try:
+            hybrid_roc_auc = roc_auc_score(y_test, hybrid_scores)
+        except:
+            hybrid_roc_auc = 0.0
+
+        try:
+            precision_curve, recall_curve, _ = precision_recall_curve(y_test, hybrid_scores)
+            hybrid_pr_auc = auc(recall_curve, precision_curve)
+        except:
+            hybrid_pr_auc = 0.0
+
+        try:
+            tn, fp, fn, tp = confusion_matrix(y_test, hybrid_pred).ravel()
+            hybrid_specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+        except:
+            hybrid_specificity = 0.0
+
+        hybrid_results = {
+            'accuracy': float(hybrid_accuracy),
+            'precision': float(hybrid_precision),
+            'recall': float(hybrid_recall),
+            'f1': float(hybrid_f1),
+            'roc_auc': float(hybrid_roc_auc),
+            'pr_auc': float(hybrid_pr_auc),
+            'specificity': float(hybrid_specificity),
+            'threshold': 0.5
         }
 
-        # Log metrics
-        for model_name, model_metrics in metrics.items():
-            logger.info(f"\n{model_name.upper()} Model Metrics:")
-            for metric_name, value in model_metrics.items():
-                logger.info(f"  {metric_name}: {value:.4f}")
+        # Combine results
+        metrics = {
+            'msif': msif_results,
+            'ple': ple_results,
+            'hybrid': hybrid_results
+        }
+
+        # Log comparative analysis
+        logger.info("")
+        logger.info("=" * 60)
+        logger.info("MODEL COMPARISON")
+        logger.info("=" * 60)
+
+        for model_name in ['msif', 'ple', 'hybrid']:
+            model_metrics = metrics[model_name]
+            logger.info(f"\n{model_name.upper()}:")
+            logger.info(f"  Accuracy:  {model_metrics['accuracy']:.4f}")
+            logger.info(f"  Precision: {model_metrics['precision']:.4f}")
+            logger.info(f"  Recall:    {model_metrics['recall']:.4f}")
+            logger.info(f"  F1:        {model_metrics['f1']:.4f}")
+            logger.info(f"  ROC-AUC:   {model_metrics['roc_auc']:.4f}")
+            logger.info(f"  PR-AUC:    {model_metrics['pr_auc']:.4f}")
+            logger.info(f"  Specificity: {model_metrics['specificity']:.4f}")
+
+        logger.info("=" * 60)
 
         return metrics
 
@@ -453,11 +496,14 @@ def create_registry(output_dir: str,
                    X_train_shape: tuple,
                    X_test_shape: tuple) -> dict:
     """
-    Create and save model registry
+    Create and save enhanced model registry (v2.0)
+
+    NEW: Includes PR-AUC, Specificity, and comprehensive metrics
+    for imbalanced data evaluation
 
     Args:
         output_dir: Directory with trained models
-        metrics: Evaluation metrics dict
+        metrics: Evaluation metrics dict (from evaluate_models)
         X_train_shape: Shape of training set
         X_test_shape: Shape of test set
 
@@ -466,35 +512,50 @@ def create_registry(output_dir: str,
     """
 
     logger.info("=" * 60)
-    logger.info("Creating Model Registry")
+    logger.info("Creating Enhanced Model Registry (v2.0)")
     logger.info("=" * 60)
 
     registry_data = {
         'version': config.API_VERSION,
         'timestamp': datetime.utcnow().isoformat(),
         'training_date': datetime.now().isoformat(),
+        'training_pipeline': 'v2.0 (Refined)',
         'models': {
             'msif': {
                 'type': 'LSTM',
                 'file': 'msif_lstm_model.h5',
                 'input_shape': (1, 10),
-                'parameters': '~40k'
+                'parameters': '~40k',
+                'refinements': [
+                    'Input validation',
+                    'Class imbalance handling',
+                    'Learning rate scheduling',
+                    'Comprehensive metrics'
+                ]
             },
             'ple': {
                 'type': 'GRU',
                 'file': 'ple_gru_model.h5',
                 'input_shape': (1, 10),
-                'parameters': '~35k'
+                'parameters': '~35k',
+                'refinements': [
+                    'Input validation',
+                    'Class imbalance handling',
+                    'Learning rate scheduling',
+                    'Comprehensive metrics'
+                ]
             },
             'hybrid': {
                 'type': 'Weighted Ensemble',
-                'combination': 'MSIF + PLE'
+                'combination': 'MSIF (50%) + PLE (50%)',
+                'description': 'Combines both models for robustness'
             }
         },
         'preprocessing': {
             'scaler_file': 'scaler.pkl',
             'stats_file': 'scaler_stats.json',
-            'normalization': 'StandardScaler'
+            'normalization': 'StandardScaler',
+            'feature_count': 10
         },
         'data': {
             'training_samples': X_train_shape[0],
@@ -504,9 +565,20 @@ def create_registry(output_dir: str,
         'evaluation': metrics,
         'config': {
             'learning_rate': config.ML_CONFIG.LEARNING_RATE,
+            'learning_rate_schedule': 'Polynomial decay (0.0001 → 0.001)',
             'dropout_rate': config.ML_CONFIG.DROPOUT_RATE,
             'epochs': config.ML_CONFIG.EPOCHS,
-            'batch_size': config.ML_CONFIG.BATCH_SIZE
+            'batch_size': config.ML_CONFIG.BATCH_SIZE,
+            'early_stopping_patience': 5,
+            'class_weight_strategy': 'Automatic (inverse frequency)'
+        },
+        'metrics_explanation': {
+            'pr_auc': 'Precision-Recall AUC (recommended for imbalanced data)',
+            'roc_auc': 'ROC AUC (threshold-independent ranking)',
+            'f1': 'Harmonic mean of precision and recall',
+            'specificity': 'True negative rate (correctly identified normal)',
+            'recall': 'True positive rate (detected anomalies)',
+            'precision': 'Positive predictive value (accuracy of anomaly predictions)'
         }
     }
 
@@ -515,7 +587,7 @@ def create_registry(output_dir: str,
     with open(registry_path, 'w') as f:
         json.dump(registry_data, f, indent=2)
 
-    logger.info(f"✅ Registry saved to {registry_path}")
+    logger.info(f"✅ Enhanced registry saved to {registry_path}")
     return registry_data
 
 
@@ -526,12 +598,15 @@ def main():
     args = parse_arguments()
 
     logger.info("=" * 60)
-    logger.info("AI-Powered Anomaly Detection Training Pipeline")
+    logger.info("AI-Powered Anomaly Detection Training Pipeline (v2.0)")
     logger.info("=" * 60)
     logger.info(f"Data path: {args.data_path}")
     logger.info(f"Output dir: {args.output_dir}")
     logger.info(f"Epochs: {args.epochs}")
     logger.info(f"Batch size: {args.batch_size}")
+    logger.info(f"Validation split: {args.validation_split}")
+    logger.info(f"Test split: {args.test_split}")
+    logger.info("")
 
     # Create output directory
     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
@@ -551,39 +626,48 @@ def main():
         # ============= STEP 3: Train preprocessor =============
         preprocessor = train_preprocessing(X_train, args.output_dir)
 
-        # ============= STEP 4: Train MSIF-LSTM =============
-        msif_history = train_msif(
+        # ============= STEP 4: Train MSIF-LSTM (v2.0) =============
+        msif_history, msif_model = train_msif(
             X_train, y_train, X_val, y_val,
             args.output_dir, preprocessor,
             args.epochs, args.batch_size
         )
 
-        # ============= STEP 5: Train PLE-GRU =============
-        ple_history = train_ple(
+        # ============= STEP 5: Train PLE-GRU (v2.0) =============
+        ple_history, ple_model = train_ple(
             X_train, y_train, X_val, y_val,
             args.output_dir, preprocessor,
             args.epochs, args.batch_size
         )
 
-        # ============= STEP 6: Evaluate =============
+        # ============= STEP 6: Evaluate (v2.0 - Comprehensive) =============
         metrics = evaluate_models(X_test, y_test, args.output_dir, preprocessor)
 
-        # ============= STEP 7: Create registry =============
+        # ============= STEP 7: Create enhanced registry =============
         registry = create_registry(
             args.output_dir, metrics,
             X_train.shape, X_test.shape
         )
 
         logger.info("=" * 60)
-        logger.info("✅ Training Pipeline Complete!")
+        logger.info("✅ Training Pipeline Complete! (v2.0)")
         logger.info("=" * 60)
         logger.info(f"Models saved to: {args.output_dir}")
         logger.info("\nGenerated files:")
-        logger.info("  - msif_lstm_model.h5")
-        logger.info("  - ple_gru_model.h5")
-        logger.info("  - scaler.pkl")
-        logger.info("  - scaler_stats.json")
-        logger.info("  - registry.json")
+        logger.info("  ✅ msif_lstm_model.h5 (with v2.0 refinements)")
+        logger.info("  ✅ ple_gru_model.h5 (with v2.0 refinements)")
+        logger.info("  ✅ scaler.pkl")
+        logger.info("  ✅ scaler_stats.json")
+        logger.info("  ✅ registry.json (enhanced with PR-AUC, Specificity)")
+        logger.info("")
+        logger.info("Key Improvements in v2.0:")
+        logger.info("  • Automatic class weight calculation for imbalanced data")
+        logger.info("  • Learning rate scheduling for stable convergence")
+        logger.info("  • Input validation layer in both models")
+        logger.info("  • Comprehensive evaluation metrics (PR-AUC, ROC-AUC, F1)")
+        logger.info("  • Threshold-based predictions for flexible deployment")
+        logger.info("  • Professional logging and error handling")
+        logger.info("=" * 60)
 
     except Exception as e:
         logger.error(f"Training failed: {e}", exc_info=True)
