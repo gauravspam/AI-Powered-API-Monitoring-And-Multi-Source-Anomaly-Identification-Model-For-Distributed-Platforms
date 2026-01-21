@@ -53,6 +53,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+frontend/package-lock.json
+frontend/package.json
 
 # Python and ML Models
 ml-models/**/__pycache__/
