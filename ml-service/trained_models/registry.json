@@ -1,0 +1,68 @@
+{
+  "version": "1.0.0",
+  "timestamp": "2026-01-21T20:12:33.536238",
+  "training_date": "2026-01-21T20:12:33.536249",
+  "models": {
+    "msif": {
+      "type": "LSTM",
+      "file": "msif_lstm_model.h5",
+      "input_shape": [
+        1,
+        10
+      ],
+      "parameters": "~40k"
+    },
+    "ple": {
+      "type": "GRU",
+      "file": "ple_gru_model.h5",
+      "input_shape": [
+        1,
+        10
+      ],
+      "parameters": "~35k"
+    },
+    "hybrid": {
+      "type": "Weighted Ensemble",
+      "combination": "MSIF + PLE"
+    }
+  },
+  "preprocessing": {
+    "scaler_file": "scaler.pkl",
+    "stats_file": "scaler_stats.json",
+    "normalization": "StandardScaler"
+  },
+  "data": {
+    "training_samples": 1221,
+    "test_samples": 169,
+    "features": 10
+  },
+  "evaluation": {
+    "msif": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "auc": 1.0
+    },
+    "ple": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "auc": 1.0
+    },
+    "hybrid": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "auc": 1.0
+    }
+  },
+  "config": {
+    "learning_rate": 0.001,
+    "dropout_rate": 0.2,
+    "epochs": 30,
+    "batch_size": 32
+  }
+}
