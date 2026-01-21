@@ -11,9 +11,6 @@ python scripts/train_models.py --data-path data/training_data.csv --output-dir t
 # 3. Start API (keep terminal open)
 python api/app.py
 
-# 4. Test (new terminal)
-curl http://localhost:5000/health | python -m json.tool
-
 # Health
 curl http://localhost:9000/health
 

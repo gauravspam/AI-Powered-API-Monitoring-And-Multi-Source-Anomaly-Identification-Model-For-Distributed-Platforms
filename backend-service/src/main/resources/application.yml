@@ -41,6 +41,15 @@ spring:
         default-property-inclusion: non_null
         time-zone: UTC
 
+    cache:
+        type: simple
+        cache-names: mlServiceHealth
+        simple:
+            time-to-live: 30s
+
+    retry:
+        enabled: true
+
 server:
     port: 8080
 
@@ -49,8 +58,16 @@ logging:
         root: INFO
         com.api.monitoring: DEBUG
         org.springframework.web: INFO
+        org.springframework.retry: DEBUG
+        com.api.monitoring.backend.service.AnomalyService: DEBUG
+        com.api.monitoring.backend.service.MLServiceClient: DEBUG
     pattern:
         console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+        file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file:
+        name: logs/backend-service.log
+        max-size: 10MB
+        max-history: 30
 
 fluentd:
     enabled: false
@@ -61,7 +78,11 @@ management:
     endpoints:
         web:
             exposure:
-                include: health,metrics,prometheus
+                include: health,metrics,info
+
+    endpoint:
+        health:
+            show-details: always
 
 # OpenSearch Configuration
 opensearch:
@@ -75,7 +96,15 @@ opensearch:
 # Python ML Service
 python:
     service:
-        url: http://localhost:9000
+        url: ${ML_SERVICE_URL:http://localhost:9000}
+        enabled: ${ML_SERVICE_ENABLED:true}
+        timeout: 30
+        version: 1.0.0
+        retry:
+            max-attempts: 3
+            initial-delay: 1000
+            multiplier: 2
+            max-delay: 10000
 
 app:
     ml:
