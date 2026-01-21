@@ -1,31 +1,52 @@
 package com.api.monitoring.backend.repository;
 
 import com.api.monitoring.backend.model.AnomalyRecord;
+import java.time.LocalDateTime;
+import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Optional;
+import org.springframework.stereotype.Repository;
 
+@Repository
 public interface AnomalyRepository extends JpaRepository<AnomalyRecord, Long> {
+    // Find recent anomalies
+    @Query(
+        "SELECT a FROM AnomalyRecord a WHERE a.createdAt >= :since ORDER BY a.createdAt DESC"
+    )
+    List<AnomalyRecord> findRecentAnomalies(
+        @Param("since") LocalDateTime since
+    );
 
-    List<AnomalyRecord> findByApiName(String apiName);
+    // Find by severity
+    List<AnomalyRecord> findBySeverityOrderByCreatedAtDesc(String severity);
 
-    List<AnomalyRecord> findTop100ByApiNameOrderByTimestampDesc(String apiName);
+    // Find by severity list
+    Page<AnomalyRecord> findBySeverityInOrderByCreatedAtDesc(
+        List<String> severities,
+        Pageable pageable
+    );
 
-    @Query("SELECT a FROM AnomalyRecord a ORDER BY a.timestamp DESC")
-    List<AnomalyRecord> findRecentAnomalies();
-    
-    // NEW: For getRecentAnomalies() method
-    @Query("SELECT a FROM AnomalyRecord a ORDER BY a.timestamp DESC LIMIT 10")
-    List<AnomalyRecord> findTop10ByOrderByTimestampDesc();
+    // Find unacknowledged critical
+    @Query(
+        "SELECT a FROM AnomalyRecord a WHERE a.acknowledged = false AND a.severity IN ('CRITICAL', 'HIGH') ORDER BY a.createdAt DESC"
+    )
+    List<AnomalyRecord> findUnacknowledgedCritical();
 
-    @Query("SELECT a FROM AnomalyRecord a WHERE a.apiName = :apiName " +
-            "AND a.timestamp >= :since ORDER BY a.timestamp DESC")
-    Optional<AnomalyRecord> findLastScoreByEndpoint(
-            @Param("apiName") String apiName,
-            @Param("since") LocalDateTime since);
+    // Count by severity and date
+    long countBySeverityAndCreatedAtAfter(String severity, LocalDateTime since);
 
-    List<AnomalyRecord> findByTimestampAfter(LocalDateTime timestamp);
+    // Count by date (all severities)
+    long countByCreatedAtAfter(LocalDateTime since);
+
+    // Find by endpoint
+    List<AnomalyRecord> findByEndpointOrderByCreatedAtDesc(String endpoint);
+
+    // Find active anomalies
+    @Query(
+        "SELECT a FROM AnomalyRecord a WHERE a.status = 'ACTIVE' ORDER BY a.createdAt DESC"
+    )
+    List<AnomalyRecord> findActiveAnomalies();
 }
