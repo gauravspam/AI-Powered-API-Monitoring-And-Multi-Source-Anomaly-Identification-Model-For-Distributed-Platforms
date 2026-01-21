@@ -1,4 +1,8 @@
 // Mock data for Alerts page
+// http://localhost:8080/api/alerts/${alertId}/resolve  this api is a POST request to resolve an alert
+// http://localhost:8080/api/alerts/${alertId}/acknowledge  this api is a POST request to acknowledge an alert
+// each alert have the status field which can be 'open', 'acknowledged' or 'resolved'
+
 // http://localhost:8080/api/alerts
 const alerts = [
   {

@@ -1,21 +1,24 @@
 import { createContext, useState, useMemo } from 'react';
 import { BrowserRouter } from 'react-router-dom';
-import { ThemeProvider, CssBaseline } from '@mui/material';
+import { ThemeProvider, CssBaseline, createTheme } from '@mui/material';
 import { AppRoutes } from '@/routes/AppRoutes.jsx';
-import { createTheme } from '@mui/material/styles';
+import { AuthProvider } from '@/contexts/AuthContext';
 
 export const ThemeContext = createContext({ toggleTheme: () => { } });
 
-
 function App() {
   const [mode, setMode] = useState('dark');
-  const getTheme = (mode) => createTheme({
-    palette: {
-      mode:mode
-    }
-  });
-  // useMemo's first argument should be a function, and getTheme expects mode
-  const theme = useMemo(() => getTheme(mode), [mode]);
+  
+  // Use default MUI theme with mode
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode,
+        },
+      }),
+    [mode]
+  );
 
   const toggleTheme = () => {
     setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
@@ -26,10 +29,12 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <BrowserRouter>
-          <AppRoutes />
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
         </BrowserRouter>
       </ThemeProvider>
-    </ThemeContext.Provider >
+    </ThemeContext.Provider>
   );
 }
 
