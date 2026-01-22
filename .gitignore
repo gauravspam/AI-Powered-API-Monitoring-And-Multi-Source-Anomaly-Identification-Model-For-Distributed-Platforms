@@ -209,3 +209,5 @@ env/
 *.egg-info/
 dist/
 build/
+backend-service/build/
+**/build/
