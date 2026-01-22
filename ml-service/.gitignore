@@ -1,1 +1,4 @@
-extra
+extraml-service/kaggle_api_dataset/
+ml-service/data/
+ml-service/logs/
+ml-service/trained_models/*.h5
