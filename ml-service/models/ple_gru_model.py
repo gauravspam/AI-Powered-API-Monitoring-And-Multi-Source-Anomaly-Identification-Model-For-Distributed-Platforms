@@ -1,111 +1,101 @@
 """
-PLE-GRU Model: Probability Label Estimation GRU
-Production-ready implementation with same interface as MSIF-LSTM
+PLE-GRU Model: Parametric Long Short-Term Memory GRU
+Production-ready implementation (v2.0 - FIXED)
 
-Architecture:
-- Input: (batch_size, 1, 10) - Lookback window of 1, 10 features
-- GRU Layer 1: 128 units, return_sequences=True
-- BatchNormalization + Dropout(0.2)
-- GRU Layer 2: 64 units, return_sequences=False
-- BatchNormalization + Dropout(0.2)
-- Dense 1: 32 units, relu
-- Dropout(0.2)
-- Dense 2: 16 units, relu
-- Output: 1 unit, sigmoid (binary anomaly classification)
+HOTFIX APPLIED: Removed ReduceLROnPlateau (incompatible with LearningRateSchedule)
 
-Compilation:
-- Optimizer: Adam (lr=0.001)
-- Loss: binary_crossentropy
-- Metrics: accuracy, AUC, Precision, Recall
+Key fix: When using PolynomialDecay LearningRateSchedule, do NOT use ReduceLROnPlateau
+because it tries to modify learning_rate directly, which is not allowed.
 
-Callbacks:
-- EarlyStopping: Stop if val_loss doesn't improve for 5 epochs
-- ReduceLROnPlateau: Reduce learning rate if val_loss plateaus
-
-GRU vs LSTM: GRU is simpler (2 gates vs 3) and often faster with similar accuracy
+Solution: Use only EarlyStopping callback with LR schedule
 """
 
-import numpy as np
 import os
-from typing import Dict, Optional
-from tensorflow.keras.models import Sequential, load_model
-from tensorflow.keras.layers import GRU, Dense, Dropout, Input, BatchNormalization
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
-from src.logger import logger
+from typing import Dict
+
+import numpy as np
 from config.settings import config
+from sklearn.metrics import (
+    accuracy_score,
+    auc,
+    confusion_matrix,
+    f1_score,
+    precision_recall_curve,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from src.logger import logger
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import GRU, BatchNormalization, Dense, Dropout, Input
+from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.optimizers.schedules import PolynomialDecay
+
 
 class PLEGRU:
-    """
-    Probability Label Estimation GRU Model
-    
-    Responsibilities:
-    - Build GRU-based anomaly detection model
-    - Train on labeled data
-    - Make predictions
-    - Persist/load model weights
-    
-    Same interface as MSIFLSTM for easy ensemble integration
-    
-    Key attributes:
-    - model: Keras Sequential model
-    - is_trained: Boolean flag
-    - training_history: Dict with loss/accuracy history
-    - input_shape: Tuple (1, 10)
-    """
-    
+    """Parametric Long Short-Term Memory GRU Model (v2.0 - Refined)"""
+
     def __init__(self, input_shape: tuple = (1, 10)):
-        """
-        Initialize PLE-GRU model
-        
-        Args:
-            input_shape: Tuple (lookback_window, feature_count)
-                        Default: (1, 10) - no lookback, 10 features
-        """
         self.input_shape = input_shape
         self.model = None
         self.is_trained = False
         self.training_history = None
-        
-        logger.info(f"PLEGRU initialized with input shape {input_shape}")
-    
-    def build_model(self) -> None:
-        """
-        Build GRU neural network architecture
-        
-        Architecture:
-        Input (batch, 1, 10)
-          ↓
-        GRU(128, return_sequences=True) + BatchNorm + Dropout(0.2)
-          ↓
-        GRU(64, return_sequences=False) + BatchNorm + Dropout(0.2)
-          ↓
-        Dense(32, relu) + Dropout(0.2)
-          ↓
-        Dense(16, relu)
-          ↓
-        Dense(1, sigmoid) → Output [0-1]
-        
-        Total parameters: ~35k (fewer than LSTM)
-        
-        Why GRU instead of LSTM?
-        - Simpler architecture (2 gates vs 3)
-        - Faster training
-        - Similar accuracy
-        - Good for sequential patterns
-        """
-        
+        self.class_weights = None
+        logger.info(f"PLEGRU v2.0 initialized with input shape {input_shape}")
+
+    def _validate_features(self, features: np.ndarray) -> np.ndarray:
+        """Validate input features before prediction"""
+
+        if not isinstance(features, np.ndarray):
+            try:
+                features = np.array(features, dtype=np.float32)
+                logger.debug(f"Converted input to numpy array, shape: {features.shape}")
+            except Exception as e:
+                raise TypeError(f"Cannot convert input to numpy array: {e}")
+
+        if features.dtype != np.float32 and features.dtype != np.float64:
+            features = features.astype(np.float32)
+
+        if features.ndim not in [1, 2, 3]:
+            raise ValueError(f"Expected 1D, 2D, or 3D array, got {features.ndim}D. Shape: {features.shape}")
+
+        if features.ndim == 3 and features.shape[1] == 1:
+            features = features.reshape((features.shape[0], features.shape[2]))
+
+        if features.shape[-1] != 10:
+            raise ValueError(f"Expected 10 features, got {features.shape[-1]}. Shape: {features.shape}.")
+
+        if np.any(np.isnan(features)):
+            raise ValueError(f"Input contains {np.sum(np.isnan(features))} NaN values.")
+
+        if np.any(np.isinf(features)):
+            raise ValueError(f"Input contains {np.sum(np.isinf(features))} Inf values.")
+
+        max_abs_value = np.max(np.abs(features))
+        if max_abs_value > 5.0:
+            logger.warning(f"⚠️  Input max value {max_abs_value:.2f} outside [-1,1] range.")
+
+        if features.ndim > 1:
+            feature_std = np.std(features, axis=0)
+            zero_var_idx = np.where(feature_std < 0.01)[0]
+            if len(zero_var_idx) > 0:
+                logger.warning(f"⚠️  Features {zero_var_idx.tolist()} have near-zero variance.")
+
+        return features
+
+    def build_model(self, use_lr_schedule: bool = True) -> None:
+        """Build GRU neural network architecture"""
+
         logger.info("=" * 60)
-        logger.info("Building PLE-GRU Model Architecture")
+        logger.info("Building PLE-GRU Model Architecture (v2.0)")
         logger.info("=" * 60)
-        
+
         self.model = Sequential([
-            # Input layer
             Input(shape=self.input_shape),
-            
-            # First GRU layer - capture short-term patterns
+
             GRU(
-                config.ML_CONFIG.PLE_UNITS[0],  # 128 units
+                config.ML_CONFIG.PLE_UNITS[0],
                 return_sequences=True,
                 activation='relu',
                 name='ple_gru_1',
@@ -113,10 +103,9 @@ class PLEGRU:
             ),
             BatchNormalization(name='ple_bn_1'),
             Dropout(config.ML_CONFIG.DROPOUT_RATE, name='ple_dropout_1'),
-            
-            # Second GRU layer - capture long-term patterns
+
             GRU(
-                config.ML_CONFIG.PLE_UNITS[1],  # 64 units
+                config.ML_CONFIG.PLE_UNITS[1],
                 return_sequences=False,
                 activation='relu',
                 name='ple_gru_2',
@@ -124,115 +113,123 @@ class PLEGRU:
             ),
             BatchNormalization(name='ple_bn_2'),
             Dropout(config.ML_CONFIG.DROPOUT_RATE, name='ple_dropout_2'),
-            
-            # Dense layers - learning representations
-            Dense(
-                config.ML_CONFIG.PLE_UNITS[2],  # 32 units
-                activation='relu',
-                name='ple_dense_1'
-            ),
+
+            Dense(config.ML_CONFIG.PLE_UNITS[2], activation='relu', name='ple_dense_1'),
             Dropout(config.ML_CONFIG.DROPOUT_RATE, name='ple_dropout_3'),
-            
-            Dense(
-                config.ML_CONFIG.PLE_UNITS[3],  # 16 units
-                activation='relu',
-                name='ple_dense_2'
-            ),
-            
-            # Output layer - binary classification
+
+            Dense(config.ML_CONFIG.PLE_UNITS[3], activation='relu', name='ple_dense_2'),
+
             Dense(1, activation='sigmoid', name='ple_output')
         ])
-        
-        # Compile with same config as MSIF
+
+        if use_lr_schedule:
+            lr_schedule = PolynomialDecay(
+                initial_learning_rate=0.0001,
+                decay_steps=1000,
+                end_learning_rate=0.001,
+                power=1.0
+            )
+            optimizer = Adam(learning_rate=lr_schedule)
+            logger.info("✅ Learning rate schedule: Polynomial decay (0.0001 → 0.001)")
+        else:
+            optimizer = Adam(learning_rate=config.ML_CONFIG.LEARNING_RATE)
+            logger.info(f"✅ Fixed learning rate: {config.ML_CONFIG.LEARNING_RATE}")
+
         self.model.compile(
-            optimizer=Adam(learning_rate=config.ML_CONFIG.LEARNING_RATE),
+            optimizer=optimizer,
             loss='binary_crossentropy',
             metrics=['accuracy', 'AUC', 'Precision', 'Recall']
         )
-        
+
         total_params = self.model.count_params()
         logger.info(f"✅ PLE-GRU model built successfully")
         logger.info(f"   Total parameters: {total_params:,}")
-        logger.info(f"   Learning rate: {config.ML_CONFIG.LEARNING_RATE}")
         logger.info(f"   Dropout rate: {config.ML_CONFIG.DROPOUT_RATE}")
-        
-        # Print summary
-        logger.debug("Model summary:")
-        self.model.summary(print_fn=lambda x: logger.debug(x))
-    
+
     def train(self,
               X_train: np.ndarray,
               y_train: np.ndarray,
               X_val: np.ndarray = None,
               y_val: np.ndarray = None,
               epochs: int = None,
-              batch_size: int = None) -> Dict[str, list]:
-        """
-        Train PLE-GRU on labeled anomaly data
-        
-        Args:
-            X_train: Training features (n_samples, feature_count)
-                    Will be reshaped to (n_samples, 1, feature_count)
-            y_train: Training labels (n_samples,) - 0 or 1
-            X_val: Validation features (optional)
-            y_val: Validation labels (optional)
-            epochs: Number of epochs (default from config)
-            batch_size: Batch size (default from config)
-        
-        Returns:
-            Training history dict
-        
-        Example:
-            >>> ple = PLEGRU()
-            >>> ple.build_model()
-            >>> history = ple.train(X_train, y_train, X_val, y_val)
-        """
-        
+              batch_size: int = None,
+              auto_class_weight: bool = True,
+              patience: int = None,
+              min_delta: float = 0.0001) -> Dict[str, list]:
+        """Train PLE-GRU with class imbalance handling"""
+
         if self.model is None:
             logger.warning("Model not built. Building now...")
             self.build_model()
-        
+
         epochs = epochs or config.ML_CONFIG.EPOCHS
         batch_size = batch_size or config.ML_CONFIG.BATCH_SIZE
-        
-        # Reshape
+        if patience is None:
+            patience = 5 if len(X_train) < 10000 else 8
+
         if X_train.ndim == 2:
             X_train = X_train.reshape((X_train.shape[0], 1, X_train.shape[1]))
             logger.info(f"Reshaped X_train to {X_train.shape}")
-        
+
         if X_val is not None and X_val.ndim == 2:
             X_val = X_val.reshape((X_val.shape[0], 1, X_val.shape[1]))
             logger.info(f"Reshaped X_val to {X_val.shape}")
-        
+
+        class_weights = None
+        if auto_class_weight:
+            n_samples = len(y_train)
+            n_anomalies = np.sum(y_train)
+            n_normal = n_samples - n_anomalies
+
+            if n_anomalies > 0:
+                weight_normal = n_samples / (2 * n_normal)
+                weight_anomaly = n_samples / (2 * n_anomalies)
+                class_weights = {0: float(weight_normal), 1: float(weight_anomaly)}
+                self.class_weights = class_weights
+
+                anomaly_rate = n_anomalies / n_samples
+                weight_ratio = weight_anomaly / weight_normal
+
+                logger.info("")
+                logger.info("=" * 60)
+                logger.info("CLASS IMBALANCE ANALYSIS")
+                logger.info("=" * 60)
+                logger.info(f"Total samples: {n_samples:,}")
+                logger.info(f"Normal samples (0): {n_normal:,} ({(1-anomaly_rate):.2%})")
+                logger.info(f"Anomaly samples (1): {n_anomalies:,} ({anomaly_rate:.2%})")
+                logger.info("")
+                logger.info("Class weights (applied during training):")
+                logger.info(f"  Normal class (0): {weight_normal:.4f}")
+                logger.info(f"  Anomaly class (1): {weight_anomaly:.4f}")
+                logger.info(f"  Weight ratio (anomaly/normal): {weight_ratio:.1f}x")
+                logger.info("=" * 60)
+                logger.info("")
+
         logger.info("=" * 60)
         logger.info("Starting PLE-GRU Training")
         logger.info("=" * 60)
         logger.info(f"Epochs: {epochs}")
         logger.info(f"Batch size: {batch_size}")
+        logger.info(f"Early stopping patience: {patience} epochs")
         logger.info(f"Training samples: {X_train.shape[0]:,}")
         if X_val is not None:
             logger.info(f"Validation samples: {X_val.shape[0]:,}")
-        
+        logger.info("")
+
+        # HOTFIX: Only use EarlyStopping (ReduceLROnPlateau incompatible with LearningRateSchedule)
         callbacks = [
             EarlyStopping(
                 monitor='val_loss',
-                patience=5,
+                patience=patience,
                 restore_best_weights=True,
                 verbose=1,
-                mode='min'
-            ),
-            ReduceLROnPlateau(
-                monitor='val_loss',
-                factor=0.5,
-                patience=3,
-                min_lr=1e-6,
-                verbose=1,
-                mode='min'
+                mode='min',
+                min_delta=min_delta
             )
         ]
-        
+
         validation_data = (X_val, y_val) if X_val is not None else None
-        
+
         try:
             history = self.model.fit(
                 X_train, y_train,
@@ -240,99 +237,160 @@ class PLEGRU:
                 epochs=epochs,
                 batch_size=batch_size,
                 callbacks=callbacks,
+                class_weight=class_weights,
                 verbose=1
             )
-            
+
             self.training_history = history.history
             self.is_trained = True
-            
+
+            logger.info("")
             logger.info("=" * 60)
-            logger.info("✅ PLE-GRU Training Completed")
+            logger.info("✅ PLE-GRU Training Completed Successfully")
             logger.info("=" * 60)
             logger.info(f"Final train loss: {history.history['loss'][-1]:.4f}")
+            logger.info(f"Final train accuracy: {history.history['accuracy'][-1]:.4f}")
             if validation_data:
                 logger.info(f"Final val loss: {history.history['val_loss'][-1]:.4f}")
-            
+                logger.info(f"Final val accuracy: {history.history['val_accuracy'][-1]:.4f}")
+            logger.info("=" * 60)
+
             return self.training_history
-        
+
         except Exception as e:
             logger.error(f"Training failed: {e}", exc_info=True)
             raise
-    
+
     def predict(self, features: np.ndarray) -> np.ndarray:
-        """
-        Make anomaly predictions
-        
-        Args:
-            features: np.ndarray of shape (n_samples, feature_count)
-                     or (n_samples, 1, feature_count)
-        
-        Returns:
-            Anomaly scores np.ndarray of shape (n_samples,)
-            Values in [0, 1] where 0=normal, 1=anomaly
-        
-        Raises:
-            RuntimeError if model not built
-        """
-        
+        """Make anomaly predictions on normalized features"""
+
         if self.model is None:
-            raise RuntimeError(
-                "Model not built! Call build_model() or load() first."
-            )
-        
+            raise RuntimeError("Model not built! Call build_model() or load() first.")
+
+        features = self._validate_features(features)
+
         if features.ndim == 2:
             features = features.reshape((features.shape[0], 1, features.shape[1]))
-        
+
         predictions = self.model.predict(features, verbose=0)
         return predictions.flatten()
-    
-    def save(self, path: str) -> None:
-        """
-        Save trained model to disk
-        
-        Creates: trained_models/ple_gru_model.h5
-        
-        Args:
-            path: Directory path to save model
-        
-        Raises:
-            RuntimeError if no model built
-        """
-        
+
+    def predict_with_threshold(self, features: np.ndarray, threshold: float = 0.5) -> Dict:
+        """Make predictions with custom threshold"""
+
         if self.model is None:
-            raise RuntimeError("No model to save! Train or build model first.")
-        
+            raise RuntimeError("Model not built! Call build_model() or load() first.")
+
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError(f"Threshold must be in [0.0, 1.0], got {threshold}")
+
+        features = self._validate_features(features)
+        raw_scores = self.predict(features)
+        predictions = (raw_scores > threshold).astype(int)
+        confidence = np.abs(raw_scores - 0.5) * 2
+
+        return {
+            'raw_scores': raw_scores,
+            'predictions': predictions,
+            'threshold': threshold,
+            'confidence': confidence,
+            'anomaly_count': int(np.sum(predictions))
+        }
+
+    def evaluate(self, X_test: np.ndarray, y_test: np.ndarray, threshold: float = 0.5) -> Dict:
+        """Comprehensive evaluation with metrics"""
+
+        if self.model is None:
+            raise RuntimeError("Model not built! Call build_model() or load() first.")
+
+        X_test = self._validate_features(X_test)
+
+        if X_test.ndim == 2:
+            X_test = X_test.reshape((X_test.shape[0], 1, X_test.shape[1]))
+
+        raw_scores = self.model.predict(X_test, verbose=0).flatten()
+        predictions = (raw_scores > threshold).astype(int)
+
+        accuracy = accuracy_score(y_test, predictions)
+        precision = precision_score(y_test, predictions, zero_division=0)
+        recall = recall_score(y_test, predictions, zero_division=0)
+        f1 = f1_score(y_test, predictions, zero_division=0)
+
+        try:
+            roc_auc = roc_auc_score(y_test, raw_scores)
+        except:
+            roc_auc = 0.0
+
+        try:
+            precision_curve, recall_curve, _ = precision_recall_curve(y_test, raw_scores)
+            pr_auc = auc(recall_curve, precision_curve)
+        except:
+            pr_auc = 0.0
+
+        try:
+            tn, fp, fn, tp = confusion_matrix(y_test, predictions).ravel()
+        except:
+            tn = fp = fn = tp = 0
+
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0.0
+
+        results = {
+            'accuracy': float(accuracy),
+            'precision': float(precision),
+            'recall': float(recall),
+            'f1': float(f1),
+            'roc_auc': float(roc_auc),
+            'pr_auc': float(pr_auc),
+            'specificity': float(specificity),
+            'threshold': threshold,
+            'confusion_matrix': {
+                'true_negatives': int(tn),
+                'false_positives': int(fp),
+                'false_negatives': int(fn),
+                'true_positives': int(tp)
+            }
+        }
+
+        logger.info("=" * 60)
+        logger.info("PLE-GRU Evaluation Results")
+        logger.info("=" * 60)
+        logger.info(f"Threshold: {threshold:.2f}")
+        logger.info(f"  Accuracy:    {accuracy:.4f}")
+        logger.info(f"  Precision:   {precision:.4f}")
+        logger.info(f"  Recall:      {recall:.4f}")
+        logger.info(f"  F1 Score:    {f1:.4f}")
+        logger.info(f"  ROC-AUC:     {roc_auc:.4f}")
+        logger.info(f"  PR-AUC:      {pr_auc:.4f}")
+        logger.info(f"  Specificity: {specificity:.4f}")
+        logger.info(f"  TP/FP/FN/TN: {tp}/{fp}/{fn}/{tn}")
+        logger.info("=" * 60)
+
+        return results
+
+    def save(self, path: str) -> None:
+        """Save trained model"""
+
+        if self.model is None:
+            raise RuntimeError("No model to save!")
+
         os.makedirs(path, exist_ok=True)
         model_path = os.path.join(path, 'ple_gru_model.h5')
-        
+
         try:
             self.model.save(model_path)
             logger.info(f"✅ PLE-GRU model saved to {model_path}")
         except Exception as e:
             logger.error(f"Failed to save model: {e}", exc_info=True)
             raise
-    
+
     def load(self, path: str) -> None:
-        """
-        Load pre-trained model from disk
-        
-        Expects: trained_models/ple_gru_model.h5
-        
-        Args:
-            path: Directory path where model is saved
-        
-        Raises:
-            FileNotFoundError if model not found
-        """
-        
+        """Load pre-trained model"""
+
         model_path = os.path.join(path, 'ple_gru_model.h5')
-        
+
         if not os.path.exists(model_path):
-            raise FileNotFoundError(
-                f"Model not found at {model_path}. "
-                f"Make sure to train and save model first."
-            )
-        
+            raise FileNotFoundError(f"Model not found at {model_path}")
+
         try:
             self.model = load_model(model_path)
             self.is_trained = True

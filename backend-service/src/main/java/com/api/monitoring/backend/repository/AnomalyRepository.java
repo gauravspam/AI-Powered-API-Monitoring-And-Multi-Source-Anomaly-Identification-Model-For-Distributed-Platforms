@@ -20,33 +20,24 @@ public interface AnomalyRepository extends JpaRepository<AnomalyRecord, Long> {
         @Param("since") LocalDateTime since
     );
 
-    // Find by severity
-    List<AnomalyRecord> findBySeverityOrderByCreatedAtDesc(String severity);
+    List<AnomalyRecord> findByEndpoint(String apiName);
 
-    // Find by severity list
-    Page<AnomalyRecord> findBySeverityInOrderByCreatedAtDesc(
-        List<String> severities,
-        Pageable pageable
-    );
+    List<AnomalyRecord> findTop100ByEndpointOrderByCreatedAtDesc(String apiName);
 
-    // Find unacknowledged critical
-    @Query(
-        "SELECT a FROM AnomalyRecord a WHERE a.acknowledged = false AND a.severity IN ('CRITICAL', 'HIGH') ORDER BY a.createdAt DESC"
-    )
-    List<AnomalyRecord> findUnacknowledgedCritical();
+    @Query("SELECT a FROM AnomalyRecord a ORDER BY a.createdAt DESC")
+    List<AnomalyRecord> findRecentAnomalies();
 
-    // Count by severity and date
-    long countBySeverityAndCreatedAtAfter(String severity, LocalDateTime since);
+    // NEW: For getRecentAnomalies() method
+    @Query("SELECT a FROM AnomalyRecord a ORDER BY a.createdAt DESC LIMIT 10")
+    List<AnomalyRecord> findTop10ByOrderByCreatedAtDesc();
 
-    // Count by date (all severities)
-    long countByCreatedAtAfter(LocalDateTime since);
+    @Query("SELECT a FROM AnomalyRecord a WHERE a.endpoint = :endpoint " +
+            "AND a.createdAt >= :since ORDER BY a.createdAt DESC")
+    Optional<AnomalyRecord> findLastScoreByEndpoint(
+            @Param("endpoint") String endpoint,
+            @Param("since") LocalDateTime since);
 
-    // Find by endpoint
-    List<AnomalyRecord> findByEndpointOrderByCreatedAtDesc(String endpoint);
+    List<AnomalyRecord> findByCreatedAtAfter(LocalDateTime timestamp);
 
-    // Find active anomalies
-    @Query(
-        "SELECT a FROM AnomalyRecord a WHERE a.status = 'ACTIVE' ORDER BY a.createdAt DESC"
-    )
-    List<AnomalyRecord> findActiveAnomalies();
+
 }

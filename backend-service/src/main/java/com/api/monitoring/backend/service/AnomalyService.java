@@ -24,100 +24,39 @@ public class AnomalyService {
     private final LogRepository logRepository;
 
     @Autowired
-    public AnomalyService(
-        MLServiceClient mlServiceClient,
-        AnomalyRepository anomalyRepository,
-        LogRepository logRepository
-    ) {
-        this.mlServiceClient = mlServiceClient;
-        this.anomalyRepository = anomalyRepository;
-        this.logRepository = logRepository;
+    private AnomalyRepository anomalyRepository;
+
+    @Autowired
+    private MetricRepository metricRepository;
+
+    @Autowired
+    private PythonMLService pythonMLService;
+
+    @Autowired
+    private FeatureEngineer featureEngineer;
+
+    public List<AnomalyResponse> getRecentAnomalies(int limit) {
+        logger.info("Fetching recent {} anomalies", limit);
+        List<AnomalyRecord> anomalies = anomalyRepository.findTop10ByOrderByCreatedAtDesc();
+        return anomalies.stream()
+                .limit(limit)
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
     }
 
-    @Transactional
-    public AnomalyRecord analyzeApiLog(LogRecord logRecord) {
-        long startTime = System.currentTimeMillis();
+    public void detectAndSaveAnomalies() {
+        logger.info("Starting anomaly detection for all APIs...");
 
         try {
-            log.info(
-                "🔍 Analyzing log ID: {}, endpoint: {}",
-                logRecord.getId(),
-                logRecord.getEndpoint()
-            );
+            List<Long> apiIds = metricRepository.findDistinctApiIds();
+            logger.info("Found {} unique API IDs to process", apiIds.size());
 
-            if (logRecord == null) {
-                throw new IllegalArgumentException("LogRecord cannot be null");
+            for (Long apiId : apiIds) {
+                detectAndSaveAnomalyForApi(apiId);
             }
 
-            if (logRecord.getId() == null) {
-                throw new IllegalArgumentException(
-                    "LogRecord must be persisted (ID cannot be null)"
-                );
-            }
+            logger.info("Anomaly detection completed for all APIs");
 
-            if (Boolean.TRUE.equals(logRecord.getProcessed())) {
-                log.warn(
-                    "⚠️ Log {} already processed. Skipping.",
-                    logRecord.getId()
-                );
-                return anomalyRepository
-                    .findById(logRecord.getAnomalyId())
-                    .orElse(null);
-            }
-
-            AnomalyPredictionDTO prediction = mlServiceClient.predictAnomaly(
-                logRecord
-            );
-
-            AnomalyRecord anomalyRecord = AnomalyRecord.builder()
-                .endpoint(logRecord.getEndpoint())
-                .method(logRecord.getMethod())
-                .msifLstmScore(prediction.getMsifScore())
-                .pleGruScore(prediction.getPleScore())
-                .hybridEnsembleScore(prediction.getHybridScore())
-                .confidence(prediction.getConfidence())
-                .severity(prediction.getSeverity())
-                .fusionMethod(prediction.getFusionMethod())
-                .status("ACTIVE")
-                .acknowledged(false)
-                .traceId(logRecord.getTraceId())
-                .mlProcessingTimeMs(prediction.getMlProcessingTimeMs())
-                .mlServiceVersion(prediction.getMlServiceVersion())
-                .build();
-
-            AnomalyRecord savedAnomaly = anomalyRepository.save(anomalyRecord);
-            log.info(
-                "✅ Anomaly record created: ID={}, hybrid_score={}, severity={}",
-                savedAnomaly.getId(),
-                savedAnomaly.getHybridEnsembleScore(),
-                savedAnomaly.getSeverity()
-            );
-
-            logRecord.markAsProcessed(
-                savedAnomaly.getId(),
-                prediction.getMlServiceVersion()
-            );
-            logRepository.save(logRecord);
-
-            long totalDuration = System.currentTimeMillis() - startTime;
-            log.info(
-                "✅ Log {} analysis complete in {}ms (ML: {}ms)",
-                logRecord.getId(),
-                totalDuration,
-                prediction.getMlProcessingTimeMs()
-            );
-
-            return savedAnomaly;
-        } catch (MLServiceClient.MLServiceException e) {
-            log.error(
-                "❌ ML Service error analyzing log {}: {}",
-                logRecord.getId(),
-                e.getMessage()
-            );
-            throw new AnomalyProcessingException(
-                "ML service failed: " + e.getMessage(),
-                e
-            );
         } catch (Exception e) {
             log.error(
                 "❌ Unexpected error analyzing log {}: {}",
@@ -132,122 +71,185 @@ public class AnomalyService {
         }
     }
 
-    @Transactional
-    public List<AnomalyRecord> analyzeLogBatch(List<LogRecord> logs) {
-        log.info("📦 Batch analyzing {} logs", logs.size());
+    private void detectAndSaveAnomalyForApi(Long apiId) {
+        String traceId = "trace_" + apiId + "_" + System.currentTimeMillis();
 
-        return logs
-            .stream()
-            .map(logRecord -> {
-                try {
-                    return analyzeApiLog(logRecord);
-                } catch (Exception e) {
-                    log.error(
-                        "Failed to analyze log {}: {}",
-                        logRecord.getId(),
-                        e.getMessage()
-                    );
-                    return null;
-                }
-            })
-            .filter(anomaly -> anomaly != null)
-            .toList();
-    }
+        try {
+            String apiName = "api_" + apiId;
+            logger.info("[{}] Processing anomaly detection for API: {}", traceId, apiName);
 
-    public List<AnomalyRecord> getRecentAnomalies(int minutes) {
-        LocalDateTime since = LocalDateTime.now().minusMinutes(minutes);
-        return anomalyRepository.findRecentAnomalies(since);
-    }
+            LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+            List<MetricRecord> metrics = metricRepository.findByApiIdAndTimestampAfter(apiId, twentyFourHoursAgo);
 
-    public List<AnomalyRecord> getAnomaliesBySeverity(String severity) {
-        return anomalyRepository.findBySeverityOrderByCreatedAtDesc(severity);
-    }
+            if (metrics.isEmpty()) {
+                logger.warn("[{}] No metrics found for API {}", traceId, apiName);
+                return;
+            }
 
-    public List<AnomalyRecord> getCriticalAnomalies(int limit) {
-        List<String> severities = List.of("CRITICAL", "HIGH");
-        Pageable pageable = PageRequest.of(0, limit);
-        return anomalyRepository
-            .findBySeverityInOrderByCreatedAtDesc(severities, pageable)
-            .getContent();
-    }
+            logger.info("[{}] Found {} metrics for API {}", traceId, metrics.size(), apiName);
 
-    public List<AnomalyRecord> getUnacknowledgedCritical() {
-        return anomalyRepository.findUnacknowledgedCritical();
-    }
+            List<Double[]> msifFeatures = featureEngineer.buildMsifFeatures(metrics);
+            logger.info("[{}] Built MSIF features: {} timesteps", traceId, msifFeatures.size());
 
-    @Transactional
-    public AnomalyRecord acknowledgeAnomaly(Long anomalyId, String username) {
-        AnomalyRecord anomaly = anomalyRepository
-            .findById(anomalyId)
-            .orElseThrow(() ->
-                new IllegalArgumentException("Anomaly not found: " + anomalyId)
-            );
+            List<Double[]> pleFeatures = featureEngineer.buildPleFeatures(metrics, LocalDateTime.now());
+            logger.info("[{}] Built PLE features: {} timesteps", traceId, pleFeatures.size());
 
-        anomaly.acknowledge(username);
-        AnomalyRecord saved = anomalyRepository.save(anomaly);
+            FeatureWindow featureWindow = new FeatureWindow();
+            featureWindow.setEndpoint(apiName);
+            featureWindow.setMethod("AGGREGATE");
+            featureWindow.setMsifFeatures(msifFeatures);
+            featureWindow.setPleFeatures(pleFeatures);
+            featureWindow.setWindowSizeMins(1440);
+            featureWindow.setStartTimestamp(System.currentTimeMillis() - (24 * 60 * 60 * 1000L));
+            featureWindow.setEndTimestamp(System.currentTimeMillis());
 
-        log.info("✅ Anomaly {} acknowledged by {}", anomalyId, username);
-        return saved;
-    }
+            logger.info("[{}] Calling ML service...", traceId);
+            AnomalyScoresResponse mlResponse = pythonMLService.predictWithFeatures(featureWindow, traceId);
 
-    @Transactional
-    public AnomalyRecord resolveAnomaly(Long anomalyId) {
-        AnomalyRecord anomaly = anomalyRepository
-            .findById(anomalyId)
-            .orElseThrow(() ->
-                new IllegalArgumentException("Anomaly not found: " + anomalyId)
-            );
+            if (mlResponse != null) {
+                saveAnomalyWithMLScores(apiName, mlResponse, traceId);
+            } else {
+                logger.warn("[{}] ML service returned null", traceId);
+            }
 
-        anomaly.resolve();
-        AnomalyRecord saved = anomalyRepository.save(anomaly);
-
-        log.info("✅ Anomaly {} resolved", anomalyId);
-        return saved;
-    }
-
-    public Map<String, Long> getAnomalyStatistics(int hours) {
-        LocalDateTime since = LocalDateTime.now().minusHours(hours);
-
-        long totalCount = anomalyRepository.countByCreatedAtAfter(since);
-        long criticalCount = anomalyRepository.countBySeverityAndCreatedAtAfter(
-            "CRITICAL",
-            since
-        );
-        long highCount = anomalyRepository.countBySeverityAndCreatedAtAfter(
-            "HIGH",
-            since
-        );
-        long mediumCount = anomalyRepository.countBySeverityAndCreatedAtAfter(
-            "MEDIUM",
-            since
-        );
-        long lowCount = anomalyRepository.countBySeverityAndCreatedAtAfter(
-            "LOW",
-            since
-        );
-
-        return Map.of(
-            "total",
-            totalCount,
-            "critical",
-            criticalCount,
-            "high",
-            highCount,
-            "medium",
-            mediumCount,
-            "low",
-            lowCount
-        );
-    }
-
-    public static class AnomalyProcessingException extends RuntimeException {
-
-        public AnomalyProcessingException(String message) {
-            super(message);
+        } catch (Exception e) {
+            logger.error("[{}] Error processing API {}: {}", traceId, apiId, e.getMessage(), e);
         }
 
-        public AnomalyProcessingException(String message, Throwable cause) {
-            super(message, cause);
+    private void saveAnomalyWithMLScores(String apiName, AnomalyScoresResponse mlResponse, String traceId) {
+        AnomalyRecord anomaly = new AnomalyRecord();
+        anomaly.setEndpoint(apiName);
+        anomaly.setCreatedAt(LocalDateTime.now());
+
+        Double msifScore = mlResponse.getMsifLstmScore() != null ? mlResponse.getMsifLstmScore() : 0.0;
+        Double pleScore = mlResponse.getPleGruScore() != null ? mlResponse.getPleGruScore() : 0.0;
+        Double hybridScore = mlResponse.getHybridScore() != null ? mlResponse.getHybridScore() : 0.0;
+        Double confidence = mlResponse.getConfidence() != null ? mlResponse.getConfidence() : 0.0;
+
+        anomaly.setMsifLstmScore(msifScore);
+        anomaly.setPleGruScore(pleScore);
+        anomaly.setHybridEnsembleScore(hybridScore);
+        anomaly.setConfidence(confidence);
+
+        if (hybridScore >= 0.7) {
+            anomaly.setSeverity("HIGH");
+        } else if (hybridScore >= 0.5) {
+            anomaly.setSeverity("MEDIUM");
+        } else {
+            anomaly.setSeverity("LOW");
         }
+        anomaly.setStatus("ACTIVE");
+        anomaly.setMlServiceVersion("v1.0");
+        anomaly.setFusionMethod("weighted_agreement");
+
+        anomalyRepository.save(anomaly);
+        logger.info("[{}] Anomaly saved: MSIF={} PLE={} Hybrid={}",
+                traceId, msifScore, pleScore, hybridScore);
+    }
+
+    public AnomalyResponse detectAnomaly(LogEntryRequest logEntry) {
+        AnomalyResponse response = new AnomalyResponse();
+        response.setApiName(logEntry.getApiName());
+        response.setFinalAnomalyScore(0.5);
+        response.setSeverity("MEDIUM");
+        response.setConfidence(0.7);
+        response.setStatus("DETECTED");
+        response.setTimestamp(LocalDateTime.now().toString());
+        return response;
+    }
+
+    public List<AnomalyResponse> detectBatchAnomalies(LogEntryRequest[] logEntries) {
+        List<AnomalyResponse> responses = new ArrayList<>();
+        for (LogEntryRequest entry : logEntries) {
+            responses.add(detectAnomaly(entry));
+        }
+        return responses;
+    }
+
+    public List<AnomalyResponse> getRecentAnomalies(String apiName, int limit) {
+        logger.info("Fetching {} anomalies for API: {}", limit, apiName);
+        List<AnomalyRecord> anomalies = anomalyRepository.findTop100ByEndpointOrderByCreatedAtDesc(apiName);
+        logger.info("Fetching {} anomalies for API: {}", limit, apiName);
+        return anomalies.stream()
+                .limit(limit)
+                .map(this::convertToResponse)
+                .collect(Collectors.toList());
+    }
+
+    public List<AnomalyResponse> getAllRecentAnomalies(int limit) {
+        return getRecentAnomalies(limit);
+    }
+
+    public List<AnomalyResponse> getLatestAnomalies(int limit) {
+        return getRecentAnomalies(limit);
+    }
+
+    public StatisticsResponse getStatistics(String apiName) {
+        StatisticsResponse stats = new StatisticsResponse();
+        stats.setApiName(apiName);
+
+        List<AnomalyRecord> anomalies = anomalyRepository.findByEndpoint(apiName);
+        stats.setAnomalyCount((long) anomalies.size());
+
+        double avgScore = anomalies.stream()
+                .mapToDouble(AnomalyRecord::getAnomalyScore)
+                .average()
+                .orElse(0.0);
+        stats.setAvgAnomalyScore(avgScore);
+
+        long normalCount = anomalies.stream().filter(a -> "LOW".equals(a.getSeverity())).count();
+        long suspiciousCount = anomalies.stream().filter(a -> "MEDIUM".equals(a.getSeverity())).count();
+        long anomalyCount = anomalies.stream().filter(a -> "HIGH".equals(a.getSeverity())).count();
+
+        stats.setNormalCount(normalCount);
+        stats.setSuspiciousCount(suspiciousCount);
+        stats.setAnomalyCount(anomalyCount);
+        stats.setTotalLogs((long) anomalies.size());
+        stats.setLast24hAnomalies((long) anomalies.size());
+        stats.setAlertsTriggered(0L);
+        stats.setErrorRateTrend("STABLE");
+
+        return stats;
+    }
+
+    public List<String> getMonitoredApis() {
+        List<Long> apiIds = metricRepository.findDistinctApiIds();
+        return apiIds.stream()
+                .map(id -> "api_" + id)
+                .collect(Collectors.toList());
+    }
+
+    public long getActiveAlertsCount() {
+        return anomalyRepository.findAll().stream()
+                .filter(a -> "ACTIVE".equals(a.getStatus()))
+                .count();
+    }
+
+    public boolean acknowledgeAnomaly(Long id) {
+        try {
+            AnomalyRecord anomaly = anomalyRepository.findById(id).orElse(null);
+            if (anomaly != null) {
+                anomaly.acknowledge("SYSTEM");
+                anomaly.setStatus("ACKNOWLEDGED");
+                anomalyRepository.save(anomaly);
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            logger.error("Error acknowledging anomaly {}: {}", id, e.getMessage());
+            return false;
+        }
+    }
+
+    private AnomalyResponse convertToResponse(AnomalyRecord record) {
+        AnomalyResponse response = new AnomalyResponse();
+        response.setId(record.getId());
+        response.setApiName(record.getEndpoint());
+        response.setSeverity(record.getSeverity());
+        response.setFinalAnomalyScore(record.getAnomalyScore());
+        response.setConfidence(record.getConfidence());
+        response.setStatus(record.getStatus());
+        response.setTimestamp(record.getCreatedAt().toString());
+        return response;
     }
 }

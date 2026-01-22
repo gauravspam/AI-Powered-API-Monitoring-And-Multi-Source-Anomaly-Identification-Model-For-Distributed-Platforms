@@ -1,107 +1,77 @@
 package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
-import java.time.Duration;
+import lombok.*;
 import java.time.LocalDateTime;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.UpdateTimestamp;
+import java.util.Map;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 /**
- * Entity representing API log entries
- * Maps to api_logs table
- * Stores all API request/response data for monitoring and analysis
+ * LogRecord Entity: Represents API request/response data
+ * Table: api_logs
+ * Purpose: Primary data source for ML-based anomaly detection
  */
 @Entity
-@Table(
-    name = "api_logs",
-    indexes = {
+@Table(name = "api_logs", indexes = {
         @Index(name = "idx_api_logs_endpoint", columnList = "endpoint"),
         @Index(name = "idx_api_logs_status_code", columnList = "status_code"),
-        @Index(name = "idx_api_logs_created_at", columnList = "created_at"),
-        @Index(
-            name = "idx_api_logs_processed_created_at",
-            columnList = "processed, created_at"
-        ),
-    }
-)
+        @Index(name = "idx_api_logs_created_at", columnList = "created_at DESC"),
+        @Index(name = "idx_api_logs_trace_id", columnList = "trace_id"),
+        @Index(name = "idx_api_logs_endpoint_created", columnList = "endpoint, created_at DESC"),
+        @Index(name = "idx_api_logs_service_created", columnList = "service_name, created_at DESC"),
+        @Index(name = "idx_api_logs_unprocessed", columnList = "is_processed, created_at")
+})
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@EqualsAndHashCode(of = "id")
+@ToString(exclude = { "requestBody", "responseBody", "metadata" })
 public class LogRecord {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "api_logs_id_seq")
+    @SequenceGenerator(name = "api_logs_id_seq", sequenceName = "api_logs_id_seq", allocationSize = 1)
     private Long id;
 
-    // API Request Details
     @Column(name = "endpoint", nullable = false, length = 500)
     private String endpoint;
 
-    @Column(name = "method", nullable = false, length = 10)
-    @Builder.Default
-    private String method = "GET";
+    @Column(name = "http_method", nullable = false, length = 10)
+    private String method;
 
-    @Column(name = "status_code")
+    @Column(name = "status_code", nullable = false)
     private Integer statusCode;
 
-    // Performance Metrics
-    @Column(name = "response_time_ms")
+    @Column(name = "response_time_ms", nullable = false)
     private Long responseTimeMs;
 
-    @Column(name = "request_size")
-    private Long requestSize;
+    @Column(name = "request_size_bytes")
+    private Long requestSizeBytes;
 
-    @Column(name = "response_size")
-    private Long responseSize;
+    @Column(name = "response_size_bytes")
+    private Long responseSizeBytes;
 
-    // System Metrics
-    @Column(name = "cpu_usage")
+    @Column(name = "cpu_usage_percent")
     private Double cpuUsage;
 
-    @Column(name = "memory_usage")
+    @Column(name = "memory_usage_percent")
     private Double memoryUsage;
+
+    @Column(name = "disk_io_bytes")
+    private Long diskIo;
+
+    @Column(name = "network_io_bytes")
+    private Long networkIo;
 
     @Column(name = "error_rate")
     private Double errorRate;
 
-    @Column(name = "request_count")
-    @Builder.Default
-    private Integer requestCount = 1;
-
-    // Network Metrics
-    @Column(name = "network_io")
-    private Long networkIo;
-
-    @Column(name = "disk_io")
-    private Long diskIo;
-
-    // Request Context
-    @Column(name = "trace_id", length = 255)
-    private String traceId;
-
-    @Column(name = "environment", length = 50)
-    private String environment;
-
-    @Column(name = "service_name", length = 255)
-    private String serviceName;
-
-    @Column(name = "user_id", length = 255)
-    private String userId;
-
-    @Column(name = "ip_address", length = 45)
-    private String ipAddress;
-
-    // Request/Response Bodies (optional)
-    @Column(name = "request_body", columnDefinition = "TEXT")
-    private String requestBody;
-
-    @Column(name = "response_body", columnDefinition = "TEXT")
-    private String responseBody;
+    @Column(name = "error_count")
+    private Integer errorCount;
 
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
@@ -109,159 +79,126 @@ public class LogRecord {
     @Column(name = "stack_trace", columnDefinition = "TEXT")
     private String stackTrace;
 
-    // ============= ML PROCESSING FIELDS (Priority 1) =============
+    @Column(name = "request_count")
+    private Integer requestCount;
 
-    /**
-     * Whether this log has been processed by ML service
-     */
-    @Column(name = "processed", nullable = false)
+    @Column(name = "user_id", length = 255)
+    private String userId;
+
+    @Column(name = "ip_address")
+    private String ipAddress;
+
+    @Column(name = "user_agent", columnDefinition = "TEXT")
+    private String userAgent;
+
+    // ✅ FIXED: Use Hibernate 6 native JSONB support
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "request_body", columnDefinition = "jsonb")
+    private Map<String, Object> requestBody;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "response_body", columnDefinition = "jsonb")
+    private Map<String, Object> responseBody;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "request_headers", columnDefinition = "jsonb")
+    private Map<String, Object> requestHeaders;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "response_headers", columnDefinition = "jsonb")
+    private Map<String, Object> responseHeaders;
+
+    @Column(name = "trace_id", length = 255)
+    private String traceId;
+
+    @Column(name = "span_id", length = 255)
+    private String spanId;
+
+    @Column(name = "parent_span_id", length = 255)
+    private String parentSpanId;
+
+    @Column(name = "service_name", nullable = false, length = 255)
+    private String serviceName;
+
+    @Column(name = "service_version", length = 50)
+    private String serviceVersion;
+
+    @Column(name = "environment", length = 50)
     @Builder.Default
-    private Boolean processed = false;
+    private String environment = "production";
 
-    /**
-     * Timestamp when ML analysis completed
-     */
-    @Column(name = "processed_at")
-    private LocalDateTime processedAt;
-
-    /**
-     * Foreign key to anomaly_scores table if anomaly was detected
-     */
-    @Column(name = "anomaly_id")
-    private Long anomalyId;
-
-    /**
-     * Version of ML service that processed this log
-     */
-    @Column(name = "ml_service_version", length = 50)
-    private String mlServiceVersion;
-
-    // ============= END ML PROCESSING FIELDS =============
-
-    // Temporal Data
     @Column(name = "hour_of_day")
     private Integer hourOfDay;
 
     @Column(name = "day_of_week")
     private Integer dayOfWeek;
 
-    // Audit Timestamps
-    @Column(name = "timestamp")
-    private LocalDateTime timestamp;
+    @Column(name = "is_weekend")
+    private Boolean isWeekend;
+
+    @Column(name = "is_business_hours")
+    private Boolean isBusinessHours;
+
+    @Column(name = "is_processed", nullable = false)
+    @Builder.Default
+    private Boolean isProcessed = false;
+
+    @Column(name = "processed_at")
+    private LocalDateTime processedAt;
+
+    @Column(name = "anomaly_detection_id")
+    private Long anomalyDetectionId;
+
+    @Column(name = "ml_service_version", length = 50)
+    private String mlServiceVersion;
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    @CreationTimestamp
     private LocalDateTime createdAt;
 
+    @Column(name = "created_by", length = 255)
+    private String createdBy;
+
     @Column(name = "updated_at")
-    @UpdateTimestamp
     private LocalDateTime updatedAt;
 
-    // ============= HELPER METHODS =============
+    @Column(name = "updated_by", length = 255)
+    private String updatedBy;
 
-    /**
-     * Check if log has been processed
-     */
-    @Transient
-    public boolean isProcessed() {
-        return Boolean.TRUE.equals(processed);
-    }
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
-    /**
-     * Check if anomaly was detected for this log
-     */
-    @Transient
-    public boolean hasAnomaly() {
-        return anomalyId != null;
-    }
+    @Column(name = "deleted_by", length = 255)
+    private String deletedBy;
 
-    /**
-     * Calculate processing duration
-     */
-    @Transient
-    public Duration getProcessingDuration() {
-        if (createdAt != null && processedAt != null) {
-            return Duration.between(createdAt, processedAt);
-        }
-        return null;
-    }
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "metadata", columnDefinition = "jsonb")
+    private Map<String, Object> metadata;
 
-    /**
-     * Mark this log as processed
-     */
-    public void markAsProcessed(Long anomalyId, String mlVersion) {
-        this.processed = true;
-        this.processedAt = LocalDateTime.now();
-        this.anomalyId = anomalyId;
-        this.mlServiceVersion = mlVersion;
-    }
-
-    /**
-     * Check if this log needs processing
-     */
-    @Transient
-    public boolean needsProcessing() {
-        return !Boolean.TRUE.equals(processed);
-    }
-
-    /**
-     * Check if this is an error response
-     */
-    @Transient
-    public boolean isError() {
-        return statusCode != null && statusCode >= 400;
-    }
-
-    /**
-     * Check if this is a slow response
-     */
-    @Transient
-    public boolean isSlowResponse(long thresholdMs) {
-        return responseTimeMs != null && responseTimeMs > thresholdMs;
-    }
-
-    /**
-     * Calculate error rate (0.0 to 1.0)
-     */
-    @Transient
-    public Double calculateErrorRate() {
-        if (errorRate != null) {
-            return errorRate;
-        }
-        return isError() ? 1.0 : 0.0;
-    }
-
-    /**
-     * Get response time in seconds
-     */
-    @Transient
-    public Double getResponseTimeSeconds() {
-        return responseTimeMs != null ? responseTimeMs / 1000.0 : null;
-    }
-
-    /**
-     * Extract hour and day from timestamp
-     */
     @PrePersist
+    protected void onCreate() {
+        createdAt = LocalDateTime.now();
+        updatedAt = LocalDateTime.now();
+    }
+
     @PreUpdate
-    public void extractTemporalFeatures() {
-        LocalDateTime time =
-            timestamp != null ? timestamp : LocalDateTime.now();
-        this.hourOfDay = time.getHour();
-        this.dayOfWeek = time.getDayOfWeek().getValue();
+    protected void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 
-    /**
-     * Validate data before persistence
-     */
-    @PrePersist
-    public void prePersist() {
-        if (this.timestamp == null) {
-            this.timestamp = LocalDateTime.now();
-        }
-        if (this.processed == null) {
-            this.processed = false;
-        }
-        extractTemporalFeatures();
+    public void markAsProcessed(Long anomalyDetectionId, String mlServiceVersion) {
+        this.isProcessed = true;
+        this.processedAt = LocalDateTime.now();
+        this.anomalyDetectionId = anomalyDetectionId;
+        this.mlServiceVersion = mlServiceVersion;
+    }
+
+    public void delete(String deletedBy) {
+        this.deletedAt = LocalDateTime.now();
+        this.deletedBy = deletedBy;
+    }
+
+    public boolean isDeleted() {
+        return deletedAt != null;
     }
 }
