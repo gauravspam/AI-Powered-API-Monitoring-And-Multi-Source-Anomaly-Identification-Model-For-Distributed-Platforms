@@ -11,6 +11,7 @@ backend/**/!gradle-wrapper.jar
 backend-service/build/
 backend-service/.gradle/
 backend-service/.idea/
+
 # Backend Service (Java/Spring Boot)
 backend-service/*.log
 backend-service/out/
@@ -24,14 +25,17 @@ build/
 *.code-workspace
 *.coverage
 coverage/
+
 # Coverage Reports
 *.crt
 *.csv
 data/
+
 # Database
 *.db
 desktop.ini
 dist/
+
 # Docker
 docker-compose.override.yml
 *.dockerignore
@@ -44,12 +48,14 @@ ehthumbs.db
 .env
 env/
 ENV/
+
 # Environment
 # Environment Variables
 .env.*.local
 .env.local
 .factorypath
 fluent-bit/logs/
+
 # Fluentd/Fluent Bit
 fluentd/logs/
 frontend/dist/
@@ -63,18 +69,23 @@ frontend/.pnpm-store/
 frontend/.vite/
 frontend/.yarn/
 hs_err_pid*
+
 # IDE
 .idea/
+
 # IDE and Editor Files
 *.iml
+
 # Infrastructure
 infrastructure/.terraform/
 infrastructure/*.tfstate
 infrastructure/*.tfstate.backup
+
 # In ml-service/.gitignore
 *.ipr
 *.iws
 *.jar
+
 # Java Build Artifacts
 *.jks
 *.json
@@ -85,9 +96,11 @@ lerna-debug.log*
 *.log
 *.log.*
 logs/
+
 # Logs
 .LSOverride
-# MacOS
+
+# Models
 ml-models/**/*$*.py
 ml-models/**/build/
 ml-models/**/dist/
@@ -118,34 +131,41 @@ ml-service/notebooks/.ipynb_checkpoints/
 ml-service/*.pyc
 ml-service/__pycache__/
 ml-service/.pytest_cache/
+ml-service/NAB
+ml-service/tf_gpu
+
 # ML Service (Python/Flask)
 ml-service/trained_models/*.h5
 ml-service/trained_models/*.pkl
 ml-service/venv*/
 ml-service/venv/
 *.nar
+
 # Node.js and Frontend
 npm-debug.log*
 .nyc_output/
 opensearch-data/
+
 # OpenSearch Data (if stored locally)
 # Operating System Files
-# OS
 *.p12
 *.pem
 pnpm-debug.log*
 *.pos
 postgres-data/
+
 # PostgreSQL Data (if stored locally)
 previous-compilation-data.bin
 .project
 *.pyc
 __pycache__/
 *.py[cod]
+
 # Python
 .Python
 # Python and ML Models
 secrets/
+
 # Secrets and Credentials
 .settings/
 *.so
@@ -157,8 +177,10 @@ secrets/
 *.swo
 *.swp
 temp/
+
 # Temporary Files
 test-results/
+
 # Test Results
 *.test-result.xml
 Thumbs.db

@@ -58,63 +58,50 @@ from src.model_registry import ModelRegistry
 def parse_arguments():
     """Parse command line arguments"""
     parser = argparse.ArgumentParser(
-        description='Train AI-Powered Anomaly Detection Models (v2.0)'
+        description="Train AI-Powered Anomaly Detection Models (v2.0)"
     )
 
     parser.add_argument(
-        '--data-path',
+        "--data-path", type=str, required=True, help="Path to training data CSV file"
+    )
+
+    parser.add_argument(
+        "--output-dir",
         type=str,
-        required=True,
-        help='Path to training data CSV file'
+        default="./trained_models",
+        help="Directory to save trained models (default: ./trained_models)",
     )
 
     parser.add_argument(
-        '--output-dir',
-        type=str,
-        default='./trained_models',
-        help='Directory to save trained models (default: ./trained_models)'
+        "--epochs", type=int, default=50, help="Number of training epochs (default: 50)"
     )
 
     parser.add_argument(
-        '--epochs',
-        type=int,
-        default=50,
-        help='Number of training epochs (default: 50)'
-    )
-
-    parser.add_argument(
-        '--batch-size',
+        "--batch-size",
         type=int,
         default=32,
-        help='Batch size for training (default: 32)'
+        help="Batch size for training (default: 32)",
     )
 
     parser.add_argument(
-        '--validation-split',
+        "--validation-split",
         type=float,
         default=0.2,
-        help='Validation split ratio (default: 0.2)'
+        help="Validation split ratio (default: 0.2)",
     )
 
     parser.add_argument(
-        '--test-split',
-        type=float,
-        default=0.1,
-        help='Test split ratio (default: 0.1)'
+        "--test-split", type=float, default=0.1, help="Test split ratio (default: 0.1)"
     )
 
     parser.add_argument(
-        '--seed',
+        "--seed",
         type=int,
         default=42,
-        help='Random seed for reproducibility (default: 42)'
+        help="Random seed for reproducibility (default: 42)",
     )
 
-    parser.add_argument(
-        '--verbose',
-        action='store_true',
-        help='Enable verbose output'
-    )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
 
     return parser.parse_args()
 
@@ -150,14 +137,23 @@ def load_data(data_path: str) -> tuple:
         # Extract features and labels
         # Expected columns: 10 features + is_anomaly label
         feature_cols = [
-            'response_time', 'status_code', 'request_count', 'error_rate',
-            'cpu_usage', 'memory_usage', 'network_io', 'disk_io',
-            'hour_of_day', 'day_of_week'
+            "response_time",
+            "status_code",
+            "request_count",
+            "error_rate",
+            "cpu_usage",
+            "memory_usage",
+            "network_io",
+            "disk_io",
+            "hour_of_day",
+            "day_of_week",
         ]
-        label_col = 'is_anomaly'
+        label_col = "is_anomaly"
 
         # Validate columns exist
-        missing_cols = [col for col in feature_cols + [label_col] if col not in df.columns]
+        missing_cols = [
+            col for col in feature_cols + [label_col] if col not in df.columns
+        ]
         if missing_cols:
             raise ValueError(f"Missing columns in CSV: {missing_cols}")
 
@@ -181,11 +177,9 @@ def load_data(data_path: str) -> tuple:
         raise
 
 
-def split_data(X: np.ndarray,
-               y: np.ndarray,
-               val_split: float,
-               test_split: float,
-               seed: int) -> tuple:
+def split_data(
+    X: np.ndarray, y: np.ndarray, val_split: float, test_split: float, seed: int
+) -> tuple:
     """
     Split data into train/val/test sets
 
@@ -212,21 +206,24 @@ def split_data(X: np.ndarray,
     indices = np.random.permutation(n_samples)
 
     train_idx = indices[:n_train]
-    val_idx = indices[n_train:n_train + n_val]
-    test_idx = indices[n_train + n_val:]
+    val_idx = indices[n_train : n_train + n_val]
+    test_idx = indices[n_train + n_val :]
 
-    logger.info(f"Train set: {n_train:,} samples ({n_train/n_samples*100:.1f}%)")
-    logger.info(f"Val set: {n_val:,} samples ({n_val/n_samples*100:.1f}%)")
-    logger.info(f"Test set: {n_test:,} samples ({n_test/n_samples*100:.1f}%)")
+    logger.info(f"Train set: {n_train:,} samples ({n_train / n_samples * 100:.1f}%)")
+    logger.info(f"Val set: {n_val:,} samples ({n_val / n_samples * 100:.1f}%)")
+    logger.info(f"Test set: {n_test:,} samples ({n_test / n_samples * 100:.1f}%)")
 
     return (
-        X[train_idx], X[val_idx], X[test_idx],
-        y[train_idx], y[val_idx], y[test_idx]
+        X[train_idx],
+        X[val_idx],
+        X[test_idx],
+        y[train_idx],
+        y[val_idx],
+        y[test_idx],
     )
 
 
-def train_preprocessing(X_train: np.ndarray,
-                       output_dir: str) -> DataPreprocessor:
+def train_preprocessing(X_train: np.ndarray, output_dir: str) -> DataPreprocessor:
     """
     Train data preprocessor (scaler)
 
@@ -250,14 +247,16 @@ def train_preprocessing(X_train: np.ndarray,
     return preprocessor
 
 
-def train_msif(X_train: np.ndarray,
-              y_train: np.ndarray,
-              X_val: np.ndarray,
-              y_val: np.ndarray,
-              output_dir: str,
-              preprocessor: DataPreprocessor,
-              epochs: int,
-              batch_size: int) -> tuple:
+def train_msif(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    output_dir: str,
+    preprocessor: DataPreprocessor,
+    epochs: int,
+    batch_size: int,
+) -> tuple:
     """
     Train MSIF-LSTM model (v2.0)
 
@@ -283,18 +282,22 @@ def train_msif(X_train: np.ndarray,
     X_train_norm = np.array([preprocessor.normalize_features(x) for x in X_train])
     X_val_norm = np.array([preprocessor.normalize_features(x) for x in X_val])
 
-    logger.info(f"Normalized data shapes: train={X_train_norm.shape}, val={X_val_norm.shape}")
+    logger.info(
+        f"Normalized data shapes: train={X_train_norm.shape}, val={X_val_norm.shape}"
+    )
 
     # Build and train model with v2.0 refinements
     msif = MSIFLSTM()
     msif.build_model(use_lr_schedule=True)  # ✅ LR scheduling enabled
 
     history = msif.train(
-        X_train_norm, y_train,
-        X_val_norm, y_val,
+        X_train_norm,
+        y_train,
+        X_val_norm,
+        y_val,
         epochs=epochs,
         batch_size=batch_size,
-        auto_class_weight=True  # ✅ Auto-handles imbalance
+        auto_class_weight=True,  # ✅ Auto-handles imbalance
     )
 
     # Save model
@@ -304,14 +307,16 @@ def train_msif(X_train: np.ndarray,
     return history, msif
 
 
-def train_ple(X_train: np.ndarray,
-             y_train: np.ndarray,
-             X_val: np.ndarray,
-             y_val: np.ndarray,
-             output_dir: str,
-             preprocessor: DataPreprocessor,
-             epochs: int,
-             batch_size: int) -> tuple:
+def train_ple(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_val: np.ndarray,
+    y_val: np.ndarray,
+    output_dir: str,
+    preprocessor: DataPreprocessor,
+    epochs: int,
+    batch_size: int,
+) -> tuple:
     """
     Train PLE-GRU model (v2.0)
 
@@ -337,18 +342,22 @@ def train_ple(X_train: np.ndarray,
     X_train_norm = np.array([preprocessor.normalize_features(x) for x in X_train])
     X_val_norm = np.array([preprocessor.normalize_features(x) for x in X_val])
 
-    logger.info(f"Normalized data shapes: train={X_train_norm.shape}, val={X_val_norm.shape}")
+    logger.info(
+        f"Normalized data shapes: train={X_train_norm.shape}, val={X_val_norm.shape}"
+    )
 
     # Build and train model with v2.0 refinements
     ple = PLEGRU()
     ple.build_model(use_lr_schedule=True)  # ✅ LR scheduling enabled
 
     history = ple.train(
-        X_train_norm, y_train,
-        X_val_norm, y_val,
+        X_train_norm,
+        y_train,
+        X_val_norm,
+        y_val,
         epochs=epochs,
         batch_size=batch_size,
-        auto_class_weight=True  # ✅ Auto-handles imbalance
+        auto_class_weight=True,  # ✅ Auto-handles imbalance
     )
 
     # Save model
@@ -358,10 +367,12 @@ def train_ple(X_train: np.ndarray,
     return history, ple
 
 
-def evaluate_models(X_test: np.ndarray,
-                   y_test: np.ndarray,
-                   output_dir: str,
-                   preprocessor: DataPreprocessor) -> dict:
+def evaluate_models(
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    output_dir: str,
+    preprocessor: DataPreprocessor,
+) -> dict:
     """
     Evaluate trained models on test set with comprehensive metrics (v2.0)
 
@@ -407,10 +418,12 @@ def evaluate_models(X_test: np.ndarray,
         logger.info("")
         logger.info("Evaluating Hybrid Ensemble...")
         detector = HybridAnomalyDetector(output_dir)
-        hybrid_scores = np.array([
-            detector.predict(X_test_norm[i:i+1])['hybrid_score']
-            for i in range(len(X_test_norm))
-        ])
+        hybrid_scores = np.array(
+            [
+                detector.predict(X_test_norm[i : i + 1])["hybrid_score"]
+                for i in range(len(X_test_norm))
+            ]
+        )
 
         # NEW: Evaluate hybrid with comprehensive metrics
         from sklearn.metrics import (
@@ -436,7 +449,9 @@ def evaluate_models(X_test: np.ndarray,
             hybrid_roc_auc = 0.0
 
         try:
-            precision_curve, recall_curve, _ = precision_recall_curve(y_test, hybrid_scores)
+            precision_curve, recall_curve, _ = precision_recall_curve(
+                y_test, hybrid_scores
+            )
             hybrid_pr_auc = auc(recall_curve, precision_curve)
         except:
             hybrid_pr_auc = 0.0
@@ -448,22 +463,18 @@ def evaluate_models(X_test: np.ndarray,
             hybrid_specificity = 0.0
 
         hybrid_results = {
-            'accuracy': float(hybrid_accuracy),
-            'precision': float(hybrid_precision),
-            'recall': float(hybrid_recall),
-            'f1': float(hybrid_f1),
-            'roc_auc': float(hybrid_roc_auc),
-            'pr_auc': float(hybrid_pr_auc),
-            'specificity': float(hybrid_specificity),
-            'threshold': 0.5
+            "accuracy": float(hybrid_accuracy),
+            "precision": float(hybrid_precision),
+            "recall": float(hybrid_recall),
+            "f1": float(hybrid_f1),
+            "roc_auc": float(hybrid_roc_auc),
+            "pr_auc": float(hybrid_pr_auc),
+            "specificity": float(hybrid_specificity),
+            "threshold": 0.5,
         }
 
         # Combine results
-        metrics = {
-            'msif': msif_results,
-            'ple': ple_results,
-            'hybrid': hybrid_results
-        }
+        metrics = {"msif": msif_results, "ple": ple_results, "hybrid": hybrid_results}
 
         # Log comparative analysis
         logger.info("")
@@ -471,7 +482,7 @@ def evaluate_models(X_test: np.ndarray,
         logger.info("MODEL COMPARISON")
         logger.info("=" * 60)
 
-        for model_name in ['msif', 'ple', 'hybrid']:
+        for model_name in ["msif", "ple", "hybrid"]:
             model_metrics = metrics[model_name]
             logger.info(f"\n{model_name.upper()}:")
             logger.info(f"  Accuracy:  {model_metrics['accuracy']:.4f}")
@@ -491,10 +502,9 @@ def evaluate_models(X_test: np.ndarray,
         raise
 
 
-def create_registry(output_dir: str,
-                   metrics: dict,
-                   X_train_shape: tuple,
-                   X_test_shape: tuple) -> dict:
+def create_registry(
+    output_dir: str, metrics: dict, X_train_shape: tuple, X_test_shape: tuple
+) -> dict:
     """
     Create and save enhanced model registry (v2.0)
 
@@ -516,75 +526,75 @@ def create_registry(output_dir: str,
     logger.info("=" * 60)
 
     registry_data = {
-        'version': config.API_VERSION,
-        'timestamp': datetime.utcnow().isoformat(),
-        'training_date': datetime.now().isoformat(),
-        'training_pipeline': 'v2.0 (Refined)',
-        'models': {
-            'msif': {
-                'type': 'LSTM',
-                'file': 'msif_lstm_model.h5',
-                'input_shape': (1, 10),
-                'parameters': '~40k',
-                'refinements': [
-                    'Input validation',
-                    'Class imbalance handling',
-                    'Learning rate scheduling',
-                    'Comprehensive metrics'
-                ]
+        "version": config.API_VERSION,
+        "timestamp": datetime.utcnow().isoformat(),
+        "training_date": datetime.now().isoformat(),
+        "training_pipeline": "v2.0 (Refined)",
+        "models": {
+            "msif": {
+                "type": "LSTM",
+                "file": "msif_lstm_model.h5",
+                "input_shape": (1, 10),
+                "parameters": "~40k",
+                "refinements": [
+                    "Input validation",
+                    "Class imbalance handling",
+                    "Learning rate scheduling",
+                    "Comprehensive metrics",
+                ],
             },
-            'ple': {
-                'type': 'GRU',
-                'file': 'ple_gru_model.h5',
-                'input_shape': (1, 10),
-                'parameters': '~35k',
-                'refinements': [
-                    'Input validation',
-                    'Class imbalance handling',
-                    'Learning rate scheduling',
-                    'Comprehensive metrics'
-                ]
+            "ple": {
+                "type": "GRU",
+                "file": "ple_gru_model.h5",
+                "input_shape": (1, 10),
+                "parameters": "~35k",
+                "refinements": [
+                    "Input validation",
+                    "Class imbalance handling",
+                    "Learning rate scheduling",
+                    "Comprehensive metrics",
+                ],
             },
-            'hybrid': {
-                'type': 'Weighted Ensemble',
-                'combination': 'MSIF (50%) + PLE (50%)',
-                'description': 'Combines both models for robustness'
-            }
+            "hybrid": {
+                "type": "Weighted Ensemble",
+                "combination": "MSIF (50%) + PLE (50%)",
+                "description": "Combines both models for robustness",
+            },
         },
-        'preprocessing': {
-            'scaler_file': 'scaler.pkl',
-            'stats_file': 'scaler_stats.json',
-            'normalization': 'StandardScaler',
-            'feature_count': 10
+        "preprocessing": {
+            "scaler_file": "scaler.pkl",
+            "stats_file": "scaler_stats.json",
+            "normalization": "StandardScaler",
+            "feature_count": 10,
         },
-        'data': {
-            'training_samples': X_train_shape[0],
-            'test_samples': X_test_shape[0],
-            'features': X_train_shape[1]
+        "data": {
+            "training_samples": X_train_shape[0],
+            "test_samples": X_test_shape[0],
+            "features": X_train_shape[1],
         },
-        'evaluation': metrics,
-        'config': {
-            'learning_rate': config.ML_CONFIG.LEARNING_RATE,
-            'learning_rate_schedule': 'Polynomial decay (0.0001 → 0.001)',
-            'dropout_rate': config.ML_CONFIG.DROPOUT_RATE,
-            'epochs': config.ML_CONFIG.EPOCHS,
-            'batch_size': config.ML_CONFIG.BATCH_SIZE,
-            'early_stopping_patience': 5,
-            'class_weight_strategy': 'Automatic (inverse frequency)'
+        "evaluation": metrics,
+        "config": {
+            "learning_rate": config.ML_CONFIG.LEARNING_RATE,
+            "learning_rate_schedule": "Polynomial decay (0.0001 → 0.001)",
+            "dropout_rate": config.ML_CONFIG.DROPOUT_RATE,
+            "epochs": config.ML_CONFIG.EPOCHS,
+            "batch_size": config.ML_CONFIG.BATCH_SIZE,
+            "early_stopping_patience": 5,
+            "class_weight_strategy": "Automatic (inverse frequency)",
         },
-        'metrics_explanation': {
-            'pr_auc': 'Precision-Recall AUC (recommended for imbalanced data)',
-            'roc_auc': 'ROC AUC (threshold-independent ranking)',
-            'f1': 'Harmonic mean of precision and recall',
-            'specificity': 'True negative rate (correctly identified normal)',
-            'recall': 'True positive rate (detected anomalies)',
-            'precision': 'Positive predictive value (accuracy of anomaly predictions)'
-        }
+        "metrics_explanation": {
+            "pr_auc": "Precision-Recall AUC (recommended for imbalanced data)",
+            "roc_auc": "ROC AUC (threshold-independent ranking)",
+            "f1": "Harmonic mean of precision and recall",
+            "specificity": "True negative rate (correctly identified normal)",
+            "recall": "True positive rate (detected anomalies)",
+            "precision": "Positive predictive value (accuracy of anomaly predictions)",
+        },
     }
 
     # Save registry
-    registry_path = os.path.join(output_dir, 'registry.json')
-    with open(registry_path, 'w') as f:
+    registry_path = os.path.join(output_dir, "registry.json")
+    with open(registry_path, "w") as f:
         json.dump(registry_data, f, indent=2)
 
     logger.info(f"✅ Enhanced registry saved to {registry_path}")
@@ -617,10 +627,11 @@ def main():
 
         # ============= STEP 2: Split data =============
         X_train, X_val, X_test, y_train, y_val, y_test = split_data(
-            X, y,
+            X,
+            y,
             val_split=args.validation_split,
             test_split=args.test_split,
-            seed=args.seed
+            seed=args.seed,
         )
 
         # ============= STEP 3: Train preprocessor =============
@@ -628,16 +639,26 @@ def main():
 
         # ============= STEP 4: Train MSIF-LSTM (v2.0) =============
         msif_history, msif_model = train_msif(
-            X_train, y_train, X_val, y_val,
-            args.output_dir, preprocessor,
-            args.epochs, args.batch_size
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            args.output_dir,
+            preprocessor,
+            args.epochs,
+            args.batch_size,
         )
 
         # ============= STEP 5: Train PLE-GRU (v2.0) =============
         ple_history, ple_model = train_ple(
-            X_train, y_train, X_val, y_val,
-            args.output_dir, preprocessor,
-            args.epochs, args.batch_size
+            X_train,
+            y_train,
+            X_val,
+            y_val,
+            args.output_dir,
+            preprocessor,
+            args.epochs,
+            args.batch_size,
         )
 
         # ============= STEP 6: Evaluate (v2.0 - Comprehensive) =============
@@ -645,8 +666,7 @@ def main():
 
         # ============= STEP 7: Create enhanced registry =============
         registry = create_registry(
-            args.output_dir, metrics,
-            X_train.shape, X_test.shape
+            args.output_dir, metrics, X_train.shape, X_test.shape
         )
 
         logger.info("=" * 60)
@@ -674,5 +694,5 @@ def main():
         raise
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
