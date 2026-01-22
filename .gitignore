@@ -1,213 +1,176 @@
-# Operating System Files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-desktop.ini
 
-# IDE and Editor Files
-.idea/
-*.iml
-*.iws
-*.ipr
-.vscode/
-*.swp
-*.swo
 *~
-.project
-.classpath
-.settings/
-*.sublime-project
-*.sublime-workspace
-*.code-workspace
-
-# Java Build Artifacts
+._*
+*$py.class
+.AppleDouble
 backend/**/build/
-backend/**/target/
+backend/.env
 backend/**/.gradle/
 backend/**/gradle-app.setting
 backend/**/!gradle-wrapper.jar
+backend-service/build/
+backend-service/.gradle/
+backend-service/.idea/
+# Backend Service (Java/Spring Boot)
+backend-service/*.log
+backend-service/out/
+backend/**/target/
+*.backup
+*.bak
+**/build/
+build/
 *.class
-*.jar
-*.war
-*.ear
-*.nar
-hs_err_pid*
-.factorypath
-previous-compilation-data.bin
-
-# Node.js and Frontend
-frontend/node_modules/
-frontend/dist/
-frontend/dist-ssr/
-frontend/.vite/
-frontend/.npm/
-frontend/.yarn/
-frontend/.pnpm-store/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-frontend/package-lock.json
-frontend/package.json
-
-# Python and ML Models
-ml-models/**/__pycache__/
-ml-models/**/*.py[cod]
-ml-models/**/*$*.py
-ml-models/**/.pytest_cache/
-ml-models/**/.mypy_cache/
-ml-models/**/.ruff_cache/
-ml-models/**/venv/
-ml-models/**/env/
-ml-models/**/.env
-ml-models/**/*.egg-info/
-ml-models/**/dist/
-ml-models/**/build/
-ml-models/**/*.pkl
-ml-models/**/*.h5
-ml-models/**/*.pt
-ml-models/**/*.onnx
-ml-models/**/models/*.pth
-ml-models/**/models/*.h5
-
-# Environment Variables
-.env
-.env.local
-.env.*.local
-backend/.env
-frontend/.env
-ml-models/.env
-*.env
-
+.classpath
+*.code-workspace
+*.coverage
+coverage/
+# Coverage Reports
+*.crt
+*.csv
+data/
+# Database
+*.db
+desktop.ini
+dist/
 # Docker
 docker-compose.override.yml
 *.dockerignore
-
-# Logs
-logs/
-*.log
-*.log.*
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Temporary Files
-tmp/
-temp/
-*.tmp
-*.bak
-*.backup
-*.swp
-*.swo
-
-# Secrets and Credentials
-secrets/
-*.pem
-*.key
-*.crt
-*.p12
-*.jks
-vault-token
-
-# Coverage Reports
-coverage/
-*.coverage
-.nyc_output/
-*.lcov
-
-# Test Results
-test-results/
-*.test-result.xml
-
-# OpenSearch Data (if stored locally)
-opensearch-data/
-
-# PostgreSQL Data (if stored locally)
-postgres-data/
-
+.DS_Store
+.DS_Store?
+*.ear
+*.egg-info/
+ehthumbs.db
+*.env
+.env
+env/
+ENV/
+# Environment
+# Environment Variables
+.env.*.local
+.env.local
+.factorypath
+fluent-bit/logs/
 # Fluentd/Fluent Bit
 fluentd/logs/
-fluent-bit/logs/
-*.pos
-
-# MacOS
-.AppleDouble
-.LSOverride
-.LSOverride
-
-# Backend Service (Java/Spring Boot)
-backend-service/build/
-backend-service/.gradle/
-backend-service/out/
-backend-service/*.log
-backend-service/.idea/
-
-# ML Service (Python/Flask)
-ml-service/__pycache__/
-ml-service/*.pyc
-ml-service/.pytest_cache/
-ml-service/venv/
-ml-service/venv*/
-ml-service/.env
-ml-service/models/saved/*.h5
-ml-service/models/saved/*.pkl
-ml-service/.ipynb_checkpoints/
-ml-service/notebooks/.ipynb_checkpoints/
-
+frontend/dist/
+frontend/dist-ssr/
+frontend/.env
+frontend/node_modules/
+frontend/.npm/
+frontend/package.json
+frontend/package-lock.json
+frontend/.pnpm-store/
+frontend/.vite/
+frontend/.yarn/
+hs_err_pid*
+# IDE
+.idea/
+# IDE and Editor Files
+*.iml
 # Infrastructure
 infrastructure/.terraform/
 infrastructure/*.tfstate
 infrastructure/*.tfstate.backup
-
-# Logs
+# In ml-service/.gitignore
+*.ipr
+*.iws
+*.jar
+# Java Build Artifacts
+*.jks
+*.json
+kaggle_api_dataset/
+*.key
+*.lcov
+lerna-debug.log*
 *.log
+*.log.*
 logs/
-
+# Logs
+.LSOverride
+# MacOS
+ml-models/**/*$*.py
+ml-models/**/build/
+ml-models/**/dist/
+ml-models/**/*.egg-info/
+ml-models/**/.env
+ml-models/**/env/
+ml-models/.env
+ml-models/**/*.h5
+ml-models/**/models/*.h5
+ml-models/**/models/*.pth
+ml-models/**/.mypy_cache/
+ml-models/**/*.onnx
+ml-models/**/*.pkl
+ml-models/**/*.pt
+ml-models/**/__pycache__/
+ml-models/**/*.py[cod]
+ml-models/**/.pytest_cache/
+ml-models/**/.ruff_cache/
+ml-models/**/venv/
+ml-service/data/
+ml-service/.env
+ml-service/.ipynb_checkpoints/
+ml-service/kaggle_api_dataset/
+ml-service/logs/
+ml-service/models/saved/*.h5
+ml-service/models/saved/*.pkl
+ml-service/notebooks/.ipynb_checkpoints/
+ml-service/*.pyc
+ml-service/__pycache__/
+ml-service/.pytest_cache/
+# ML Service (Python/Flask)
+ml-service/trained_models/*.h5
+ml-service/trained_models/*.pkl
+ml-service/venv*/
+ml-service/venv/
+*.nar
+# Node.js and Frontend
+npm-debug.log*
+.nyc_output/
+opensearch-data/
+# OpenSearch Data (if stored locally)
+# Operating System Files
 # OS
-.DS_Store
-Thumbs.db
-venv/
+*.p12
+*.pem
+pnpm-debug.log*
+*.pos
+postgres-data/
+# PostgreSQL Data (if stored locally)
+previous-compilation-data.bin
+.project
 *.pyc
-__pycache__/
-# Python
-venv/
-env/
-.venv/
-*.pyc
-__pycache__/
-*.egg-info/
-dist/
-build/
-
-# Environment
-.env
-.env.local
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
+# Python
 .Python
+# Python and ML Models
+secrets/
+# Secrets and Credentials
+.settings/
+*.so
+.Spotlight-V100
+*.sqlite
+*.sqlite3
+*.sublime-project
+*.sublime-workspace
+*.swo
+*.swp
+temp/
+# Temporary Files
+test-results/
+# Test Results
+*.test-result.xml
+Thumbs.db
+*.tmp
+tmp/
+trained_models/*.h5
+trained_models/*.pkl
+.Trashes
+vault-token
+.venv/
 venv/
-ENV/
-env/
-*.egg-info/
-dist/
-build/
-backend-service/build/
-**/build/
+.vscode/
+*.war
+yarn-debug.log*
+yarn-error.log*
