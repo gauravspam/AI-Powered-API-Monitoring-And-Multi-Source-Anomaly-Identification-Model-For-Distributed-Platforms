@@ -76,6 +76,15 @@ ml-models/**/*.onnx
 ml-models/**/models/*.pth
 ml-models/**/models/*.h5
 
+# In ml-service/.gitignore
+kaggle_api_dataset/
+data/
+logs/
+trained_models/*.h5
+trained_models/*.pkl
+*.csv
+*.json
+
 # Environment Variables
 .env
 .env.local
@@ -209,3 +218,12 @@ env/
 *.egg-info/
 dist/
 build/
+kaggle_api_dataset/
+kaggle_api_dataset/
+ml-service/kaggle_api_dataset/
+ml-service/data/
+ml-service/logs/
+ml-service/trained_models/*.h5
+ml-service/trained_models/*.pkl
+ml-service/venv/
+ml-service/__pycache__/
