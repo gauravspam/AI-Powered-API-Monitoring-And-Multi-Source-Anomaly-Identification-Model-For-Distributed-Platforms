@@ -133,6 +133,11 @@ ml-service/__pycache__/
 ml-service/.pytest_cache/
 ml-service/NAB
 ml-service/tf_gpu
+ml-service/data/
+extraml-service/kaggle_api_dataset/
+ml-service/logs/
+ml-service/trained_models/*.h5
+ml-service/data/NAB
 
 # ML Service (Python/Flask)
 ml-service/trained_models/*.h5
@@ -140,6 +145,28 @@ ml-service/trained_models/*.pkl
 ml-service/venv*/
 ml-service/venv/
 *.nar
+ml-service/test/
+ml-service/test*/
+ml-service/tf_gpu/
+ml-service/tf_gpu*/
+ml-service/env/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Model files (too large for git)
+ml-service/models/*/*.keras
+ml-service/models/*/*.h5
+
+# Data files
+ml-service/data/*.csv
+ml-service/data/*.parquet
+ml-service/data/external_datasets/
+
+# TensorFlow large files
+**/*.so
+**/*.so.*
+**/*.dll
 
 # Node.js and Frontend
 npm-debug.log*
