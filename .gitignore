@@ -108,8 +108,6 @@ ml-models/**/*.egg-info/
 ml-models/**/.env
 ml-models/**/env/
 ml-models/.env
-ml-models/**/*.h5
-ml-models/**/models/*.h5
 ml-models/**/models/*.pth
 ml-models/**/.mypy_cache/
 ml-models/**/*.onnx
@@ -125,8 +123,6 @@ ml-service/.env
 ml-service/.ipynb_checkpoints/
 ml-service/kaggle_api_dataset/
 ml-service/logs/
-ml-service/models/saved/*.h5
-ml-service/models/saved/*.pkl
 ml-service/notebooks/.ipynb_checkpoints/
 ml-service/*.pyc
 ml-service/__pycache__/
@@ -136,12 +132,9 @@ ml-service/tf_gpu
 ml-service/data/
 extraml-service/kaggle_api_dataset/
 ml-service/logs/
-ml-service/trained_models/*.h5
 ml-service/data/NAB
 
 # ML Service (Python/Flask)
-ml-service/trained_models/*.h5
-ml-service/trained_models/*.pkl
 ml-service/venv*/
 ml-service/venv/
 *.nar
@@ -154,9 +147,6 @@ ml-service/env/
 **/*.pyc
 **/*.pyo
 
-# Model files (too large for git)
-ml-service/models/*/*.keras
-ml-service/models/*/*.h5
 
 # Data files
 ml-service/data/*.csv
@@ -213,8 +203,6 @@ test-results/
 Thumbs.db
 *.tmp
 tmp/
-trained_models/*.h5
-trained_models/*.pkl
 .Trashes
 vault-token
 .venv/
