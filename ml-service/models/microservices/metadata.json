@@ -1,0 +1,39 @@
+{
+  "model_name": "MSIF-LSTM",
+  "dataset": "Microservices",
+  "training_date": "2026-01-27T09:48:33.835234",
+  "n_features": 21,
+  "metrics": {
+    "f1": 0.11699779249448124,
+    "precision": 0.8688524590163934,
+    "recall": 0.06272189349112427,
+    "auc": 0.5767645416992295,
+    "threshold": 0.6066219806671143,
+    "confusion_matrix": [
+      [
+        257,
+        8
+      ],
+      [
+        792,
+        53
+      ]
+    ],
+    "status": "NEEDS_IMPROVEMENT"
+  },
+  "hyperparameters": {
+    "sequence_length": 100,
+    "batch_size": 32,
+    "epochs": 100,
+    "learning_rate": 0.001,
+    "early_stopping_patience": 15,
+    "lstm_units": [
+      64,
+      32
+    ],
+    "dense_units": [
+      16
+    ],
+    "dropout_rate": 0.3
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "validation_date": "2026-01-27T10:08:12.756230",
+  "all_results": [
+    {
+      "model_name": "MSIF-LSTM",
+      "dataset": "Microservices",
+      "f1": 0.4128113879003559,
+      "precision": 0.8315412186379928,
+      "recall": 0.27455621301775146,
+      "auc": 0.5397275873618399,
+      "threshold": 0.6704616546630859,
+      "confusion_matrix": {
+        "TP": 232,
+        "FP": 47,
+        "FN": 613,
+        "TN": 218
+      },
+      "status": "NEEDS_IMPROVEMENT",
+      "success": true
+    },
+    {
+      "model_name": "PLE-GRU",
+      "dataset": "Microservices",
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "auc": 0.5605559897287038,
+      "threshold": 1.0,
+      "confusion_matrix": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 845,
+        "TN": 265
+      },
+      "status": "NEEDS_IMPROVEMENT",
+      "success": true
+    }
+  ],
+  "leaderboard": [
+    {
+      "model_name": "MSIF-LSTM",
+      "dataset": "Microservices",
+      "f1": 0.4128113879003559,
+      "precision": 0.8315412186379928,
+      "recall": 0.27455621301775146,
+      "auc": 0.5397275873618399,
+      "threshold": 0.6704616546630859,
+      "confusion_matrix": {
+        "TP": 232,
+        "FP": 47,
+        "FN": 613,
+        "TN": 218
+      },
+      "status": "NEEDS_IMPROVEMENT",
+      "success": true
+    },
+    {
+      "model_name": "PLE-GRU",
+      "dataset": "Microservices",
+      "f1": 0.0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "auc": 0.5605559897287038,
+      "threshold": 1.0,
+      "confusion_matrix": {
+        "TP": 0,
+        "FP": 0,
+        "FN": 845,
+        "TN": 265
+      },
+      "status": "NEEDS_IMPROVEMENT",
+      "success": true
+    }
+  ],
+  "recommendations": {
+    "Microservices": {
+      "model_name": "MSIF-LSTM",
+      "dataset": "Microservices",
+      "f1": 0.4128113879003559,
+      "precision": 0.8315412186379928,
+      "recall": 0.27455621301775146,
+      "auc": 0.5397275873618399,
+      "threshold": 0.6704616546630859,
+      "confusion_matrix": {
+        "TP": 232,
+        "FP": 47,
+        "FN": 613,
+        "TN": 218
+      },
+      "status": "NEEDS_IMPROVEMENT",
+      "success": true
+    }
+  }
+}
