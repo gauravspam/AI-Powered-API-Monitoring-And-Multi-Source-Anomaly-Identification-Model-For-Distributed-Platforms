@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "alerts")
+@Table(name = "alert_rules")
 public class AlertRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -16,7 +16,6 @@ public class AlertRecord {
     @Column(nullable = false)
     private String condition;
 
-    
     @Column()
 
     private Double threshold;
@@ -37,7 +36,8 @@ public class AlertRecord {
     public AlertRecord() {
     }
 
-    public AlertRecord(String alertName, String condition, Double threshold, Boolean enabled, String notificationChannels) {
+    public AlertRecord(String alertName, String condition, Double threshold, Boolean enabled,
+            String notificationChannels) {
         this.alertName = alertName;
         this.condition = condition;
         this.threshold = threshold;

@@ -1,123 +1,309 @@
 import os
-import time
 import pickle
+from datetime import datetime
+
 import numpy as np
-import pandas as pd
 import tensorflow as tf
-from flask import Flask, request, jsonify
-from collections import deque
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
 # --- CONFIG ---
-SEQ_LEN_MICRO = 100
-SEQ_LEN_NAB = 10  # If we use NAB later
-FEATURE_COLS = [
-    'cpu_usage_system_mean', 'cpu_usage_system_std', 'cpu_usage_system_max',
-    'cpu_usage_total_mean', 'cpu_usage_total_std', 'cpu_usage_total_max',
-    'cpu_usage_user_mean', 'cpu_usage_user_std', 'cpu_usage_user_max',
-    'memory_usage_mean', 'memory_usage_std', 'memory_usage_max',
-    'memory_working_set_mean', 'memory_working_set_std', 'memory_working_set_max',
-    'rx_bytes_sum', 'rx_bytes_mean', 'rx_bytes_std',
-    'tx_bytes_sum', 'tx_bytes_mean', 'tx_bytes_std'
-]
+SEQ_LEN = 100  # Models expect sequence length of 100
+
+# Context-aware fusion thresholds
+HIGH_AGREEMENT_THRESHOLD = 0.85
+MODERATE_AGREEMENT_THRESHOLD = 0.60
+
+SEVERITY_THRESHOLDS = {
+    'CRITICAL': 0.8,
+    'HIGH': 0.6,
+    'MEDIUM': 0.4,
+    'LOW': 0.2
+}
+
+WEIGHT_RULES = {
+    'peak_hours': {'msif': 0.40, 'ple': 0.60},
+    'off_hours': {'msif': 0.55, 'ple': 0.45},
+    'cpu_endpoint': {'msif': 0.50, 'ple': 0.50},
+    'api_endpoint': {'msif': 0.35, 'ple': 0.65},
+    'high_traffic': {'msif': 0.30, 'ple': 0.70},
+    'low_traffic': {'msif': 0.50, 'ple': 0.50}
+}
 
 # --- STATE ---
-# Buffer to hold recent metrics: { "endpoint_name": deque(maxlen=100) }
-METRIC_BUFFERS = {}
+MODEL_MSIF = None
+MODEL_PLE = None
+SCALER_MSIF = None
+SCALER_PLE = None
+prediction_count = 0
+anomaly_count = 0
 
-# --- LOAD ARTIFACTS ---
+# --- LOAD MODELS ---
 print("⏳ Loading Models...")
+
 try:
-    MODEL_MICRO = tf.keras.models.load_model('models/microservices/msif_lstm_model.keras', compile=False)
+    MODEL_MSIF = tf.keras.models.load_model(
+        'models/microservices/msif_lstm_model.keras',
+        compile=False
+    )
     with open('models/microservices/msif_lstm_scaler.pkl', 'rb') as f:
-        SCALER_MICRO = pickle.load(f)
-    print("✅ Microservices Model Loaded")
+        SCALER_MSIF = pickle.load(f)
+    print(f"✅ MSIF-LSTM Model Loaded (input shape: {MODEL_MSIF.input_shape})")
 except Exception as e:
-    print(f"❌ Failed to load Microservices model: {e}")
-    MODEL_MICRO = None
+    print(f"❌ Failed to load MSIF-LSTM model: {e}")
+
+try:
+    MODEL_PLE = tf.keras.models.load_model(
+        'models/microservices/ple_gru_model.keras',
+        compile=False
+    )
+    with open('models/microservices/ple_gru_scaler.pkl', 'rb') as f:
+        SCALER_PLE = pickle.load(f)
+    print(f"✅ PLE-GRU Model Loaded (input shape: {MODEL_PLE.input_shape})")
+except Exception as e:
+    print(f"❌ Failed to load PLE-GRU model: {e}")
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "healthy", "models_loaded": MODEL_MICRO is not None})
+    return jsonify({
+        "status": "healthy",
+        "models_loaded": {
+            "msif": MODEL_MSIF is not None,
+            "ple": MODEL_PLE is not None
+        },
+        "total_predictions": prediction_count,
+        "anomalies_detected": anomaly_count
+    })
+
+def expand_to_21_features(data):
+    """
+    Expand 10 raw features to 21 aggregated features expected by models.
+
+    Maps incoming features to the 21-feature format the models were trained on:
+    - cpu_usage → cpu_usage_{system,total,user}_{mean,std,max} (9 features)
+    - memory_usage → memory_{usage,working_set}_{mean,std,max} (6 features)
+    - network_io → {rx,tx}_bytes_{sum,mean,std} (6 features)
+
+    Since we only have single-point data, we approximate:
+    - mean = value
+    - std = small variance (5% of mean)
+    - max = value * 1.1 (slightly higher)
+    """
+    cpu = float(data.get('cpu_usage', 0))
+    mem = float(data.get('memory_usage', 0))
+    net_io = float(data.get('network_io', 0))
+
+    # Approximate statistics from single values
+    cpu_std = cpu * 0.05  # 5% standard deviation
+    mem_std = mem * 0.05
+    net_std = net_io * 0.05
+
+    # Build 21-feature vector matching training data structure
+    features_21 = [
+        # CPU system (mean, std, max)
+        cpu, cpu_std, cpu * 1.1,
+        # CPU total (mean, std, max)
+        cpu, cpu_std, cpu * 1.1,
+        # CPU user (mean, std, max)
+        cpu, cpu_std, cpu * 1.1,
+        # Memory usage (mean, std, max)
+        mem, mem_std, mem * 1.1,
+        # Memory working set (mean, std, max)
+        mem, mem_std, mem * 1.1,
+        # RX bytes (sum, mean, std)
+        net_io, net_io, net_std,
+        # TX bytes (sum, mean, std)
+        net_io, net_io, net_std
+    ]
+
+    return np.array(features_21, dtype=np.float32)
+
+def calculate_dynamic_weights(context):
+    """Calculate context-aware weights for ensemble fusion."""
+    hour = context.get('hour_of_day', 12)
+    endpoint_type = context.get('endpoint_type', 'api')
+    traffic_level = context.get('traffic_level', 'medium')
+
+    if 9 <= hour <= 17:
+        base_weights = WEIGHT_RULES['peak_hours']
+    else:
+        base_weights = WEIGHT_RULES['off_hours']
+
+    if endpoint_type == 'cpu_intensive':
+        endpoint_adj = WEIGHT_RULES['cpu_endpoint']
+    else:
+        endpoint_adj = WEIGHT_RULES['api_endpoint']
+
+    if traffic_level == 'high':
+        traffic_adj = WEIGHT_RULES['high_traffic']
+    else:
+        traffic_adj = WEIGHT_RULES['low_traffic']
+
+    final_msif = (0.5 * base_weights['msif'] +
+                  0.25 * endpoint_adj['msif'] +
+                  0.25 * traffic_adj['msif'])
+    final_ple = 1.0 - final_msif
+
+    print(f"🔧 Dynamic weights: MSIF={final_msif:.2f}, PLE={final_ple:.2f}")
+
+    return {'msif': final_msif, 'ple': final_ple}
+
+def fuse_predictions(msif_score, ple_score, weights):
+    """Fuse predictions using confidence-based strategy."""
+    model_agreement = 1.0 - abs(msif_score - ple_score)
+
+    if model_agreement >= HIGH_AGREEMENT_THRESHOLD:
+        hybrid_score = (weights['msif'] * msif_score +
+                       weights['ple'] * ple_score)
+        fusion_method = "weighted_agreement"
+        print(f"✓ High agreement ({model_agreement:.2f}) - weighted average")
+    elif model_agreement >= MODERATE_AGREEMENT_THRESHOLD:
+        hybrid_score = max(msif_score, ple_score)
+        fusion_method = "conservative_max"
+        print(f"⚠️  Moderate agreement ({model_agreement:.2f}) - using max")
+    else:
+        hybrid_score = max(msif_score, ple_score)
+        fusion_method = "conflict_detected"
+        print(f"🚨 Conflict! MSIF={msif_score:.3f}, PLE={ple_score:.3f}")
+
+    return hybrid_score, fusion_method, model_agreement
+
+def calculate_severity(hybrid_score):
+    """Calculate severity level based on hybrid score."""
+    if hybrid_score > SEVERITY_THRESHOLDS['CRITICAL']:
+        return "CRITICAL", 0.95
+    elif hybrid_score > SEVERITY_THRESHOLDS['HIGH']:
+        return "HIGH", 0.85
+    elif hybrid_score > SEVERITY_THRESHOLDS['MEDIUM']:
+        return "MEDIUM", 0.75
+    elif hybrid_score > SEVERITY_THRESHOLDS['LOW']:
+        return "LOW", 0.65
+    else:
+        return "NORMAL", 0.90
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """
-    Receives a single log record from Java Backend.
-    Buffers it.
-    Returns anomaly prediction if buffer is full.
-    """
-    if not MODEL_MICRO:
-        return jsonify({"error": "Model not loaded"}), 503
+    """Anomaly prediction endpoint."""
+    global prediction_count, anomaly_count
+
+    if not MODEL_MSIF and not MODEL_PLE:
+        return jsonify({"error": "No models loaded"}), 503
 
     data = request.json
-    endpoint = data.get('endpoint', 'default')
-
-    # 1. Extract relevant features from the single log
-    # We need to map the incoming simple metrics to the 21 complex features the model expects.
-    # For this demo, we will duplicate/approximate the missing stats.
 
     try:
-        # Incoming: cpu_usage, memory_usage, network_io, disk_io
-        cpu = float(data.get('cpu_usage', 0))
-        mem = float(data.get('memory_usage', 0))
-        net_in = float(data.get('network_io', 0))
-        net_out = float(data.get('network_io', 0)) # approx
+        start_time = datetime.now()
 
-        # Construct a 21-feature vector (Approximation for demo)
-        # Real world: You'd calculate rolling stats here or in Java
-        features = [
-            cpu, 0, cpu, # cpu_system (mean, std, max)
-            cpu, 0, cpu, # cpu_total
-            cpu, 0, cpu, # cpu_user
-            mem, 0, mem, # mem_usage
-            mem, 0, mem, # mem_working_set
-            net_in, net_in, 0, # rx
-            net_out, net_out, 0 # tx
-        ]
+        # 1. Expand 10 features to 21 features
+        features_21 = expand_to_21_features(data)
+        print(f"📊 Expanded to 21 features (first 6): {features_21[:6]}")
 
-        # 2. Add to Buffer
-        if endpoint not in METRIC_BUFFERS:
-            METRIC_BUFFERS[endpoint] = deque(maxlen=SEQ_LEN_MICRO)
+        # 2. Create sequence of length 100 by repeating the single point
+        sequence = np.tile(features_21, (SEQ_LEN, 1))
+        noise = np.random.normal(0, 0.01, sequence.shape)
+        sequence = sequence + noise
 
-        METRIC_BUFFERS[endpoint].append(features)
-
-        # 3. Predict if enough data
+        # 3. Get individual model predictions
         msif_score = 0.0
-        severity = "LOW"
+        ple_score = 0.0
 
-        if len(METRIC_BUFFERS[endpoint]) == SEQ_LEN_MICRO:
-            # Convert to numpy
-            raw_seq = np.array(METRIC_BUFFERS[endpoint]) # shape (100, 21)
+        if MODEL_MSIF:
+            scaled_msif = SCALER_MSIF.transform(sequence)
+            input_msif = scaled_msif.reshape(1, SEQ_LEN, 21)
+            pred_msif = MODEL_MSIF.predict(input_msif, verbose=0)
+            msif_score = float(pred_msif[0][0])
+            print(f"🔵 MSIF-LSTM raw output: {msif_score:.4f}")
 
-            # Scale
-            scaled_seq = SCALER_MICRO.transform(raw_seq)
+        if MODEL_PLE:
+            scaled_ple = SCALER_PLE.transform(sequence)
+            input_ple = scaled_ple.reshape(1, SEQ_LEN, 21)
+            pred_ple = MODEL_PLE.predict(input_ple, verbose=0)
+            ple_score = float(pred_ple[0][0])
+            print(f"🟢 PLE-GRU raw output: {ple_score:.4f}")
 
-            # Reshape (1, 100, 21)
-            input_seq = scaled_seq.reshape(1, SEQ_LEN_MICRO, 21)
+        # 4. Calculate context-aware weights
+        context = data.get('context', {})
+        if 'hour_of_day' not in context and 'hour_of_day' in data:
+            context['hour_of_day'] = int(data['hour_of_day'])
 
-            # Predict
-            pred = MODEL_MICRO.predict(input_seq, verbose=0)
-            msif_score = float(pred[0][0])
+        weights = calculate_dynamic_weights(context)
 
-            # Determine Severity
-            if msif_score > 0.8: severity = "CRITICAL"
-            elif msif_score > 0.6: severity = "HIGH"
-            elif msif_score > 0.4: severity = "MEDIUM"
+        # 5. Fuse predictions
+        if MODEL_MSIF and MODEL_PLE:
+            hybrid_score, fusion_method, model_agreement = fuse_predictions(
+                msif_score, ple_score, weights
+            )
+        elif MODEL_MSIF:
+            hybrid_score = msif_score
+            fusion_method = "msif_only"
+            model_agreement = 1.0
+        elif MODEL_PLE:
+            hybrid_score = ple_score
+            fusion_method = "ple_only"
+            model_agreement = 1.0
+        else:
+            return jsonify({"error": "No models available"}), 503
 
-        return jsonify({
-            "msifScore": msif_score,
-            "pleScore": 0.0, # Placeholder
-            "hybridScore": msif_score,
+        # 6. Calculate severity and confidence
+        severity, base_confidence = calculate_severity(hybrid_score)
+
+        if MODEL_MSIF and MODEL_PLE:
+            score_uncertainty = abs(msif_score - ple_score)
+            confidence = max(0.5, base_confidence - (score_uncertainty * 0.3))
+        else:
+            confidence = base_confidence
+
+        # 7. Convert confidence to string for Java backend
+        if confidence >= 0.85:
+            confidence_str = "HIGH"
+        elif confidence >= 0.65:
+            confidence_str = "MEDIUM"
+        else:
+            confidence_str = "LOW"
+
+        # 8. Update statistics
+        prediction_count += 1
+        if hybrid_score > SEVERITY_THRESHOLDS['MEDIUM']:
+            anomaly_count += 1
+
+        # 9. Calculate processing time
+        processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
+
+        # 10. Build response matching Java MLPredictionResponse expectations
+        response = {
+            "msif_score": round(msif_score, 4),          # snake_case for Java
+            "ple_score": round(ple_score, 4),            # snake_case for Java
+            "hybrid_score": round(hybrid_score, 4),      # snake_case for Java
             "severity": severity,
-            "confidence": 0.95 if len(METRIC_BUFFERS[endpoint]) == SEQ_LEN_MICRO else 0.0,
-            "fusionMethod": "MSIF_ONLY"
-        })
+            "confidence": confidence_str,                 # String: "HIGH", "MEDIUM", "LOW"
+            "fusion_method": fusion_method,              # snake_case for Java
+            "weights_used": {                            # snake_case for Java
+                "msif": round(weights['msif'], 2),
+                "ple": round(weights['ple'], 2)
+            },
+            "models_loaded": True,                       # snake_case for Java
+            "processing_time_ms": round(processing_time_ms, 2),  # snake_case
+            "trace_id": data.get('context', {}).get('trace_id', None)
+        }
+
+        print(f"✅ Prediction: hybrid={hybrid_score:.4f}, severity={severity}, "
+              f"confidence={confidence_str}, method={fusion_method}, "
+              f"time={processing_time_ms:.1f}ms")
+
+        return jsonify(response)
 
     except Exception as e:
-        print(f"Prediction Error: {e}")
+        print(f"❌ Prediction Error: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=9000) # Port matches Java config
+    print("🚀 Starting ML Service on port 9000...")
+    print(f"   Models: MSIF-LSTM {'✅' if MODEL_MSIF else '❌'}, "
+          f"PLE-GRU {'✅' if MODEL_PLE else '❌'}")
+    print(f"   Expected input: 10 raw features → expanded to 21 aggregated features")
+    print(f"   Sequence length: {SEQ_LEN} timesteps")
+    app.run(host='0.0.0.0', port=9000, debug=False)

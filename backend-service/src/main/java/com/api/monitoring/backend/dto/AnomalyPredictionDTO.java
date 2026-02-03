@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * DTO for ML anomaly prediction results
@@ -23,7 +24,6 @@ public class AnomalyPredictionDTO {
     // ML Scores
     private Double msifScore;
     private Double pleScore;
-    private Double hybridScore;
 
     // Analysis results
     private String severity;
@@ -35,4 +35,17 @@ public class AnomalyPredictionDTO {
     private String mlServiceVersion;
     private String traceId;
     private LocalDateTime timestamp;
+
+    @JsonProperty("hybrid_score") // ← Maps Python's snake_case
+    private Double hybridScore;
+
+    @JsonProperty("msif_lstm_score")
+    private Double msifLstmScore;
+
+    @JsonProperty("ple_gru_score")
+    private Double pleGruScore;
+
+    @JsonProperty("anomaly_details")
+    private String anomalyDetails;
+
 }

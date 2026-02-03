@@ -1,0 +1,267 @@
+{
+  "summary": {
+    "passed": 6,
+    "warning": 0,
+    "failed": 0
+  },
+  "total_models": 6,
+  "pass_rate": 100.0,
+  "warning_rate": 0.0,
+  "health": "\ud83c\udf89 EXCELLENT - All models validated successfully!",
+  "timestamp": "2026-02-03T22:49:26.403423",
+  "results": [
+    {
+      "dataset": "nab",
+      "model_type": "msif_lstm",
+      "architecture": {
+        "status": "PASSED",
+        "total_params": 32161,
+        "trainable_params": 32161,
+        "input_shape": "(None, 10)",
+        "output_shape": "(None, 1)",
+        "layers": 7,
+        "layer_types": [
+          "Reshape",
+          "LSTM",
+          "Dropout",
+          "LSTM",
+          "Dropout",
+          "Dense",
+          "Dense"
+        ]
+      },
+      "inference": {
+        "status": "PASSED",
+        "reason": "Inference successful with varied predictions",
+        "prediction_shape": "(32, 1)",
+        "pred_min": 0.30214041471481323,
+        "pred_max": 0.33028435707092285,
+        "pred_mean": 0.3136526942253113,
+        "pred_std": 0.006683325860649347,
+        "inference_batch_size": 32
+      },
+      "metadata": {
+        "status": "PASSED",
+        "performance": "GOOD \u2705",
+        "f1_score": 0.9259259259259259,
+        "precision": 0.9146341463414634,
+        "recall": 0.9375,
+        "accuracy": 0,
+        "auc": 0.9949191808700562
+      },
+      "timestamp": "2026-02-03T22:49:23.426533",
+      "overall_status": "\u2705 PASSED"
+    },
+    {
+      "dataset": "nab",
+      "model_type": "ple_gru",
+      "architecture": {
+        "status": "PASSED",
+        "total_params": 4193,
+        "trainable_params": 4129,
+        "input_shape": "(None, 10, 8)",
+        "output_shape": "(None, 1)",
+        "layers": 5,
+        "layer_types": [
+          "InputLayer",
+          "GRU",
+          "BatchNormalization",
+          "Dropout",
+          "Dense"
+        ]
+      },
+      "inference": {
+        "status": "PASSED",
+        "reason": "Inference successful with varied predictions",
+        "prediction_shape": "(32, 1)",
+        "pred_min": 0.001418544095940888,
+        "pred_max": 0.1481872797012329,
+        "pred_mean": 0.021916072815656662,
+        "pred_std": 0.033358532935380936,
+        "inference_batch_size": 32
+      },
+      "metadata": {
+        "status": "PASSED",
+        "performance": "NEEDS_IMPROVEMENT \u274c",
+        "f1_score": 0.28571426852301923,
+        "precision": 1.0,
+        "recall": 0.1666666716337204,
+        "accuracy": 0.9937888383865356,
+        "auc": 0
+      },
+      "timestamp": "2026-02-03T22:49:23.812930",
+      "overall_status": "\u2705 PASSED"
+    },
+    {
+      "dataset": "microservices",
+      "model_type": "msif_lstm",
+      "architecture": {
+        "status": "PASSED",
+        "total_params": 127041,
+        "trainable_params": 126657,
+        "input_shape": "(None, 100, 21)",
+        "output_shape": "(None, 1)",
+        "layers": 8,
+        "layer_types": [
+          "InputLayer",
+          "LSTM",
+          "BatchNormalization",
+          "Dropout",
+          "LSTM",
+          "BatchNormalization",
+          "Dropout",
+          "Dense"
+        ]
+      },
+      "inference": {
+        "status": "PASSED",
+        "reason": "Inference successful with varied predictions",
+        "prediction_shape": "(32, 1)",
+        "pred_min": 0.7705331444740295,
+        "pred_max": 0.9581930637359619,
+        "pred_mean": 0.8565977811813354,
+        "pred_std": 0.04669918492436409,
+        "inference_batch_size": 32
+      },
+      "metadata": {
+        "status": "PASSED",
+        "performance": "MODERATE \u26a0\ufe0f",
+        "f1_score": 0.8615384292004519,
+        "precision": 0.7567567825317383,
+        "recall": 1.0,
+        "accuracy": 0.7567567825317383,
+        "auc": 0.5376719832420349
+      },
+      "timestamp": "2026-02-03T22:49:24.294242",
+      "overall_status": "\u2705 PASSED"
+    },
+    {
+      "dataset": "microservices",
+      "model_type": "ple_gru",
+      "architecture": {
+        "status": "PASSED",
+        "total_params": 27041,
+        "trainable_params": 26849,
+        "input_shape": "(None, 100, 21)",
+        "output_shape": "(None, 1)",
+        "layers": 9,
+        "layer_types": [
+          "GRU",
+          "BatchNormalization",
+          "Dropout",
+          "GRU",
+          "BatchNormalization",
+          "Dropout",
+          "Dense",
+          "Dropout",
+          "Dense"
+        ]
+      },
+      "inference": {
+        "status": "PASSED",
+        "reason": "Inference successful with varied predictions",
+        "prediction_shape": "(32, 1)",
+        "pred_min": 6.996684533078223e-05,
+        "pred_max": 0.9998579025268555,
+        "pred_mean": 0.4522126019001007,
+        "pred_std": 0.3709779977798462,
+        "inference_batch_size": 32
+      },
+      "metadata": {
+        "status": "PASSED",
+        "performance": "EXCELLENT \u2b50",
+        "f1_score": 0.9681,
+        "precision": 0.9669,
+        "recall": 0.9692,
+        "accuracy": 0,
+        "auc": 0.9854
+      },
+      "timestamp": "2026-02-03T22:49:25.340430",
+      "overall_status": "\u2705 PASSED"
+    },
+    {
+      "dataset": "lo2",
+      "model_type": "msif_lstm",
+      "architecture": {
+        "status": "PASSED",
+        "total_params": 168769,
+        "trainable_params": 168769,
+        "input_shape": "(None, 100)",
+        "output_shape": "(None, 1)",
+        "layers": 7,
+        "layer_types": [
+          "Reshape",
+          "LSTM",
+          "Dropout",
+          "LSTM",
+          "Dropout",
+          "Dense",
+          "Dense"
+        ]
+      },
+      "inference": {
+        "status": "PASSED",
+        "reason": "Inference successful with varied predictions",
+        "prediction_shape": "(32, 1)",
+        "pred_min": 0.6264755129814148,
+        "pred_max": 0.6407086253166199,
+        "pred_mean": 0.6334376931190491,
+        "pred_std": 0.003475567791610956,
+        "inference_batch_size": 32
+      },
+      "metadata": {
+        "status": "PASSED",
+        "performance": "EXCELLENT \u2b50",
+        "f1_score": 0.9788819875776398,
+        "precision": 0.9668711656441717,
+        "recall": 0.9911949685534591,
+        "accuracy": 0,
+        "auc": 0.9676317572593689
+      },
+      "timestamp": "2026-02-03T22:49:25.866169",
+      "overall_status": "\u2705 PASSED"
+    },
+    {
+      "dataset": "lo2",
+      "model_type": "ple_gru",
+      "architecture": {
+        "status": "PASSED",
+        "total_params": 127681,
+        "trainable_params": 127681,
+        "input_shape": "(None, 100)",
+        "output_shape": "(None, 1)",
+        "layers": 7,
+        "layer_types": [
+          "Reshape",
+          "GRU",
+          "Dropout",
+          "GRU",
+          "Dropout",
+          "Dense",
+          "Dense"
+        ]
+      },
+      "inference": {
+        "status": "PASSED",
+        "reason": "Inference successful with varied predictions",
+        "prediction_shape": "(32, 1)",
+        "pred_min": 0.6186326146125793,
+        "pred_max": 0.6592881083488464,
+        "pred_mean": 0.6306740045547485,
+        "pred_std": 0.006383778061717749,
+        "inference_batch_size": 32
+      },
+      "metadata": {
+        "status": "PASSED",
+        "performance": "EXCELLENT \u2b50",
+        "f1_score": 0.9726069559864574,
+        "precision": 0.9523809523809523,
+        "recall": 0.9937106918238994,
+        "accuracy": 0,
+        "auc": 0.9226511716842651
+      },
+      "timestamp": "2026-02-03T22:49:26.403212",
+      "overall_status": "\u2705 PASSED"
+    }
+  ]
+}

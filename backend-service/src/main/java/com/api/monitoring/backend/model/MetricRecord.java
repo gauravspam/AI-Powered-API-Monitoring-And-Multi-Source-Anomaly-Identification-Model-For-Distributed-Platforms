@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "metrics")
+@Table(name = "system_metrics")
 public class MetricRecord {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
