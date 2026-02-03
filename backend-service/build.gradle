@@ -1,22 +1,19 @@
 plugins {
     id 'java'
     id 'org.springframework.boot' version '3.2.1'
-    id 'io.spring.dependency-management' version '1.1.6'
+    id 'io.spring.dependency-management' version '1.1.4'
 }
 
 group = 'com.api.monitoring'
 version = '0.0.1-SNAPSHOT'
 
 java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)  // Using Java 21 LTS for stability
-    }
-    sourceSets {
-        main {
-            java {
-                srcDir 'src/main/java'
-            }
-        }
+    sourceCompatibility = '17'
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
     }
 }
 
@@ -26,46 +23,31 @@ repositories {
 
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-    implementation 'org.postgresql:postgresql'
-    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
 
-    // Fluentd logger
-    implementation 'org.fluentd:fluent-logger:0.3.4'
+    // Retry & AOP
+    implementation 'org.springframework.retry:spring-retry'
+    implementation 'org.springframework.boot:spring-boot-starter-aop'
+
+    // Database
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // OpenSearch Dependencies
+    implementation 'org.opensearch.client:opensearch-rest-high-level-client:2.11.0'
+    implementation 'org.opensearch.client:opensearch-rest-client:2.11.0'
+    implementation 'org.opensearch:opensearch:2.11.0'
+    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
+    implementation 'org.apache.httpcomponents:httpcore:4.4.16'
 
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
 
-    testCompileOnly 'org.projectlombok:lombok'
-    testAnnotationProcessor 'org.projectlombok:lombok'
-
-    // OpenSearch Java Client (RestHighLevelClient + related)
-    implementation 'org.opensearch.client:opensearch-rest-high-level-client:2.11.1'
-    implementation 'org.opensearch.client:opensearch-java:2.11.1'
-    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
-    implementation 'org.apache.httpcomponents:httpcore:4.4.16'
-
-    // OpenSearch Java Client (RestHighLevelClient + related)
-    implementation 'org.opensearch.client:opensearch-rest-high-level-client:2.11.1'
-    implementation 'org.opensearch.client:opensearch-java:2.11.1'
-    implementation 'org.apache.httpcomponents:httpclient:4.5.14'
-    implementation 'org.apache.httpcomponents:httpcore:4.4.16'
-
-    // Test H2 database
-    testImplementation 'com.h2database:h2:2.2.224'
-
-    // Hibernate Types for JSON/JSONB support
-    implementation 'io.hypersistence:hypersistence-utils-hibernate-60:3.7.3'
-
-    // Testcontainers (optional but recommended)
-    testImplementation 'org.testcontainers:postgresql:1.19.8'
-    testImplementation 'org.testcontainers:junit-jupiter:1.19.8'
-
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 
-tasks.test {
+tasks.named('test') {
     useJUnitPlatform()
 }

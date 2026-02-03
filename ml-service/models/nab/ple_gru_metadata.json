@@ -1,0 +1,9 @@
+{
+    "model_name": "PLE-GRU (Simplified)",
+    "dataset": "NAB (EC2 Request Latency)",
+    "training_date": "2026-02-03 15:21:05.949822",
+    "f1_score": 0.28571426852301923,
+    "precision": 1.0,
+    "recall": 0.1666666716337204,
+    "accuracy": 0.9937888383865356
+}

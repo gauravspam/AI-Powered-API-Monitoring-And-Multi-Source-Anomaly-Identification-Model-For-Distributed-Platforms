@@ -3,6 +3,7 @@ package com.api.monitoring.backend.repository;
 import com.api.monitoring.backend.model.AnomalyRecord;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,7 +23,9 @@ public interface AnomalyRepository extends JpaRepository<AnomalyRecord, Long> {
 
     List<AnomalyRecord> findByEndpoint(String apiName);
 
-    List<AnomalyRecord> findTop100ByEndpointOrderByCreatedAtDesc(String apiName);
+    List<AnomalyRecord> findTop100ByEndpointOrderByCreatedAtDesc(
+        String apiName
+    );
 
     @Query("SELECT a FROM AnomalyRecord a ORDER BY a.createdAt DESC")
     List<AnomalyRecord> findRecentAnomalies();
@@ -31,13 +34,14 @@ public interface AnomalyRepository extends JpaRepository<AnomalyRecord, Long> {
     @Query("SELECT a FROM AnomalyRecord a ORDER BY a.createdAt DESC LIMIT 10")
     List<AnomalyRecord> findTop10ByOrderByCreatedAtDesc();
 
-    @Query("SELECT a FROM AnomalyRecord a WHERE a.endpoint = :endpoint " +
-            "AND a.createdAt >= :since ORDER BY a.createdAt DESC")
+    @Query(
+        "SELECT a FROM AnomalyRecord a WHERE a.endpoint = :endpoint " +
+            "AND a.createdAt >= :since ORDER BY a.createdAt DESC"
+    )
     Optional<AnomalyRecord> findLastScoreByEndpoint(
-            @Param("endpoint") String endpoint,
-            @Param("since") LocalDateTime since);
+        @Param("endpoint") String endpoint,
+        @Param("since") LocalDateTime since
+    );
 
     List<AnomalyRecord> findByCreatedAtAfter(LocalDateTime timestamp);
-
-
 }

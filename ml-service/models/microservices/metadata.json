@@ -1,11 +1,11 @@
 {
     "model_name": "MSIF-LSTM",
     "dataset": "Microservices",
-    "training_date": "2026-02-03 14:23:27.278089",
+    "training_date": "2026-02-03 14:40:56.717592",
     "n_features": 21,
-    "f1_score": 0.8628659059669025,
-    "precision": 0.7588075995445251,
+    "f1_score": 0.8615384292004519,
+    "precision": 0.7567567825317383,
     "recall": 1.0,
-    "accuracy": 0.7594594359397888,
-    "auc": 0.5276631116867065
+    "accuracy": 0.7567567825317383,
+    "auc": 0.5376719832420349
 }
