@@ -146,7 +146,7 @@ ml-service/env/
 **/__pycache__/
 **/*.pyc
 **/*.pyo
-
+*:Zone.Identifier
 
 # Data files
 ml-service/data/*.csv
@@ -211,3 +211,4 @@ venv/
 *.war
 yarn-debug.log*
 yarn-error.log*
+*.pth
