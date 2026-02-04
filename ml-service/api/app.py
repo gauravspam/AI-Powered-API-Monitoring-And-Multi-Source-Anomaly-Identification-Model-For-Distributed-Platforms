@@ -9,9 +9,8 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 # --- CONFIG ---
-SEQ_LEN = 100  # Models expect sequence length of 100
+SEQ_LEN = 100
 
-# Context-aware fusion thresholds
 HIGH_AGREEMENT_THRESHOLD = 0.85
 MODERATE_AGREEMENT_THRESHOLD = 0.60
 
@@ -55,10 +54,10 @@ except Exception as e:
 
 try:
     MODEL_PLE = tf.keras.models.load_model(
-        'models/microservices/ple_gru_model.keras',
+        'models/lo2/ple_gru_model.keras',
         compile=False
     )
-    with open('models/microservices/ple_gru_scaler.pkl', 'rb') as f:
+    with open('models/lo2/ple_gru_scaler.pkl', 'rb') as f:
         SCALER_PLE = pickle.load(f)
     print(f"✅ PLE-GRU Model Loaded (input shape: {MODEL_PLE.input_shape})")
 except Exception as e:
@@ -77,50 +76,27 @@ def health():
     })
 
 def expand_to_21_features(data):
-    """
-    Expand 10 raw features to 21 aggregated features expected by models.
-
-    Maps incoming features to the 21-feature format the models were trained on:
-    - cpu_usage → cpu_usage_{system,total,user}_{mean,std,max} (9 features)
-    - memory_usage → memory_{usage,working_set}_{mean,std,max} (6 features)
-    - network_io → {rx,tx}_bytes_{sum,mean,std} (6 features)
-
-    Since we only have single-point data, we approximate:
-    - mean = value
-    - std = small variance (5% of mean)
-    - max = value * 1.1 (slightly higher)
-    """
     cpu = float(data.get('cpu_usage', 0))
     mem = float(data.get('memory_usage', 0))
     net_io = float(data.get('network_io', 0))
 
-    # Approximate statistics from single values
-    cpu_std = cpu * 0.05  # 5% standard deviation
+    cpu_std = cpu * 0.05
     mem_std = mem * 0.05
     net_std = net_io * 0.05
 
-    # Build 21-feature vector matching training data structure
     features_21 = [
-        # CPU system (mean, std, max)
         cpu, cpu_std, cpu * 1.1,
-        # CPU total (mean, std, max)
         cpu, cpu_std, cpu * 1.1,
-        # CPU user (mean, std, max)
         cpu, cpu_std, cpu * 1.1,
-        # Memory usage (mean, std, max)
         mem, mem_std, mem * 1.1,
-        # Memory working set (mean, std, max)
         mem, mem_std, mem * 1.1,
-        # RX bytes (sum, mean, std)
         net_io, net_io, net_std,
-        # TX bytes (sum, mean, std)
         net_io, net_io, net_std
     ]
 
     return np.array(features_21, dtype=np.float32)
 
 def calculate_dynamic_weights(context):
-    """Calculate context-aware weights for ensemble fusion."""
     hour = context.get('hour_of_day', 12)
     endpoint_type = context.get('endpoint_type', 'api')
     traffic_level = context.get('traffic_level', 'medium')
@@ -150,7 +126,6 @@ def calculate_dynamic_weights(context):
     return {'msif': final_msif, 'ple': final_ple}
 
 def fuse_predictions(msif_score, ple_score, weights):
-    """Fuse predictions using confidence-based strategy."""
     model_agreement = 1.0 - abs(msif_score - ple_score)
 
     if model_agreement >= HIGH_AGREEMENT_THRESHOLD:
@@ -170,7 +145,6 @@ def fuse_predictions(msif_score, ple_score, weights):
     return hybrid_score, fusion_method, model_agreement
 
 def calculate_severity(hybrid_score):
-    """Calculate severity level based on hybrid score."""
     if hybrid_score > SEVERITY_THRESHOLDS['CRITICAL']:
         return "CRITICAL", 0.95
     elif hybrid_score > SEVERITY_THRESHOLDS['HIGH']:
@@ -199,7 +173,7 @@ def predict():
         features_21 = expand_to_21_features(data)
         print(f"📊 Expanded to 21 features (first 6): {features_21[:6]}")
 
-        # 2. Create sequence of length 100 by repeating the single point
+        # 2. Create sequence of length 100
         sequence = np.tile(features_21, (SEQ_LEN, 1))
         noise = np.random.normal(0, 0.01, sequence.shape)
         sequence = sequence + noise
@@ -220,7 +194,14 @@ def predict():
             input_ple = scaled_ple.reshape(1, SEQ_LEN, 21)
             pred_ple = MODEL_PLE.predict(input_ple, verbose=0)
             ple_score = float(pred_ple[0][0])
-            print(f"🟢 PLE-GRU raw output: {ple_score:.4f}")
+
+            # Diagnostics
+            print(f"🔍 PLE DEBUG:")
+            print(f"   Input shape: {input_ple.shape}")
+            print(f"   Raw prediction array: {pred_ple[0]}")
+            print(f"   PLE score extracted: {ple_score:.6f}")
+            print(f"   Scaled input range: [{scaled_ple.min():.3f}, {scaled_ple.max():.3f}]")
+            print(f"🟢 PLE-GRU final output: {ple_score:.4f}")
 
         # 4. Calculate context-aware weights
         context = data.get('context', {})
@@ -270,20 +251,20 @@ def predict():
         # 9. Calculate processing time
         processing_time_ms = (datetime.now() - start_time).total_seconds() * 1000
 
-        # 10. Build response matching Java MLPredictionResponse expectations
+        # 10. Build response
         response = {
-            "msif_score": round(msif_score, 4),          # snake_case for Java
-            "ple_score": round(ple_score, 4),            # snake_case for Java
-            "hybrid_score": round(hybrid_score, 4),      # snake_case for Java
+            "msif_score": round(msif_score, 4),
+            "ple_score": round(ple_score, 4),
+            "hybrid_score": round(hybrid_score, 4),
             "severity": severity,
-            "confidence": confidence_str,                 # String: "HIGH", "MEDIUM", "LOW"
-            "fusion_method": fusion_method,              # snake_case for Java
-            "weights_used": {                            # snake_case for Java
+            "confidence": confidence_str,
+            "fusion_method": fusion_method,
+            "weights_used": {
                 "msif": round(weights['msif'], 2),
                 "ple": round(weights['ple'], 2)
             },
-            "models_loaded": True,                       # snake_case for Java
-            "processing_time_ms": round(processing_time_ms, 2),  # snake_case
+            "models_loaded": True,
+            "processing_time_ms": round(processing_time_ms, 2),
             "trace_id": data.get('context', {}).get('trace_id', None)
         }
 
