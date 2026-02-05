@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS anomalyscores (
+CREATE TABLE IF NOT EXISTS anomaly_scores (
   id SERIAL PRIMARY KEY,
   endpoint VARCHAR(255),
   method VARCHAR(10),
@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS anomalyscores (
   severity VARCHAR(20),
   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX idx_anomalyscores_timestamp ON anomalyscores(timestamp);
+CREATE INDEX idx_anomalyscores_timestamp ON anomaly_scores(timestamp);
 
 
 

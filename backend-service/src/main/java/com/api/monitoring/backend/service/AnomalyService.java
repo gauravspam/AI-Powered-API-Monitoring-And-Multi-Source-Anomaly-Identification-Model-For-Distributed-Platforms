@@ -1,11 +1,19 @@
 package com.api.monitoring.backend.service;
 
-import java.time.LocalDateTime;
-import com.api.monitoring.backend.dto.*;
-import com.api.monitoring.backend.model.*;
-import com.api.monitoring.backend.repository.*;
+import com.api.monitoring.backend.dto.AnomalyPredictionDTO;
+import com.api.monitoring.backend.dto.AnomalyResponse;
+import com.api.monitoring.backend.dto.LogEntryRequest;
+import com.api.monitoring.backend.dto.StatisticsResponse;
+import com.api.monitoring.backend.model.AnomalyRecord;
+import com.api.monitoring.backend.model.LogRecord;
+import com.api.monitoring.backend.repository.AnomalyRepository;
+import com.api.monitoring.backend.repository.MetricRepository;
 import com.api.monitoring.backend.util.FeatureEngineer;
-import java.util.*;
+import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,220 +24,146 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class AnomalyService {
 
-    @Autowired
-    private AnomalyRepository anomalyRepository;
+    private static final double SAVE_THRESHOLD = 0.40;
 
-    @Autowired
-    private MetricRepository metricRepository;
+    private static final double TH_LOW = 0.30;
+    private static final double TH_MEDIUM = 0.50;
+    private static final double TH_HIGH = 0.70;
+    private static final double TH_CRITICAL = 0.85;
 
-    @Autowired
-    private MLServiceClient mlServiceClient; // Renamed for clarity, assumes MLServiceClient handles Python calls
+    private final AnomalyRepository anomalyRepository;
+    private final MetricRepository metricRepository;
+    private final MLServiceClient mlServiceClient;
 
     @Autowired(required = false)
-    private FeatureEngineer featureEngineer; // Optional if not implemented yet
+    private FeatureEngineer featureEngineer;
+
+    @Autowired
+    public AnomalyService(
+            AnomalyRepository anomalyRepository,
+            MetricRepository metricRepository,
+            MLServiceClient mlServiceClient) {
+        this.anomalyRepository = anomalyRepository;
+        this.metricRepository = metricRepository;
+        this.mlServiceClient = mlServiceClient;
+    }
 
     public List<AnomalyResponse> getRecentAnomalies(int limit) {
-        log.info("Fetching recent {} anomalies", limit);
+        int safeLimit = Math.max(1, Math.min(limit, 200));
+        log.info("Fetching recent anomalies, limit={}", safeLimit);
+
         List<AnomalyRecord> anomalies = anomalyRepository.findTop10ByOrderByCreatedAtDesc();
-        return anomalies
-                .stream()
-                .limit(limit)
+        return anomalies.stream()
+                .limit(safeLimit)
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
 
     public List<AnomalyResponse> getRecentAnomalies(String apiName, int limit) {
-        log.info("Fetching {} anomalies for API: {}", limit, apiName);
-        List<AnomalyRecord> anomalies = anomalyRepository.findTop100ByEndpointOrderByCreatedAtDesc(apiName);
-        return anomalies
-                .stream()
-                .limit(limit)
+        int safeLimit = Math.max(1, Math.min(limit, 200));
+        String endpoint = (apiName == null) ? "" : apiName;
+
+        log.info("Fetching anomalies for API={}, limit={}", endpoint, safeLimit);
+
+        List<AnomalyRecord> anomalies = anomalyRepository.findTop100ByEndpointOrderByCreatedAtDesc(endpoint);
+        return anomalies.stream()
+                .limit(safeLimit)
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
 
-    public void detectAndSaveAnomalies() {
-        log.info("Starting anomaly detection for all APIs...");
-
-        try {
-            List<Long> apiIds = metricRepository.findDistinctApiIds();
-            log.info("Found {} unique API IDs to process", apiIds.size());
-
-            for (Long apiId : apiIds) {
-                detectAndSaveAnomalyForApi(apiId);
-            }
-
-            log.info("Anomaly detection completed for all APIs");
-        } catch (Exception e) {
-            log.error(
-                    "❌ Unexpected error during batch detection: {}",
-                    e.getMessage(),
-                    e);
-            throw new AnomalyProcessingException(
-                    "Failed to run batch detection: " + e.getMessage(),
-                    e);
-        }
-    }
-
-    private void detectAndSaveAnomalyForApi(Long apiId) {
-        String traceId = "trace_" + apiId + "_" + System.currentTimeMillis();
-        String apiName = "api_" + apiId;
-
-        try {
-            log.info(
-                    "[{}] Processing anomaly detection for API: {}",
-                    traceId,
-                    apiName);
-
-            LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(
-                    24);
-            List<MetricRecord> metrics = metricRepository.findByApiIdAndTimestampAfter(
-                    apiId,
-                    twentyFourHoursAgo);
-
-            if (metrics.isEmpty()) {
-                log.warn("[{}] No metrics found for API {}", traceId, apiName);
-                return;
-            }
-
-            log.info(
-                    "[{}] Found {} metrics for API {}",
-                    traceId,
-                    metrics.size(),
-                    apiName);
-
-            // 1. Build Features (Mocking if FeatureEngineer is null/complex)
-            if (featureEngineer == null) {
-                log.warn(
-                        "FeatureEngineer not initialized, skipping detailed feature build.");
-                return;
-            }
-
-            List<Double[]> msifFeatures = featureEngineer.buildMsifFeatures(
-                    metrics);
-            List<Double[]> pleFeatures = featureEngineer.buildPleFeatures(
-                    metrics,
-                    LocalDateTime.now());
-
-            // 2. Prepare Window
-            FeatureWindow featureWindow = new FeatureWindow();
-            featureWindow.setEndpoint(apiName);
-            featureWindow.setMethod("AGGREGATE");
-            featureWindow.setMsifFeatures(msifFeatures);
-            featureWindow.setPleFeatures(pleFeatures);
-            featureWindow.setWindowSizeMins(1440);
-            featureWindow.setStartTimestamp(
-                    System.currentTimeMillis() - (24 * 60 * 60 * 1000L));
-            featureWindow.setEndTimestamp(System.currentTimeMillis());
-
-            // 3. Call ML Service (Using MLServiceClient, assuming it has this method or
-            // similar)
-            // Note: MLServiceClient usually takes LogRecord, so this assumes you extended
-            // it or this is a placeholder
-            // For now, we'll comment out the direct call if MLServiceClient signature
-            // doesn't match
-
-            // AnomalyScoresResponse mlResponse =
-            // mlServiceClient.predictWithFeatures(featureWindow, traceId);
-            // if (mlResponse != null) {
-            // saveAnomalyWithMLScores(apiName, mlResponse, traceId);
-            // }
-        } catch (Exception e) {
-            log.error(
-                    "[{}] Error processing API {}: {}",
-                    traceId,
-                    apiId,
-                    e.getMessage(),
-                    e);
-        }
-    }
-
-    private void saveAnomalyWithMLScores(
-            String apiName,
-            AnomalyScoresResponse mlResponse,
-            String traceId) {
-        AnomalyRecord anomaly = new AnomalyRecord();
-        anomaly.setEndpoint(apiName);
-        anomaly.setCreatedAt(LocalDateTime.now());
-
-        Double msifScore = mlResponse.getMsifLstmScore() != null
-                ? mlResponse.getMsifLstmScore()
-                : 0.0;
-        Double pleScore = mlResponse.getPleGruScore() != null
-                ? mlResponse.getPleGruScore()
-                : 0.0;
-        Double hybridScore = mlResponse.getHybridScore() != null
-                ? mlResponse.getHybridScore()
-                : 0.0;
-        Double confidence = mlResponse.getConfidence() != null
-                ? mlResponse.getConfidence()
-                : 0.0;
-
-        anomaly.setMsifLstmScore(msifScore);
-        anomaly.setPleGruScore(pleScore);
-        anomaly.setHybridEnsembleScore(hybridScore);
-        anomaly.setConfidence(confidence);
-
-        if (hybridScore >= 0.7)
-            anomaly.setSeverity("HIGH");
-        else if (hybridScore >= 0.5)
-            anomaly.setSeverity("MEDIUM");
-        else
-            anomaly.setSeverity("LOW");
-
-        anomaly.setStatus("ACTIVE");
-        anomaly.setMlServiceVersion("v1.0");
-        anomaly.setFusionMethod("weighted_agreement");
-
-        anomalyRepository.save(anomaly);
-        log.info(
-                "[{}] Anomaly saved: MSIF={} PLE={} Hybrid={}",
-                traceId,
-                msifScore,
-                pleScore,
-                hybridScore);
-    }
-
-    // --- Single Entry Detection (Real-time) ---
+    /**
+     * Real-time anomaly detection (called by AnomalyController
+     * /api/anomalies/analyze).
+     */
+    @Transactional
     public AnomalyResponse detectAnomaly(LogEntryRequest logEntry) {
-        // Convert LogEntryRequest to LogRecord
-        LogRecord record = new LogRecord();
-        record.setEndpoint(logEntry.getApiName());
-        // ... map other fields ...
+        Objects.requireNonNull(logEntry, "logEntry must not be null");
+        String endpoint = logEntry.getApiName();
 
-        // Call ML Service (Real-time)
-        AnomalyPredictionDTO prediction = mlServiceClient.predictAnomaly(
-                record);
-        // ✨ NEW: Handle null hybrid_score
-        if (prediction.getHybridScore() == null) {
-            prediction.setHybridScore(0.0);
+        LogRecord record = LogRecord.builder()
+                .endpoint(endpoint)
+                .method(normalizeHttpMethod(logEntry.getMethod()))
+                .statusCode(defaultIfNull(logEntry.getStatusCode(), 200))
+                .responseTimeMs(doubleToLongMs(defaultIfNull(logEntry.getResponseTime(), 0.0)))
+                .requestCount(defaultIfNull(logEntry.getRequestCount(), 1))
+                .errorRate(defaultIfNull(logEntry.getErrorRate(), 0.0))
+                .cpuUsage(defaultIfNull(logEntry.getCpuUsage(), 0.0))
+                .memoryUsage(defaultIfNull(logEntry.getMemoryUsage(), 0.0))
+                .networkIo(doubleToLong(defaultIfNull(logEntry.getNetworkIo(), 0.0)))
+                .diskIo(doubleToLong(defaultIfNull(logEntry.getDiskIo(), 0.0)))
+                .hourOfDay(logEntry.getHourOfDay())
+                .dayOfWeek(logEntry.getDayOfWeek())
+                // apilogs.servicename is marked nullable=false in your entity; keep a default
+                .serviceName("api-monitoring")
+                .build();
+
+        AnomalyPredictionDTO prediction;
+        try {
+            prediction = mlServiceClient.predictAnomaly(record);
+        } catch (Exception e) {
+            log.error("ML prediction failed for endpoint={}: {}", endpoint, e.getMessage(), e);
+            throw new AnomalyProcessingException("ML prediction failed: " + e.getMessage(), e);
         }
 
-        // Now safe to use prediction.getHybridScore()
-        double score = prediction.getHybridScore();
+        if (prediction == null) {
+            throw new AnomalyProcessingException("ML prediction returned null response");
+        }
 
-        // ✨ NEW: Save to database if severity is MEDIUM/HIGH/CRITICAL
-        if (prediction.getHybridScore() > 0.4) { // Threshold for saving
+        Double hybrid = prediction.getHybridScore();
+        if (hybrid == null)
+            hybrid = 0.0;
+
+        Double msif = prediction.getMsifScore();
+        if (msif == null)
+            msif = 0.0;
+
+        Double ple = prediction.getPleScore();
+        if (ple == null)
+            ple = 0.0;
+
+        String severity = prediction.getSeverity();
+        if (severity == null || severity.isBlank()) {
+            severity = severityFromScore(hybrid);
+        }
+
+        Double confidence = prediction.getConfidence();
+        if (confidence == null)
+            confidence = 0.0;
+
+        String fusionMethod = prediction.getFusionMethod();
+        if (fusionMethod == null || fusionMethod.isBlank())
+            fusionMethod = "weighted_ensemble";
+
+        String mlServiceVersion = prediction.getMlServiceVersion();
+        if (mlServiceVersion == null || mlServiceVersion.isBlank())
+            mlServiceVersion = "1.0.0";
+
+        Long processingTimeMs = prediction.getMlProcessingTimeMs();
+        if (processingTimeMs == null)
+            processingTimeMs = 0L;
+
+        String traceId = prediction.getTraceId();
+
+        // Save anomalies above threshold (tunable)
+        if (hybrid >= SAVE_THRESHOLD) {
             try {
                 AnomalyRecord anomalyRecord = AnomalyRecord.builder()
-                        .endpoint(logEntry.getApiName())
-                        .method(logEntry.getMethod() != null ? logEntry.getMethod() : "POST")
-                        .msifLstmScore(prediction.getMsifScore() != null ? prediction.getMsifScore() : 0.0)
-                        .pleGruScore(prediction.getPleScore() != null ? prediction.getPleScore() : 0.0)
-                        .hybridEnsembleScore(prediction.getHybridScore())
-                        .confidence(prediction.getConfidence())
-                        .severity(prediction.getSeverity())
-                        .fusionMethod(prediction.getFusionMethod() != null ? prediction.getFusionMethod()
-                                : "weighted_ensemble")
-                        .mlServiceVersion(
-                                prediction.getMlServiceVersion() != null ? prediction.getMlServiceVersion() : "1.0.0")
-                        .mlProcessingTimeMs(
-                                prediction.getMlProcessingTimeMs() != null ? prediction.getMlProcessingTimeMs() : 0L)
+                        .endpoint(endpoint)
+                        .method(record.getMethod())
+                        .msifLstmScore(msif)
+                        .pleGruScore(ple)
+                        .hybridEnsembleScore(hybrid)
+                        .confidence(confidence)
+                        .severity(severity)
+                        .fusionMethod(fusionMethod)
+                        .mlServiceVersion(mlServiceVersion)
+                        .mlProcessingTimeMs(processingTimeMs)
                         .status("ACTIVE")
                         .isAcknowledged(false)
                         .isResolved(false)
                         .isFalsePositive(false)
-                        .traceId(prediction.getTraceId())
+                        .traceId(traceId)
                         .serviceName("api-monitoring")
                         .environment("production")
                         .createdAt(LocalDateTime.now())
@@ -237,71 +171,53 @@ public class AnomalyService {
                         .build();
 
                 AnomalyRecord saved = anomalyRepository.save(anomalyRecord);
-                log.info("💾 Anomaly saved to database: id={}, endpoint={}, score={}, severity={}",
-                        saved.getId(),
-                        saved.getEndpoint(),
-                        saved.getHybridEnsembleScore(),
-                        saved.getSeverity());
-
+                log.info("Anomaly saved id={}, endpoint={}, score={}, severity={}",
+                        saved.getId(), saved.getEndpoint(), saved.getHybridEnsembleScore(), saved.getSeverity());
             } catch (Exception e) {
-                log.error("❌ Failed to save anomaly to database: {}", e.getMessage(), e);
-                // Don't throw - allow response to continue even if save fails
+                // Don't fail the request if DB write fails; return prediction to caller
+                log.error("Failed to save anomaly to DB for endpoint={}: {}", endpoint, e.getMessage(), e);
             }
         }
 
         AnomalyResponse response = new AnomalyResponse();
-        response.setApiName(logEntry.getApiName());
-        response.setFinalAnomalyScore(prediction.getHybridScore());
-        response.setSeverity(prediction.getSeverity());
-        response.setConfidence(prediction.getConfidence());
+        response.setApiName(endpoint);
+        response.setFinalAnomalyScore(hybrid);
+        response.setSeverity(severity);
+        response.setConfidence(confidence);
         response.setStatus("DETECTED");
         response.setTimestamp(LocalDateTime.now().toString());
-
         return response;
     }
 
-    public List<AnomalyResponse> detectBatchAnomalies(
-            LogEntryRequest[] logEntries) {
-        return Arrays.stream(logEntries)
-                .map(this::detectAnomaly)
-                .collect(Collectors.toList());
-    }
-
     public StatisticsResponse getStatistics(String apiName) {
+        String endpoint = (apiName == null) ? "" : apiName;
+
         StatisticsResponse stats = new StatisticsResponse();
-        stats.setApiName(apiName);
+        stats.setApiName(endpoint);
 
-        List<AnomalyRecord> anomalies = anomalyRepository.findByEndpoint(
-                apiName);
-        stats.setAnomalyCount((long) anomalies.size());
+        List<AnomalyRecord> anomalies = anomalyRepository.findByEndpoint(endpoint);
 
-        // Fix: Use getHybridEnsembleScore if getAnomalyScore doesn't exist
-        double avgScore = anomalies
-                .stream()
-                .mapToDouble(a -> a.getHybridEnsembleScore() != null
-                        ? a.getHybridEnsembleScore()
-                        : 0.0)
+        stats.setTotalLogs((long) anomalies.size());
+
+        long low = anomalies.stream().filter(a -> "LOW".equalsIgnoreCase(a.getSeverity())).count();
+        long medium = anomalies.stream().filter(a -> "MEDIUM".equalsIgnoreCase(a.getSeverity())).count();
+        long high = anomalies.stream().filter(a -> "HIGH".equalsIgnoreCase(a.getSeverity())).count();
+        long critical = anomalies.stream().filter(a -> "CRITICAL".equalsIgnoreCase(a.getSeverity())).count();
+
+        stats.setNormalCount(low);
+        stats.setSuspiciousCount(medium);
+
+        // Treat HIGH + CRITICAL as "anomalycount" for dashboard aggregation
+        stats.setAnomalyCount(high + critical);
+
+        double avgScore = anomalies.stream()
+                .map(AnomalyRecord::getHybridEnsembleScore)
+                .filter(Objects::nonNull)
+                .mapToDouble(Double::doubleValue)
                 .average()
                 .orElse(0.0);
         stats.setAvgAnomalyScore(avgScore);
 
-        long normalCount = anomalies
-                .stream()
-                .filter(a -> "LOW".equals(a.getSeverity()))
-                .count();
-        long suspiciousCount = anomalies
-                .stream()
-                .filter(a -> "MEDIUM".equals(a.getSeverity()))
-                .count();
-        long anomalyCount = anomalies
-                .stream()
-                .filter(a -> "HIGH".equals(a.getSeverity()))
-                .count();
-
-        stats.setNormalCount(normalCount);
-        stats.setSuspiciousCount(suspiciousCount);
-        stats.setAnomalyCount(anomalyCount); // Overwrites previous setAnomalyCount, logic intentional?
-        stats.setTotalLogs((long) anomalies.size());
         stats.setLast24hAnomalies((long) anomalies.size());
         stats.setAlertsTriggered(0L);
         stats.setErrorRateTrend("STABLE");
@@ -309,36 +225,40 @@ public class AnomalyService {
         return stats;
     }
 
-    public List<String> getMonitoredApis() {
-        List<Long> apiIds = metricRepository.findDistinctApiIds();
-        return apiIds
-                .stream()
-                .map(id -> "api_" + id)
-                .collect(Collectors.toList());
+    @Transactional
+    public boolean acknowledgeAnomaly(Long id) {
+        if (id == null)
+            return false;
+
+        try {
+            AnomalyRecord anomaly = anomalyRepository.findById(id).orElse(null);
+            if (anomaly == null)
+                return false;
+
+            // Mark acknowledged boolean + set a status string used by controller filter
+            // logic
+            anomaly.acknowledge("system");
+            anomaly.setStatus("ACKNOWLEDGED");
+
+            anomalyRepository.save(anomaly);
+            return true;
+        } catch (Exception e) {
+            log.error("Error acknowledging anomaly id={}: {}", id, e.getMessage(), e);
+            return false;
+        }
     }
 
     public long getActiveAlertsCount() {
-        return anomalyRepository
-                .findAll()
-                .stream()
-                .filter(a -> "ACTIVE".equals(a.getStatus()))
+        return anomalyRepository.findAll().stream()
+                .filter(a -> "ACTIVE".equalsIgnoreCase(a.getStatus()))
                 .count();
     }
 
-    public boolean acknowledgeAnomaly(Long id) {
-        try {
-            AnomalyRecord anomaly = anomalyRepository.findById(id).orElse(null);
-            if (anomaly != null) {
-                // Check if acknowledge method exists in AnomalyRecord, otherwise use setters
-                anomaly.setStatus("ACKNOWLEDGED");
-                anomalyRepository.save(anomaly);
-                return true;
-            }
-            return false;
-        } catch (Exception e) {
-            log.error("Error acknowledging anomaly {}: {}", id, e.getMessage());
-            return false;
-        }
+    public List<String> getMonitoredApis() {
+        List<Long> apiIds = metricRepository.findDistinctApiIds();
+        return apiIds.stream()
+                .map(id -> "api-" + id)
+                .collect(Collectors.toList());
     }
 
     private AnomalyResponse convertToResponse(AnomalyRecord record) {
@@ -346,11 +266,42 @@ public class AnomalyService {
         response.setId(record.getId());
         response.setApiName(record.getEndpoint());
         response.setSeverity(record.getSeverity());
-        // Fix: Use correct getter
         response.setFinalAnomalyScore(record.getHybridEnsembleScore());
         response.setConfidence(record.getConfidence());
         response.setStatus(record.getStatus());
-        response.setTimestamp(record.getCreatedAt().toString());
+        response.setTimestamp(record.getCreatedAt() != null ? record.getCreatedAt().toString() : null);
         return response;
+    }
+
+    private static String normalizeHttpMethod(String method) {
+        if (method == null || method.isBlank())
+            return "POST";
+        return method.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private static String severityFromScore(double score) {
+        if (score < TH_LOW)
+            return "LOW";
+        if (score < TH_MEDIUM)
+            return "MEDIUM";
+        if (score < TH_HIGH)
+            return "HIGH";
+        return (score >= TH_CRITICAL) ? "CRITICAL" : "HIGH";
+    }
+
+    private static long doubleToLongMs(double val) {
+        if (Double.isNaN(val) || Double.isInfinite(val))
+            return 0L;
+        return Math.max(0L, (long) val);
+    }
+
+    private static long doubleToLong(double val) {
+        if (Double.isNaN(val) || Double.isInfinite(val))
+            return 0L;
+        return (long) Math.max(0.0, val);
+    }
+
+    private static <T> T defaultIfNull(T value, T defaultValue) {
+        return value != null ? value : defaultValue;
     }
 }

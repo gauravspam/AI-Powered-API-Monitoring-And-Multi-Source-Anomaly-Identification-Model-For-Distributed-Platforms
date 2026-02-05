@@ -1,117 +1,65 @@
 package com.api.monitoring.backend.model;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "system_metrics")
+@Table(name = "systemmetrics")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class MetricRecord {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "api_id", nullable = false)
+    /**
+     * NOTE: your repositories/controllers use "apiId" and query methods like
+     * findByApiIdAndTimestampAfter(...).
+     * Keep the Java field name as apiId even if you later change the DB column
+     * during the migration cleanup.
+     */
+    @Column(name = "apiid", nullable = false)
     private Long apiId;
 
-    @Column()
-
+    @Column(name = "cpuusage")
     private Double cpuUsage;
 
-    @Column()
-
+    @Column(name = "memoryusage")
     private Double memoryUsage;
 
-    @Column()
-
+    @Column(name = "responsetimems")
     private Double responseTimeMs;
 
-    @Column()
-
+    @Column(name = "errorrate")
     private Double errorRate;
 
-    @Column(name = "request_count")
+    @Column(name = "requestcount")
     private Integer requestCount;
 
-    @Column(nullable = false)
+    @Column(name = "timestamp", nullable = false)
     private LocalDateTime timestamp;
 
-    // Constructors
-    public MetricRecord() {
-    }
+    @Column(name = "createdat")
+    private LocalDateTime createdAt;
 
-    public MetricRecord(Long apiId, Double cpuUsage, Double memoryUsage, Double responseTimeMs, Double errorRate,
-            Integer requestCount, LocalDateTime timestamp) {
-        this.apiId = apiId;
-        this.cpuUsage = cpuUsage;
-        this.memoryUsage = memoryUsage;
-        this.responseTimeMs = responseTimeMs;
-        this.errorRate = errorRate;
-        this.requestCount = requestCount;
-        this.timestamp = timestamp;
-    }
-
-    // Getters and Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Long getApiId() {
-        return apiId;
-    }
-
-    public void setApiId(Long apiId) {
-        this.apiId = apiId;
-    }
-
-    public Double getCpuUsage() {
-        return cpuUsage;
-    }
-
-    public void setCpuUsage(Double cpuUsage) {
-        this.cpuUsage = cpuUsage;
-    }
-
-    public Double getMemoryUsage() {
-        return memoryUsage;
-    }
-
-    public void setMemoryUsage(Double memoryUsage) {
-        this.memoryUsage = memoryUsage;
-    }
-
-    public Double getResponseTimeMs() {
-        return responseTimeMs;
-    }
-
-    public void setResponseTimeMs(Double responseTimeMs) {
-        this.responseTimeMs = responseTimeMs;
-    }
-
-    public Double getErrorRate() {
-        return errorRate;
-    }
-
-    public void setErrorRate(Double errorRate) {
-        this.errorRate = errorRate;
-    }
-
-    public Integer getRequestCount() {
-        return requestCount;
-    }
-
-    public void setRequestCount(Integer requestCount) {
-        this.requestCount = requestCount;
-    }
-
-    public LocalDateTime getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null)
+            createdAt = LocalDateTime.now();
+        if (timestamp == null)
+            timestamp = LocalDateTime.now();
     }
 }

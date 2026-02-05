@@ -53,27 +53,6 @@ services:
             retries: 5
         restart: unless-stopped
 
-    fluentd:
-        image: fluent/fluentd-kubernetes-daemonset:v1.16-debian-opensearch-1
-        build:
-            context: ../../fluentd
-            dockerfile: Dockerfile
-        container_name: fluentd
-        volumes:
-            - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf
-            - ./fluent-plugins:/fluentd/plugins
-        environment:
-            FLUENT_UID: 0
-        ports:
-            - "9880:9880"
-            - "24224:24224"
-        depends_on:
-            opensearch:
-                condition: service_healthy
-        networks:
-            - monitoring-net
-        restart: unless-stopped
-
     backend:
         build:
             context: ../../backend-service
@@ -86,8 +65,6 @@ services:
             SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
             LOGGING_LEVEL_ROOT: INFO
             LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE: DEBUG
-            FLUENTD_HOST: fluentd
-            FLUENTD_PORT: "9880"
             OPENSEARCH_ENABLED: "true"
             OPENSEARCH_HOST: opensearch
             OPENSEARCH_PORT: "9200"
@@ -95,29 +72,6 @@ services:
             OPENSEARCH_USERNAME: admin
             OPENSEARCH_PASSWORD: Admin@123
             ML_SERVICE_URL: http://host.docker.internal:9000
-            # SPRING_PROFILES_ACTIVE: docker
-            # SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring?currentSchema=public
-            # SPRING_DATASOURCE_USERNAME: api_monitor
-            # SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
-            # SPRING_FLYWAY_ENABLED: "true"
-            # SPRING_FLYWAY_BASELINE_ON_MIGRATE: "true"
-            # SPRING_FLYWAY_URL: jdbc:postgresql://postgres:5432/api_monitoring?currentSchema=public
-            # SPRING_FLYWAY_USER: api_monitor
-            # SPRING_FLYWAY_PASSWORD: api_monitor_pwd
-            # SPRING_FLYWAY_LOCATIONS: classpath:db/migration
-            # SPRING_FLYWAY_SCHEMAS: public
-            # LOGGING_LEVEL_ORG_FLYWAYDB: DEBUG
-            # SPRING_JPA_SHOW_SQL: "true"
-            # LOGGING_LEVEL_ROOT: INFO
-            # FLUENTD_HOST: fluentd
-            # FLUENTD_PORT: "9880"
-            # OPENSEARCH_ENABLED: "true"
-            # OPENSEARCH_HOST: opensearch
-            # OPENSEARCH_PORT: "9200"
-            # OPENSEARCH_SCHEME: http
-            # OPENSEARCH_USERNAME: admin
-            # OPENSEARCH_PASSWORD: Admin@123
-            # ML_SERVICE_URL: http://host.docker.internal:9000
         ports:
             - "8081:8080" # Use 8081 to avoid conflict with your running backend
         restart: unless-stopped
@@ -126,8 +80,6 @@ services:
                 condition: service_healthy
             opensearch:
                 condition: service_healthy
-            fluentd:
-                condition: service_started
         networks:
             - monitoring-net
         extra_hosts:
