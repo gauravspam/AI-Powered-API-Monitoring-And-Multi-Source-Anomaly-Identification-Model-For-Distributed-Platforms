@@ -1,3 +1,4 @@
-CREATE DATABASE api_monitoring;
-CREATE USER api_monitor WITH PASSWORD 'api_monitor_pwd';
 GRANT ALL PRIVILEGES ON DATABASE api_monitoring TO api_monitor;
+GRANT ALL ON SCHEMA public TO api_monitor;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO api_monitor;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO api_monitor;

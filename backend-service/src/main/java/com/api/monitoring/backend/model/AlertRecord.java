@@ -13,7 +13,7 @@ public class AlertRecord {
     @Column(name = "alert_name", nullable = false)
     private String alertName;
 
-    @Column(nullable = false)
+    @Column(name = "conditionexpression", nullable = false)
     private String condition;
 
     @Column()

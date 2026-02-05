@@ -1,4 +1,4 @@
-package com.example.apimonitoring.dto;
+package com.api.monitoring.backend.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;

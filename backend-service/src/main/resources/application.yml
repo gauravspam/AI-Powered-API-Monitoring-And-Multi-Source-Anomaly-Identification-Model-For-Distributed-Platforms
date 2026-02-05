@@ -4,7 +4,7 @@ spring:
         version: 1.0.0
 
     datasource:
-        url: jdbc:postgresql://localhost:5433/api_monitoring
+        url: jdbc:postgresql://postgres:5432/api_monitoring
         username: api_monitor
         password: api_monitor_pwd
         driver-class-name: org.postgresql.Driver
@@ -17,7 +17,7 @@ spring:
 
     jpa:
         hibernate:
-            ddl-auto: update
+            ddl-auto: validate
         properties:
             hibernate:
                 dialect: org.hibernate.dialect.PostgreSQLDialect

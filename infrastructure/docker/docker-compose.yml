@@ -60,9 +60,11 @@ services:
         container_name: api-monitoring-backend
         environment:
             SPRING_PROFILES_ACTIVE: docker
-            SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring?currentSchema=public
+            SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring
             SPRING_DATASOURCE_USERNAME: api_monitor
             SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
+            SPRING_FLYWAY_ENABLED: "true"
+            SPRING_JPA_HIBERNATE_DDL_AUTO: validate
             LOGGING_LEVEL_ROOT: INFO
             LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE: DEBUG
             OPENSEARCH_ENABLED: "true"
