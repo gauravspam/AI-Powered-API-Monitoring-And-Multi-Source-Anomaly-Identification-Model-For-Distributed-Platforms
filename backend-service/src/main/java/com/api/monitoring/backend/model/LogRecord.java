@@ -1,15 +1,6 @@
 package com.api.monitoring.backend.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Index;
-import jakarta.persistence.PrePersist;
-import jakarta.persistence.PreUpdate;
-import jakarta.persistence.SequenceGenerator;
-import jakarta.persistence.Table;
+import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.Map;
 import lombok.AllArgsConstructor;
@@ -22,14 +13,11 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(name = "apilogs", indexes = {
-        @Index(name = "idxapilogsendpoint", columnList = "endpoint"),
-        @Index(name = "idxapilogsstatuscode", columnList = "statuscode"),
-        @Index(name = "idxapilogscreatedat", columnList = "createdat DESC"),
-        @Index(name = "idxapilogstraceid", columnList = "traceid"),
-        @Index(name = "idxapilogsendpointcreated", columnList = "endpoint, createdat DESC"),
-        @Index(name = "idxapilogsservicecreated", columnList = "servicename, createdat DESC"),
-        @Index(name = "idxapilogsunprocessed", columnList = "isprocessed, createdat")
+@Table(name = "api_logs", indexes = { 
+        @Index(name = "idx_api_logs_endpoint", columnList = "endpoint"),
+        @Index(name = "idx_api_logs_status_code", columnList = "status_code"),
+        @Index(name = "idx_api_logs_created_at", columnList = "created_at DESC"),
+        @Index(name = "idx_api_logs_trace_id", columnList = "trace_id")
 })
 @Data
 @NoArgsConstructor
@@ -40,140 +28,139 @@ import org.hibernate.type.SqlTypes;
 public class LogRecord {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "apilogsidseq")
-    @SequenceGenerator(name = "apilogsidseq", sequenceName = "apilogsidseq", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "endpoint", nullable = false, length = 500)
     private String endpoint;
 
-    @Column(name = "httpmethod", nullable = false, length = 10)
+    @Column(name = "http_method", nullable = false, length = 10)
     private String method;
 
-    @Column(name = "statuscode", nullable = false)
+    @Column(name = "status_code", nullable = false)
     private Integer statusCode;
 
-    @Column(name = "responsetimems", nullable = false)
+    @Column(name = "response_time_ms", nullable = false)
     private Long responseTimeMs;
 
-    @Column(name = "requestsizebytes")
+    @Column(name = "request_size_bytes")
     private Long requestSizeBytes;
 
-    @Column(name = "responsesizebytes")
+    @Column(name = "response_size_bytes")
     private Long responseSizeBytes;
 
-    @Column(name = "cpuusagepercent")
+    @Column(name = "cpu_usage_percent")
     private Double cpuUsage;
 
-    @Column(name = "memoryusagepercent")
+    @Column(name = "memory_usage_percent")
     private Double memoryUsage;
 
-    @Column(name = "diskiobytes")
+    @Column(name = "disk_io_bytes")
     private Long diskIo;
 
-    @Column(name = "networkiobytes")
+    @Column(name = "network_io_bytes")
     private Long networkIo;
 
-    @Column(name = "errorrate")
+    @Column(name = "error_rate")
     private Double errorRate;
 
-    @Column(name = "errorcount")
+    @Column(name = "error_count")
     private Integer errorCount;
 
-    @Column(name = "errormessage", columnDefinition = "TEXT")
+    @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
-    @Column(name = "stacktrace", columnDefinition = "TEXT")
+    @Column(name = "stack_trace", columnDefinition = "TEXT")
     private String stackTrace;
 
-    @Column(name = "requestcount")
+    @Column(name = "request_count")
     private Integer requestCount;
 
-    @Column(name = "userid", length = 255)
+    @Column(name = "user_id")
     private String userId;
 
-    @Column(name = "ipaddress")
+    @Column(name = "ip_address", columnDefinition = "inet")
     private String ipAddress;
 
-    @Column(name = "useragent", columnDefinition = "TEXT")
+    @Column(name = "user_agent", columnDefinition = "TEXT")
     private String userAgent;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "requestbody", columnDefinition = "jsonb")
+    @Column(name = "request_body", columnDefinition = "jsonb")
     private Map<String, Object> requestBody;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "responsebody", columnDefinition = "jsonb")
+    @Column(name = "response_body", columnDefinition = "jsonb")
     private Map<String, Object> responseBody;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "requestheaders", columnDefinition = "jsonb")
+    @Column(name = "request_headers", columnDefinition = "jsonb")
     private Map<String, Object> requestHeaders;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "responseheaders", columnDefinition = "jsonb")
+    @Column(name = "response_headers", columnDefinition = "jsonb")
     private Map<String, Object> responseHeaders;
 
-    @Column(name = "traceid", length = 255)
+    @Column(name = "trace_id")
     private String traceId;
 
-    @Column(name = "spanid", length = 255)
+    @Column(name = "span_id")
     private String spanId;
 
-    @Column(name = "parentspanid", length = 255)
+    @Column(name = "parent_span_id")
     private String parentSpanId;
 
-    @Column(name = "servicename", nullable = false, length = 255)
+    @Column(name = "service_name", nullable = false)
     private String serviceName;
 
-    @Column(name = "serviceversion", length = 50)
+    @Column(name = "service_version")
     private String serviceVersion;
 
     @Builder.Default
-    @Column(name = "environment", length = 50)
+    @Column(name = "environment")
     private String environment = "production";
 
-    @Column(name = "hourofday")
+    @Column(name = "hour_of_day")
     private Integer hourOfDay;
 
-    @Column(name = "dayofweek")
+    @Column(name = "day_of_week")
     private Integer dayOfWeek;
 
-    @Column(name = "isweekend")
+    @Column(name = "is_weekend")
     private Boolean isWeekend;
 
-    @Column(name = "isbusinesshours")
+    @Column(name = "is_business_hours")
     private Boolean isBusinessHours;
 
     @Builder.Default
-    @Column(name = "isprocessed", nullable = false)
+    @Column(name = "is_processed", nullable = false)
     private Boolean isProcessed = false;
 
-    @Column(name = "processedat")
+    @Column(name = "processed_at")
     private LocalDateTime processedAt;
 
-    @Column(name = "anomalydetectionid")
+    @Column(name = "anomaly_detection_id")
     private Long anomalyDetectionId;
 
-    @Column(name = "mlserviceversion", length = 50)
+    @Column(name = "ml_service_version")
     private String mlServiceVersion;
 
-    @Column(name = "createdat", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
-    @Column(name = "createdby", length = 255)
+    @Column(name = "created_by")
     private String createdBy;
 
-    @Column(name = "updatedat")
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Column(name = "updatedby", length = 255)
+    @Column(name = "updated_by")
     private String updatedBy;
 
-    @Column(name = "deletedat")
+    @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    @Column(name = "deletedby", length = 255)
+    @Column(name = "deleted_by")
     private String deletedBy;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -182,31 +169,14 @@ public class LogRecord {
 
     @PrePersist
     protected void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
         if (createdAt == null)
-            createdAt = now;
+            createdAt = LocalDateTime.now();
         if (updatedAt == null)
-            updatedAt = now;
+            updatedAt = LocalDateTime.now();
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
-    }
-
-    public void markAsProcessed(Long anomalyDetectionId, String mlServiceVersion) {
-        this.isProcessed = true;
-        this.processedAt = LocalDateTime.now();
-        this.anomalyDetectionId = anomalyDetectionId;
-        this.mlServiceVersion = mlServiceVersion;
-    }
-
-    public void delete(String deletedBy) {
-        this.deletedAt = LocalDateTime.now();
-        this.deletedBy = deletedBy;
-    }
-
-    public boolean isDeleted() {
-        return deletedAt != null;
     }
 }

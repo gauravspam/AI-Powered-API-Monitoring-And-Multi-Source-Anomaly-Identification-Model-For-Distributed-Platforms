@@ -1,5 +1,6 @@
 package com.api.monitoring.backend.controller;
 
+import com.api.monitoring.backend.dto.MetricIngestionDTO;
 import com.api.monitoring.backend.dto.MetricIngestDTO;
 import com.api.monitoring.backend.model.MetricRecord;
 import com.api.monitoring.backend.repository.MetricRepository;
@@ -14,30 +15,55 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/metrics")
+
 public class MetricsController {
 
     @Autowired
     private MetricRepository metricRepository;
 
+    @PostMapping("/api/metrics")
+    public ResponseEntity<MetricRecord> ingestMetric(@RequestBody MetricIngestionDTO dto) {
+        MetricRecord metric = new MetricRecord();
+        metric.setApiLogId(dto.getApiId());
+        metric.setServiceName(dto.getServiceName() != null ? dto.getServiceName() : "default-service"); // ADD THIS
+        metric.setCpuUsagePercent(dto.getCpuUsage());
+        metric.setMemoryUsagePercent(dto.getMemoryUsage());
+        metric.setDiskIoBytes(dto.getDiskIoBytes());
+        metric.setNetworkIoBytes(dto.getNetworkIoBytes());
+        metric.setResponseTimeMs(dto.getResponseTimeMs() != null ? dto.getResponseTimeMs().longValue() : null);
+        metric.setRequestCount(dto.getRequestCount());
+        metric.setErrorRate(dto.getErrorRate());
+        metric.setMetricTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
+        metric.setCreatedAt(LocalDateTime.now());
+
+        MetricRecord saved = metricRepository.save(metric);
+        return ResponseEntity.ok(saved);
+    }
+
     @PostMapping
     public ResponseEntity<Map<String, Object>> ingestMetric(@RequestBody MetricIngestDTO dto) {
         MetricRecord metric = new MetricRecord();
-        metric.setApiId(dto.getApiId());
-        metric.setCpuUsage(dto.getCpuUsage());
-        metric.setMemoryUsage(dto.getMemoryUsage());
-        metric.setResponseTimeMs(dto.getResponseTimeMs());
+        metric.setApiLogId(dto.getApiId());
+        metric.setServiceName(dto.getServiceName() != null ? dto.getServiceName() : "default-service"); // ADD THIS
+        metric.setCpuUsagePercent(dto.getCpuUsage());
+        metric.setMemoryUsagePercent(dto.getMemoryUsage());
+        metric.setDiskIoBytes(dto.getDiskIoBytes()); // ADD THIS
+        metric.setNetworkIoBytes(dto.getNetworkIoBytes()); // ADD THIS
+        metric.setResponseTimeMs(
+                dto.getResponseTimeMs() != null ? dto.getResponseTimeMs().longValue() : null);
         metric.setErrorRate(dto.getErrorRate());
         metric.setRequestCount(dto.getRequestCount());
-        metric.setTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
-        
+        metric.setMetricTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
+        metric.setCreatedAt(LocalDateTime.now()); // ADD THIS
+
         MetricRecord saved = metricRepository.save(metric);
-        
+
         Map<String, Object> response = new HashMap<>();
         response.put("status", "success");
         response.put("message", "Metric saved successfully");
         response.put("id", saved.getId());
-        response.put("timestamp", saved.getTimestamp());
-        
+        response.put("timestamp", saved.getMetricTimestamp());
+
         return ResponseEntity.ok(response);
     }
 
@@ -46,34 +72,35 @@ public class MetricsController {
         int saved = 0;
         for (MetricIngestDTO dto : metrics) {
             MetricRecord metric = new MetricRecord();
-            metric.setApiId(dto.getApiId());
-            metric.setCpuUsage(dto.getCpuUsage());
-            metric.setMemoryUsage(dto.getMemoryUsage());
-            metric.setResponseTimeMs(dto.getResponseTimeMs());
+            metric.setApiLogId(dto.getApiId());
+            metric.setCpuUsagePercent(dto.getCpuUsage());
+            metric.setMemoryUsagePercent(dto.getMemoryUsage());
+            metric.setResponseTimeMs(
+                    dto.getResponseTimeMs() != null ? dto.getResponseTimeMs().longValue() : null);
             metric.setErrorRate(dto.getErrorRate());
             metric.setRequestCount(dto.getRequestCount());
-            metric.setTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
-            
+            metric.setMetricTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
+
             metricRepository.save(metric);
             saved++;
         }
-        
+
         Map<String, Object> response = new HashMap<>();
         response.put("status", "success");
         response.put("message", "Batch ingestion completed");
         response.put("count", saved);
-        
+
         return ResponseEntity.ok(response);
     }
 
     @GetMapping("/recent")
     public ResponseEntity<List<MetricRecord>> getRecentMetrics(
             @RequestParam(defaultValue = "100") int limit) {
-        return ResponseEntity.ok(metricRepository.findTop100ByOrderByTimestampDesc());
+        return ResponseEntity.ok(metricRepository.findTop100ByOrderByMetricTimestampDesc());
     }
 
     @GetMapping("/api/{apiId}")
     public ResponseEntity<List<MetricRecord>> getMetricsByApiId(@PathVariable Long apiId) {
-        return ResponseEntity.ok(metricRepository.findByApiId(apiId));
+        return ResponseEntity.ok(metricRepository.findByApiLogId(apiId));
     }
 }

@@ -12,15 +12,15 @@ import java.util.Optional;
 
 @Repository
 public interface TraceRepository extends JpaRepository<TraceRecord, Long> {
-    
-    List<TraceRecord> findAllByOrderByTimestampDesc(Pageable pageable);
-    
+
+    List<TraceRecord> findAllByOrderByStartTimeDesc(Pageable pageable);
+
     Optional<TraceRecord> findByTraceId(String traceId);
-    
-    List<TraceRecord> findByServiceNameOrderByTimestampDesc(String serviceName, Pageable pageable);
-    
+
+    List<TraceRecord> findByServiceNameOrderByStartTimeDesc(String serviceName, Pageable pageable);
+
     Long countByServiceName(String serviceName);
-    
+
     // Use 'duration' not 'durationMs' - it's the Java field name!
     @Query("SELECT AVG(t.duration) FROM TraceRecord t WHERE t.serviceName = :serviceName")
     Double averageDurationByServiceName(@Param("serviceName") String serviceName);

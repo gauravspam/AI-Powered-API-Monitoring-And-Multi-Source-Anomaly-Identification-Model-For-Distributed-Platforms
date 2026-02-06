@@ -38,11 +38,11 @@ public class FeatureEngineer {
             return msifFeatures;
         }
 
-        LocalDateTime baseTime = metrics.get(0).getTimestamp();
+        LocalDateTime baseTime = metrics.get(0).getMetricTimestamp();
 
         // Distribute metrics into buckets
         for (MetricRecord metric : metrics) {
-            long minutesDiff = ChronoUnit.MINUTES.between(baseTime, metric.getTimestamp());
+            long minutesDiff = ChronoUnit.MINUTES.between(baseTime, metric.getMetricTimestamp());
             if (minutesDiff >= 0 && minutesDiff < 60) {
                 minuteBuckets.get((int) minutesDiff).add(metric);
             }
@@ -90,7 +90,7 @@ public class FeatureEngineer {
 
         // Distribute metrics into buckets
         for (MetricRecord metric : metrics) {
-            long minutesDiff = ChronoUnit.MINUTES.between(baseTime, metric.getTimestamp());
+            long minutesDiff = ChronoUnit.MINUTES.between(baseTime, metric.getMetricTimestamp());
             if (minutesDiff >= 0 && minutesDiff < 1440) {
                 minuteBuckets.get((int) minutesDiff).add(metric);
             }
@@ -175,7 +175,7 @@ public class FeatureEngineer {
             return 0.0;
 
         return metrics.stream()
-                .map(m -> m.getCpuUsage() != null ? m.getCpuUsage() : 0.0)
+                .map(m -> m.getCpuUsagePercent() != null ? m.getCpuUsagePercent() : 0.0)
                 .mapToDouble(Double::doubleValue)
                 .average()
                 .orElse(0.0);
@@ -189,7 +189,7 @@ public class FeatureEngineer {
             return 0.0;
 
         return metrics.stream()
-                .map(m -> m.getMemoryUsage() != null ? m.getMemoryUsage() : 0.0)
+                .map(m -> m.getMemoryUsagePercent() != null ? m.getMemoryUsagePercent() : 0.0)
                 .mapToDouble(Double::doubleValue)
                 .average()
                 .orElse(0.0);

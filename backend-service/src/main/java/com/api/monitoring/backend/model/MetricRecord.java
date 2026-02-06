@@ -5,61 +5,51 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "systemmetrics")
+@Table(name = "system_metrics")
 @Data
-@NoArgsConstructor
-@AllArgsConstructor
-@Builder
 public class MetricRecord {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /**
-     * NOTE: your repositories/controllers use "apiId" and query methods like
-     * findByApiIdAndTimestampAfter(...).
-     * Keep the Java field name as apiId even if you later change the DB column
-     * during the migration cleanup.
-     */
-    @Column(name = "apiid", nullable = false)
-    private Long apiId;
+    @Column(name = "api_log_id")
+    private Long apiLogId;
 
-    @Column(name = "cpuusage")
-    private Double cpuUsage;
+    @Column(name = "service_name", nullable = false)
+    private String serviceName;
 
-    @Column(name = "memoryusage")
-    private Double memoryUsage;
+    @Column(name = "endpoint")
+    private String endpoint;
 
-    @Column(name = "responsetimems")
-    private Double responseTimeMs;
+    @Column(name = "cpu_usage_percent")
+    private Double cpuUsagePercent;
 
-    @Column(name = "errorrate")
-    private Double errorRate;
+    @Column(name = "memory_usage_percent")
+    private Double memoryUsagePercent;
 
-    @Column(name = "requestcount")
+    @Column(name = "disk_io_bytes")
+    private Long diskIoBytes;
+
+    @Column(name = "network_io_bytes")
+    private Long networkIoBytes;
+
+    @Column(name = "response_time_ms")
+    private Long responseTimeMs;
+
+    @Column(name = "request_count")
     private Integer requestCount;
 
-    @Column(name = "timestamp", nullable = false)
-    private LocalDateTime timestamp;
+    @Column(name = "error_rate")
+    private Double errorRate;
 
-    @Column(name = "createdat")
+    @Column(name = "metric_timestamp", nullable = false)
+    private LocalDateTime metricTimestamp;
+
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        if (createdAt == null)
-            createdAt = LocalDateTime.now();
-        if (timestamp == null)
-            timestamp = LocalDateTime.now();
-    }
 }

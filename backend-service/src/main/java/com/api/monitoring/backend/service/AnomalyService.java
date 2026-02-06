@@ -255,7 +255,7 @@ public class AnomalyService {
     }
 
     public List<String> getMonitoredApis() {
-        List<Long> apiIds = metricRepository.findDistinctApiIds();
+        List<Long> apiIds = metricRepository.findDistinctApiLogIds();
         return apiIds.stream()
                 .map(id -> "api-" + id)
                 .collect(Collectors.toList());

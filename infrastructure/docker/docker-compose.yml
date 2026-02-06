@@ -64,6 +64,7 @@ services:
             SPRING_DATASOURCE_USERNAME: api_monitor
             SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
             SPRING_FLYWAY_ENABLED: "true"
+            SPRING_FLYWAY_BASELINE_ON_MIGRATE: "false"
             SPRING_JPA_HIBERNATE_DDL_AUTO: validate
             LOGGING_LEVEL_ROOT: INFO
             LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE: DEBUG

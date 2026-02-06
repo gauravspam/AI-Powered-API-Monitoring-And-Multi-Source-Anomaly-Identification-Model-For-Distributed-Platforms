@@ -13,18 +13,29 @@ public class AlertRecord {
     @Column(name = "alert_name", nullable = false)
     private String alertName;
 
-    @Column(name = "conditionexpression", nullable = false)
-    private String condition;
+    @Column(name = "alert_description", columnDefinition = "TEXT")
+    private String alertDescription;
 
-    @Column()
+    @Column(name = "condition_type", nullable = false)
+    private String conditionType;
 
-    private Double threshold;
+    @Column(name = "condition_expression", nullable = false, columnDefinition = "TEXT")
+    private String conditionExpression;
 
-    @Column(nullable = false)
-    private Boolean enabled;
+    @Column(name = "threshold_value")
+    private Double thresholdValue;
+
+    @Column(name = "severity_level", nullable = false)
+    private String severityLevel;
+
+    @Column(name = "is_enabled", nullable = false)
+    private Boolean enabled = true;
 
     @Column(name = "notification_channels", columnDefinition = "jsonb")
     private String notificationChannels;
+
+    @Column(name = "notification_recipients", columnDefinition = "jsonb")
+    private String notificationRecipients;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
@@ -36,14 +47,18 @@ public class AlertRecord {
     public AlertRecord() {
     }
 
-    public AlertRecord(String alertName, String condition, Double threshold, Boolean enabled,
+    public AlertRecord(String alertName, String conditionType, String conditionExpression,
+            Double thresholdValue, String severityLevel, Boolean enabled,
             String notificationChannels) {
         this.alertName = alertName;
-        this.condition = condition;
-        this.threshold = threshold;
+        this.conditionType = conditionType;
+        this.conditionExpression = conditionExpression;
+        this.thresholdValue = thresholdValue;
+        this.severityLevel = severityLevel;
         this.enabled = enabled;
         this.notificationChannels = notificationChannels;
         this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
     }
 
     // Getters and Setters
@@ -63,20 +78,44 @@ public class AlertRecord {
         this.alertName = alertName;
     }
 
-    public String getCondition() {
-        return condition;
+    public String getAlertDescription() {
+        return alertDescription;
     }
 
-    public void setCondition(String condition) {
-        this.condition = condition;
+    public void setAlertDescription(String alertDescription) {
+        this.alertDescription = alertDescription;
     }
 
-    public Double getThreshold() {
-        return threshold;
+    public String getConditionType() {
+        return conditionType;
     }
 
-    public void setThreshold(Double threshold) {
-        this.threshold = threshold;
+    public void setConditionType(String conditionType) {
+        this.conditionType = conditionType;
+    }
+
+    public String getConditionExpression() {
+        return conditionExpression;
+    }
+
+    public void setConditionExpression(String conditionExpression) {
+        this.conditionExpression = conditionExpression;
+    }
+
+    public Double getThresholdValue() {
+        return thresholdValue;
+    }
+
+    public void setThresholdValue(Double thresholdValue) {
+        this.thresholdValue = thresholdValue;
+    }
+
+    public String getSeverityLevel() {
+        return severityLevel;
+    }
+
+    public void setSeverityLevel(String severityLevel) {
+        this.severityLevel = severityLevel;
     }
 
     public Boolean getEnabled() {
@@ -95,6 +134,14 @@ public class AlertRecord {
         this.notificationChannels = notificationChannels;
     }
 
+    public String getNotificationRecipients() {
+        return notificationRecipients;
+    }
+
+    public void setNotificationRecipients(String notificationRecipients) {
+        this.notificationRecipients = notificationRecipients;
+    }
+
     public LocalDateTime getCreatedAt() {
         return createdAt;
     }
@@ -109,5 +156,14 @@ public class AlertRecord {
 
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    // Compatibility methods if older code uses them
+    public Double getThreshold() {
+        return thresholdValue;
+    }
+
+    public void setThreshold(Double threshold) {
+        this.thresholdValue = threshold;
     }
 }
