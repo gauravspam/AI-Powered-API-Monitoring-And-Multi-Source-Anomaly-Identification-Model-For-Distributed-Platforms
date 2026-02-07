@@ -1,11 +1,7 @@
 FROM node:22-alpine
-
 WORKDIR /app
-COPY package.json package-lock.json* ./ 
-RUN npm install --production || npm install --production
+COPY package.json package-lock.json ./
+RUN npm install --production
 COPY . .
-
-EXPOSE 8080
+EXPOSE 8082
 CMD ["npm", "start"]
-
-

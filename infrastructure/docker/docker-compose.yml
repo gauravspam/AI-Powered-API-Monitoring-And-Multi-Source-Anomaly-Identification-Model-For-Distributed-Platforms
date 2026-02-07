@@ -111,6 +111,29 @@ services:
             - monitoring-net
         restart: unless-stopped
 
+    fake-server:
+        build:
+            context: ../../frontend/fake-server
+            dockerfile: Dockerfile
+        container_name: fake-server
+        ports:
+            - "8082:8082"
+        networks:
+            - monitoring-net
+        healthcheck:
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--spider",
+                    "-q",
+                    "http://localhost:8082/health",
+                ]
+            interval: 10s
+            timeout: 5s
+            retries: 3
+        restart: unless-stopped
+
 networks:
     monitoring-net:
 
