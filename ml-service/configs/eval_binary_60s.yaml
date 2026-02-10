@@ -1,0 +1,36 @@
+# Binary evaluation (60s) using your Flask endpoint
+endpoint:
+  url: "http://127.0.0.1:9000/predict/multimodal"
+  timeout_s: 15
+
+window:
+  size_s: 60
+
+train_ticket:
+  root: "data/raw/train_ticket/AIOps挑战赛数据"
+  fault_list_csv: "data/raw/train_ticket/故障整理（预赛）.csv"
+  timezone: "Asia/Shanghai"
+  # Choose days you want to include; start with a small set, then expand.
+  days:
+    - "2020_04_11"
+    - "2020_04_20"
+    - "2020_04_21"
+    - "2020_04_22"
+    - "2020_04_23"
+  prepared_dir: "data/prepared/train_ticket_60s_entity"
+
+splits:
+  # Date-folder split to avoid temporal leakage.
+  train_days: ["2020_04_11", "2020_04_20", "2020_04_21"]
+  val_days:   ["2020_04_22"]
+  test_days:  ["2020_04_23"]
+
+# How to reduce per-window features into the 3 scalars expected by your API.
+# (API then applies log1p internally.)
+featurization:
+  metrics_scalar:
+    method: "mean_abs"  # mean(|value|) within window after grouping
+  traces_scalar:
+    method: "count"     # count spans in window (if trace files available)
+  logs_scalar:
+    method: "zero"      # you don't have logs for TrainTicket in this pipeline

@@ -1,214 +1,245 @@
-
-*~
-._*
-*$py.class
-.AppleDouble
-backend/**/build/
-backend/.env
-backend/**/.gradle/
-backend/**/gradle-app.setting
-backend/**/!gradle-wrapper.jar
+# =============================
+# Java/Spring Boot Backend
+# =============================
+backend-service/bin/
 backend-service/build/
 backend-service/.gradle/
-backend-service/.idea/
-
-# Backend Service (Java/Spring Boot)
-backend-service/*.log
 backend-service/out/
-backend/**/target/
-*.backup
-*.bak
-**/build/
-build/
-*.class
-.classpath
-*.code-workspace
-*.coverage
-coverage/
+backend-service/*.log
+backend-service/*.log.*
+backend-service/target/
 
-# Coverage Reports
-*.crt
-*.csv
-data/
+# Gradle (keep wrapper jar)
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+gradle-app.setting
 
-# Database
-*.db
-desktop.ini
-dist/
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
 
-# Docker
-docker-compose.override.yml
-*.dockerignore
-.DS_Store
-.DS_Store?
-*.ear
+# =============================
+# Python/ML Service
+# =============================
+ml-service/__pycache__/
+ml-service/*.pyc
+ml-service/*.pyo
+ml-service/*.pyd
+ml-service/.pytest_cache/
+ml-service/.ipynb_checkpoints/
+ml-service/.env
+ml-service/venv/
+ml-service/venv*/
+ml-service/env/
+ml-service/logs/
+ml-service/data/
+ml-service/kaggle_api_dataset/
+ml-service/tf_gpu/
+ml-service/tf_gpu*/
+ml-service/test/
+ml-service/test*/
+ml-service/notebooks/.ipynb_checkpoints/
+
+# Python general
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.cache/
+.eggs/
 *.egg-info/
-ehthumbs.db
-*.env
-.env
-env/
-ENV/
+dist/
+build/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg
+MANIFEST
 
-# Environment
-# Environment Variables
-.env.*.local
-.env.local
-.factorypath
-fluent-bit/logs/
+# Jupyter notebooks
+.ipynb_checkpoints/
 
-# Fluentd/Fluent Bit
-fluentd/logs/
+# =============================
+# Node.js/Frontend
+# =============================
+frontend/node_modules/
+frontend/.npm/
+frontend/.pnpm-store/
+frontend/.yarn/
+frontend/.vite/
 frontend/dist/
 frontend/dist-ssr/
 frontend/.env
-frontend/node_modules/
-frontend/.npm/
-frontend/package.json
-frontend/package-lock.json
-frontend/.pnpm-store/
-frontend/.vite/
-frontend/.yarn/
-hs_err_pid*
 
-# IDE
+# Node.js general
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.nyc_output/
+
+# =============================
+# IDE and Editors
+# =============================
 .idea/
-
-# IDE and Editor Files
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
 *.iml
+*.iws
+*.ipr
+*.project
+.factorypath
+.settings/
+.classpath
+*.code-workspace
+*.sublime-project
+*.sublime-workspace
 
-# Infrastructure
+# =============================
+# Operating System
+# =============================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+ntuser.dat
+*.lnk
+
+# Linux
+*~
+
+# macOS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+*.DS_Store
+
+# =============================
+# Logs and Temp Files
+# =============================
+*.log
+*.log.*
+logs/
+log/
+*.tmp
+*.temp
+temp/
+tmp/
+*.backup
+*.bak
+
+# =============================
+# Database
+# =============================
+*.db
+*.sqlite
+*.sqlite3
+*.mdb
+*.accdb
+
+# =============================
+# Docker
+# =============================
+docker-compose.override.yml
+*.dockerignore
+Dockerfile*
+docker/
+opensearch-data/
+postgres-data/
+
+# =============================
+# Infrastructure/Terraform
+# =============================
 infrastructure/.terraform/
 infrastructure/*.tfstate
 infrastructure/*.tfstate.backup
 
-# In ml-service/.gitignore
-*.ipr
-*.iws
-*.jar
-
-# Java Build Artifacts
-*.jks
-backend-service/*.json
-kaggle_api_dataset/
+# =============================
+# Security/Credentials
+# =============================
+.env
+.env.local
+.env.*.local
+secrets/
 *.key
-*.lcov
-lerna-debug.log*
-*.log
-*.log.*
-logs/
+*.pem
+*.crt
+*.p12
+*.jks
+vault-token
 
-# Logs
-.LSOverride
-
-# Models
-ml-models/**/*$*.py
-ml-models/**/build/
-ml-models/**/dist/
-ml-models/**/*.egg-info/
-ml-models/**/.env
-ml-models/**/env/
-ml-models/.env
-ml-models/**/models/*.pth
-ml-models/**/.mypy_cache/
-ml-models/**/*.onnx
-ml-models/**/*.pkl
-ml-models/**/*.pt
-ml-models/**/__pycache__/
-ml-models/**/*.py[cod]
-ml-models/**/.pytest_cache/
-ml-models/**/.ruff_cache/
-ml-models/**/venv/
-ml-service/data/
-ml-service/.env
-ml-service/.ipynb_checkpoints/
-ml-service/kaggle_api_dataset/
-ml-service/logs/
-ml-service/notebooks/.ipynb_checkpoints/
-ml-service/*.pyc
-ml-service/__pycache__/
-ml-service/.pytest_cache/
-ml-service/NAB
-ml-service/tf_gpu
-ml-service/data/
-extraml-service/kaggle_api_dataset/
-ml-service/logs/
-ml-service/data/NAB
-
-# ML Service (Python/Flask)
-ml-service/venv*/
-ml-service/venv/
-*.nar
-ml-service/test/
-ml-service/test*/
-ml-service/tf_gpu/
-ml-service/tf_gpu*/
-ml-service/env/
-**/__pycache__/
-**/*.pyc
-**/*.pyo
-*:Zone.Identifier
+# =============================
+# ML Models and Large Files
+# =============================
+# Use Git LFS for these file types
+*.h5
+*.hdf5
+*.pth
+*.pt
+*.pkl
+*.joblib
+*.onnx
+models/
+checkpoints/
+ml-service/models/
 
 # Data files
-ml-service/data/*.csv
-ml-service/data/*.parquet
-ml-service/data/external_datasets/
+*.csv
+*.parquet
+data/
+external_datasets/
 
-# TensorFlow large files
-**/*.so
-**/*.so.*
-**/*.dll
-
-# Node.js and Frontend
-npm-debug.log*
-.nyc_output/
-opensearch-data/
-
-# OpenSearch Data (if stored locally)
-# Operating System Files
-*.p12
-*.pem
-pnpm-debug.log*
-*.pos
-postgres-data/
-
-# PostgreSQL Data (if stored locally)
-previous-compilation-data.bin
-.project
-*.pyc
-__pycache__/
-*.py[cod]
-
-# Python
-.Python
-# Python and ML Models
-secrets/
-
-# Secrets and Credentials
-.settings/
+# TensorFlow
 *.so
-.Spotlight-V100
-*.sqlite
-*.sqlite3
-*.sublime-project
-*.sublime-workspace
-*.swo
-*.swp
-temp/
+*.so.*
+*.dll
+*.dylib
 
-# Temporary Files
-test-results/
-
-# Test Results
-*.test-result.xml
-Thumbs.db
-*.tmp
-tmp/
-.Trashes
-vault-token
-.venv/
-venv/
-.vscode/
+# =============================
+# Build Artifacts (General)
+# =============================
+bin/
+obj/
+build/
+dist/
+out/
+*.class
+*.jar
 *.war
-yarn-debug.log*
-yarn-error.log*
-*.pth
+*.ear
+*.nar
+*.hprof
+*.jnilib
