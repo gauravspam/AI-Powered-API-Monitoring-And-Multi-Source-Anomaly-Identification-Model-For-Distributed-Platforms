@@ -1,4 +1,4 @@
-we are using synthetic logs(machine generated fake logs) for training the model 
+we are using synthetic logs for training the model 
 
 step 1:
 ```bash
