@@ -1,0 +1,23 @@
+{
+    "trainticket": {
+        "root": "data/raw/train_ticket/AIOps挑战赛数据"
+    },
+    "window": {
+        "sizes": [
+            60000
+        ]
+    },
+    "splits": {
+        "train_days": [
+            "2020_04_11",
+            "2020_04_20",
+            "2020_04_21"
+        ],
+        "val_days": [
+            "2020_04_22"
+        ],
+        "test_days": [
+            "2020_04_23"
+        ]
+    }
+}

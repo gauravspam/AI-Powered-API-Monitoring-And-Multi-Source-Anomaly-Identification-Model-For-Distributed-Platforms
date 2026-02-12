@@ -1,73 +1,93 @@
+"""
+PLE-GRU Model for multimodal anomaly detection.
+Now accepts 384-dim concatenated embeddings (128 × 3 modalities).
+"""
+
 import torch
 import torch.nn as nn
 
 
-class VariableInputPLE_GRU(nn.Module):
+class VariableInputPLEGRU(nn.Module):
     """
-    Probability Label Estimation GRU (PLE-GRU).
-    Uses multiple 'Expert' GRUs to learn distinct patterns from different modalities.
+    Probabilistic Label Enhancement GRU.
+
+    Input: (batch, seq_len, 384) - concatenated [metric, log, trace] embeddings
+    Output: (batch, 1) - anomaly score logits
     """
 
-    def __init__(self, embedding_dim=128, gru_hidden_dim=64, num_experts=3):
-        super(VariableInputPLE_GRU, self).__init__()
+    def __init__(self, embedding_dim=384, gru_hidden_dim=64, num_classes=1):
+        super().__init__()
+        self.embedding_dim = embedding_dim  # Changed from 3 to 384
+        self.gru_hidden_dim = gru_hidden_dim
 
-        # Expert Networks (Separate GRUs)
-        self.experts = nn.ModuleList(
-            [
-                nn.GRU(
-                    input_size=embedding_dim,
-                    hidden_size=gru_hidden_dim,
-                    num_layers=2,
-                    batch_first=True,
-                    bidirectional=True,
-                    dropout=0.3,
-                )
-                for _ in range(num_experts)
-            ]
+        # Multi-layer GRU
+        self.gru1 = nn.GRU(
+            input_size=embedding_dim,
+            hidden_size=gru_hidden_dim,
+            num_layers=2,
+            batch_first=True,
+            dropout=0.3,
+            bidirectional=True
         )
 
-        # Gating Network / Fusion Attention
-        self.fusion = nn.MultiheadAttention(
-            embed_dim=gru_hidden_dim * 2, num_heads=4, batch_first=True
+        self.gru2 = nn.GRU(
+            input_size=gru_hidden_dim * 2,  # Bidirectional
+            hidden_size=gru_hidden_dim // 2,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True
         )
 
-        # Classifier
-        self.clf = nn.Sequential(
-            nn.Linear(gru_hidden_dim * 2, 64),
+        # Self-attention
+        self.attention = nn.MultiheadAttention(
+            embed_dim=gru_hidden_dim,
+            num_heads=4,
+            batch_first=True
+        )
+
+        # Probabilistic enhancement layer
+        self.enhancement = nn.Sequential(
+            nn.Linear(gru_hidden_dim, gru_hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(gru_hidden_dim, gru_hidden_dim)
+        )
+
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.Linear(gru_hidden_dim, gru_hidden_dim // 2),
             nn.ReLU(),
             nn.Dropout(0.3),
-            nn.Linear(64, 1),
-            nn.Sigmoid(),
+            nn.Linear(gru_hidden_dim // 2, num_classes)
         )
 
     def forward(self, x):
-        # x shape: (Batch, Features) or (Batch, Seq, Features)
-        if x.dim() == 2:
-            x = x.unsqueeze(1)  # Ensure (Batch, 1, Features)
+        """
+        Args:
+            x: (batch, seq_len, 384) - multimodal embeddings
 
-        expert_outs = []
-        for exp in self.experts:
-            # exp(x) -> (Batch, Seq, Hidden*2)
-            out, _ = exp(x)
-            # Take mean over sequence to get (Batch, 1, Hidden*2)
-            expert_outs.append(out.mean(dim=1, keepdim=True))
+        Returns:
+            logits: (batch, 1) - anomaly score logits (apply sigmoid for probability)
+        """
+        # First GRU layer
+        gru1_out, _ = self.gru1(x)  # (batch, seq_len, gru_hidden_dim*2)
 
-        # Stack experts: (Batch, Num_Experts, Hidden*2)
-        stack = torch.cat(expert_outs, dim=1)
+        # Second GRU layer
+        gru2_out, _ = self.gru2(gru1_out)  # (batch, seq_len, gru_hidden_dim)
 
-        # Attention Fusion: "Which expert should I trust?"
-        fused, _ = self.fusion(stack, stack, stack)
+        # Attention pooling
+        attn_out, _ = self.attention(gru2_out, gru2_out, gru2_out)
 
-        # Average the fused expert opinions
-        # (Batch, Hidden*2)
-        context_vector = fused.mean(dim=1)
+        # Global average pooling
+        pooled = attn_out.mean(dim=1)  # (batch, gru_hidden_dim)
 
-        return self.clf(context_vector)
+        # Probabilistic enhancement
+        enhanced = self.enhancement(pooled)
 
-    def predict(self, x):
-        self.eval()
-        with torch.no_grad():
-            if x.dim() == 2:
-                x = x.unsqueeze(1)
-            if x.dim() == 2: x = x.unsqueeze(1)
-            return float(self.forward(x).item())
+        # Residual connection
+        enhanced = enhanced + pooled
+
+        # Classification
+        logits = self.classifier(enhanced)  # (batch, 1)
+
+        return logits

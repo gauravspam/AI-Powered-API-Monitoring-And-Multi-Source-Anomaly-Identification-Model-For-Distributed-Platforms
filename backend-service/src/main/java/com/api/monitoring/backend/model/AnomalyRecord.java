@@ -4,34 +4,25 @@ import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
 import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-/**
- * AnomalyRecord Entity: Represents ML anomaly detection results
- * Table: anomaly_detections
- */
 @Entity
 @Table(name = "anomaly_detections", indexes = {
         @Index(name = "idx_anomaly_detections_endpoint", columnList = "endpoint"),
         @Index(name = "idx_anomaly_detections_severity", columnList = "severity_level"),
         @Index(name = "idx_anomaly_detections_status", columnList = "status"),
-        @Index(name = "idx_anomaly_detections_created_at", columnList = "created_at DESC"),
-        @Index(name = "idx_anomaly_detections_trace_id", columnList = "trace_id"),
-        @Index(name = "idx_anomaly_detections_api_log_id", columnList = "api_log_id"),
-        @Index(name = "idx_anomaly_detections_severity_status", columnList = "severity_level, status, created_at DESC")
+        @Index(name = "idx_anomaly_detections_created_at", columnList = "created_at DESC")
 })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-@EqualsAndHashCode(of = "id")
-@ToString(exclude = "additionalContext")
 public class AnomalyRecord {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "anomaly_detections_id_seq")
-    @SequenceGenerator(name = "anomaly_detections_id_seq", sequenceName = "anomaly_detections_id_seq", allocationSize = 1)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(name = "api_log_id")
@@ -137,56 +128,11 @@ public class AnomalyRecord {
     @Column(name = "deleted_by", length = 255)
     private String deletedBy;
 
-    // ✅ FIXED: Use Hibernate 6 native JSONB support
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "additional_context", columnDefinition = "jsonb")
     private Map<String, Object> additionalContext;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-        updatedAt = LocalDateTime.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
-
-    public void acknowledge(String username) {
-        this.isAcknowledged = true;
-        this.acknowledgedBy = username;
-        this.acknowledgedAt = LocalDateTime.now();
-    }
-
-    public void resolve() {
-        this.isResolved = true;
-        this.resolvedBy = "SYSTEM";
-        this.resolvedAt = LocalDateTime.now();
-        this.status = "RESOLVED";
-    }
-
-    public void markAsFalsePositive(String username) {
-        this.isFalsePositive = true;
-        this.markedFalsePositiveBy = username;
-        this.markedFalsePositiveAt = LocalDateTime.now();
-        this.status = "FALSE_POSITIVE";
-    }
-
-    public void delete(String deletedBy) {
-        this.deletedAt = LocalDateTime.now();
-        this.deletedBy = deletedBy;
-    }
-
-    public boolean isDeleted() {
-        return deletedAt != null;
-    }
-
-    public boolean isCriticalUnacknowledged() {
-        return !isAcknowledged && ("CRITICAL".equals(severity) || "HIGH".equals(severity));
-    }
-
-    public Double getAnomalyScore() {
-        return hybridEnsembleScore;
+    public void setAcknowledged(boolean acknowledged) {
+        this.isAcknowledged = acknowledged;
     }
 }

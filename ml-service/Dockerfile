@@ -2,32 +2,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first (for caching)
+# Install dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
+# Copy application
+COPY api/ ./api/
+COPY core/ ./core/
+COPY config/ ./config/
 
-# Create models directory
-RUN mkdir -p models/saved
+EXPOSE 9000
 
-# Generate synthetic data and train models on first run
-RUN python train_models.py && \
-    echo "✅ Models trained successfully!" > /app/training_complete.txt
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Start FastAPI server
-CMD ["python", "api_server.py"]
+# Run server
+CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "9000"]

@@ -4,7 +4,7 @@ spring:
         version: 1.0.0
 
     datasource:
-        url: jdbc:postgresql://postgres:5432/api_monitoring
+        url: jdbc:postgresql://localhost:5432/api_monitoring
         username: api_monitor
         password: api_monitor_pwd
         driver-class-name: org.postgresql.Driver
@@ -98,7 +98,7 @@ python:
     service:
         url: ${ML_SERVICE_URL:http://localhost:9000}
         enabled: ${ML_SERVICE_ENABLED:true}
-        timeout: 30
+        timeout: 5000
         version: 1.0.0
         retry:
             max-attempts: 3

@@ -41,11 +41,10 @@ ml-service/venv*/
 ml-service/env/
 ml-service/logs/
 ml-service/data/
+ml-service/venv/
 ml-service/kaggle_api_dataset/
 ml-service/tf_gpu/
 ml-service/tf_gpu*/
-ml-service/test/
-ml-service/test*/
 ml-service/notebooks/.ipynb_checkpoints/
 
 # Python general
@@ -173,12 +172,12 @@ tmp/
 # =============================
 # Docker
 # =============================
-docker-compose.override.yml
-*.dockerignore
-Dockerfile*
-docker/
-opensearch-data/
-postgres-data/
+#docker-compose.override.yml
+#*.dockerignore
+#Dockerfile*
+#docker/
+#opensearch-data/
+#postgres-data/
 
 # =============================
 # Infrastructure/Terraform
@@ -219,7 +218,7 @@ ml-service/models/
 # Data files
 *.csv
 *.parquet
-data/
+ml-service/data/
 external_datasets/
 
 # TensorFlow

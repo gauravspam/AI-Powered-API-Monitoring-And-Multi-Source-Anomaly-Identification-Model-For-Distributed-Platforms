@@ -1,18 +1,14 @@
 package com.api.monitoring.backend.model;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import java.time.LocalDateTime;
+import jakarta.persistence.*;
 import lombok.Data;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "system_metrics")
 @Data
 public class MetricRecord {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -33,10 +29,10 @@ public class MetricRecord {
     private Double memoryUsagePercent;
 
     @Column(name = "disk_io_bytes")
-    private Long diskIoBytes;
+    private Long diskIoBytes; // Added
 
     @Column(name = "network_io_bytes")
-    private Long networkIoBytes;
+    private Long networkIoBytes; // Added
 
     @Column(name = "response_time_ms")
     private Long responseTimeMs;
@@ -52,4 +48,14 @@ public class MetricRecord {
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null)
+            createdAt = LocalDateTime.now();
+        if (metricTimestamp == null)
+            metricTimestamp = LocalDateTime.now();
+        if (serviceName == null)
+            serviceName = "default-service";
+    }
 }

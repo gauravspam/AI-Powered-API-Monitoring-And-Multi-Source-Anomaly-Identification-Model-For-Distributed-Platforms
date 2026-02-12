@@ -1,27 +1,29 @@
 package com.api.monitoring.backend.service;
 
-import com.api.monitoring.backend.dto.AnomalyPredictionDTO;
-import com.api.monitoring.backend.dto.MLPredictionResponse;
+import com.api.monitoring.backend.dto.ml.LogEventDto;
+import com.api.monitoring.backend.dto.ml.MetricPointDto;
+import com.api.monitoring.backend.dto.ml.PredictionResponseDto;
+import com.api.monitoring.backend.dto.ml.PredictionWindowDto;
+import com.api.monitoring.backend.dto.ml.TraceSpanDto;
 import com.api.monitoring.backend.model.LogRecord;
+import com.api.monitoring.backend.model.MetricRecord;
+import com.api.monitoring.backend.model.TraceRecord;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.http.*;
-import org.springframework.retry.annotation.Backoff;
-import org.springframework.retry.annotation.Retryable;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.HttpClientErrorException;
-import org.springframework.web.client.HttpServerErrorException;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
+import java.time.Instant;
+import java.util.*;
+import java.util.stream.Collectors;
 
-@Service
 @Slf4j
+@Service
+@RequiredArgsConstructor
 public class MLServiceClient {
 
     private final RestTemplate restTemplate;
@@ -29,219 +31,170 @@ public class MLServiceClient {
     @Value("${ml.service.url:http://localhost:9000}")
     private String mlServiceUrl;
 
-    @Value("${ml.service.enabled:true}")
-    private boolean mlServiceEnabled;
-
-    @Value("${ml.service.timeout:10}")
-    private int timeoutSeconds;
-
-    @Value("${ml.service.version:1.0.0}")
-    private String mlServiceVersion;
-
-    @Autowired
-    public MLServiceClient(RestTemplate restTemplate) {
-        this.restTemplate = restTemplate;
-    }
-
-    @Retryable(
-        value = {ResourceAccessException.class, HttpServerErrorException.class},
-        maxAttempts = 3,
-        backoff = @Backoff(delay = 1000, multiplier = 2, maxDelay = 10000)
-    )
-    public AnomalyPredictionDTO predictAnomaly(LogRecord logRecord) {
-        long startTime = System.currentTimeMillis();
-        
-        if (!mlServiceEnabled) {
-            log.warn("ML Service is disabled. Returning default prediction.");
-            return createDefaultPrediction(logRecord);
-        }
+    /**
+     * Detect anomaly using Multimodal ML Service V2.
+     * Calls POST /v1/predict with the strictly typed PredictionWindow schema.
+     */
+    public PredictionResponseDto detectAnomaly(
+            List<MetricRecord> metrics,
+            List<LogRecord> logs,
+            List<TraceRecord> traces,
+            String serviceName,
+            Instant windowStart,
+            Instant windowEnd) {
 
         try {
-            log.info("Calling ML Service for log ID: {}, endpoint: {}", 
-                    logRecord.getId(), logRecord.getEndpoint());
+            // 1. Build the V2 Prediction Window
+            PredictionWindowDto request = buildPredictionWindow(
+                    metrics, logs, traces,
+                    serviceName, windowStart, windowEnd);
 
-            Map<String, Object> requestPayload = buildPredictionRequest(logRecord);
-
+            // 2. Prepare Endpoint
+            String url = mlServiceUrl + "/v1/predict";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.set("X-Trace-Id", logRecord.getTraceId() != null ? logRecord.getTraceId() : "unknown");
-            headers.set("X-Request-Source", "backend-service");
+            HttpEntity<PredictionWindowDto> entity = new HttpEntity<>(request, headers);
 
-            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestPayload, headers);
+            log.info("Calling ML Service V2: {} (Metrics: {}, Logs: {}, Traces: {})",
+                    url,
+                    request.getMetrics().getOrDefault("cpu_usage", Collections.emptyList()).size(),
+                    request.getLogs().size(),
+                    request.getTraces().size());
 
-            String endpoint = mlServiceUrl + "/predict";
-            log.debug("POST {}", endpoint);
-            log.debug("Request body: {}", requestPayload);
+            // 3. Execute
+            PredictionResponseDto response = restTemplate.postForObject(
+                    url,
+                    entity,
+                    PredictionResponseDto.class);
 
-            ResponseEntity<MLPredictionResponse> response = restTemplate.exchange(
-                endpoint,
-                HttpMethod.POST,
-                request,
-                MLPredictionResponse.class
-            );
-
-            long duration = System.currentTimeMillis() - startTime;
-
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                MLPredictionResponse mlResponse = response.getBody();
-                
-                log.info("✅ ML prediction SUCCESS for log {}: hybrid_score={}, severity={}, duration={}ms",
-                        logRecord.getId(), 
-                        mlResponse.getHybridScore(),
-                        mlResponse.getSeverity(),
-                        duration);
-
-                return convertToAnomalyPredictionDTO(mlResponse, logRecord, duration);
-            } else {
-                log.error("ML Service returned non-OK status: {}", response.getStatusCode());
-                throw new MLServiceException("ML Service returned status: " + response.getStatusCode());
+            if (response != null && response.getResult() != null) {
+                log.info("ML V2 Prediction: IsAnomaly={}, Severity={}, FusionScore={}",
+                        response.getResult().isAnomaly(),
+                        response.getResult().getSeverity(),
+                        response.getResult().getScoreFusion());
             }
 
-        } catch (HttpClientErrorException e) {
-            log.error("❌ ML Service client error (4xx) for log {}: {} - {}",
-                    logRecord.getId(), e.getStatusCode(), e.getResponseBodyAsString());
-            throw new MLServiceException("Client error calling ML service: " + e.getMessage(), e);
-
-        } catch (HttpServerErrorException e) {
-            log.error("❌ ML Service server error (5xx) for log {}: {} - Will retry",
-                    logRecord.getId(), e.getStatusCode());
-            throw e;
-
-        } catch (ResourceAccessException e) {
-            log.error("❌ ML Service network error for log {}: {} - Will retry",
-                    logRecord.getId(), e.getMessage());
-            throw e;
+            return response;
 
         } catch (Exception e) {
-            log.error("❌ Unexpected error calling ML Service for log {}: {}",
-                    logRecord.getId(), e.getMessage(), e);
-            throw new MLServiceException("Unexpected error: " + e.getMessage(), e);
+            log.error("ML Service V2 call failed: {}", e.getMessage());
+            return createFallbackResponse(serviceName, windowEnd);
         }
     }
 
-    private Map<String, Object> buildPredictionRequest(LogRecord logRecord) {
-        Map<String, Object> payload = new HashMap<>();
+    /**
+     * Assembles the PredictionWindowDto from raw DB entities.
+     * Pivots row-based MetricRecords into column-based Map<String, List<Point>>.
+     */
+    private PredictionWindowDto buildPredictionWindow(
+            List<MetricRecord> metrics,
+            List<LogRecord> logs,
+            List<TraceRecord> traces,
+            String serviceName,
+            Instant windowStart,
+            Instant windowEnd) {
 
-        payload.put("endpoint", logRecord.getEndpoint());
-        payload.put("method", logRecord.getMethod());
-        payload.put("response_time", logRecord.getResponseTimeMs() != null ? logRecord.getResponseTimeMs() : 0);
-        payload.put("status_code", logRecord.getStatusCode() != null ? logRecord.getStatusCode() : 200);
-        payload.put("cpu_usage", logRecord.getCpuUsage() != null ? logRecord.getCpuUsage() : 0.0);
-        payload.put("memory_usage", logRecord.getMemoryUsage() != null ? logRecord.getMemoryUsage() : 0.0);
-        payload.put("error_rate", logRecord.getErrorRate() != null ? logRecord.getErrorRate() : 0.0);
-        payload.put("network_io", logRecord.getNetworkIo() != null ? logRecord.getNetworkIo() : 0);
-        payload.put("disk_io", logRecord.getDiskIo() != null ? logRecord.getDiskIo() : 0);
-        payload.put("request_count", logRecord.getRequestCount() != null ? logRecord.getRequestCount() : 1);
-        payload.put("hour_of_day", logRecord.getHourOfDay() != null ? logRecord.getHourOfDay() : 
-                    LocalDateTime.now().getHour());
-        payload.put("day_of_week", logRecord.getDayOfWeek() != null ? logRecord.getDayOfWeek() : 
-                    LocalDateTime.now().getDayOfWeek().getValue());
-        
-        Map<String, Object> context = new HashMap<>();
-        context.put("trace_id", logRecord.getTraceId());
-        context.put("environment", logRecord.getEnvironment() != null ? logRecord.getEnvironment() : "production");
-        context.put("service_name", logRecord.getServiceName() != null ? logRecord.getServiceName() : "unknown");
-        payload.put("context", context);
-
-        return payload;
-    }
-
-    private AnomalyPredictionDTO convertToAnomalyPredictionDTO(
-            MLPredictionResponse mlResponse, 
-            LogRecord logRecord, 
-            long processingTimeMs) {
-        
-        return AnomalyPredictionDTO.builder()
-                .logId(logRecord.getId())
-                .endpoint(logRecord.getEndpoint())
-                .method(logRecord.getMethod())
-                .msifScore(mlResponse.getMsifScore())
-                .pleScore(mlResponse.getPleScore())
-                .hybridScore(mlResponse.getHybridScore())
-                .severity(mlResponse.getSeverity())
-                .confidence(mlResponse.getConfidenceValue())
-                .fusionMethod(mlResponse.getFusionMethod() != null ? 
-                             mlResponse.getFusionMethod() : "weighted_ensemble")
-                .mlProcessingTimeMs(processingTimeMs)
-                .mlServiceVersion(mlServiceVersion)
-                .traceId(logRecord.getTraceId())
-                .timestamp(LocalDateTime.now())
+        return PredictionWindowDto.builder()
+                .windowStart(windowStart.toEpochMilli())
+                .windowEnd(windowEnd.toEpochMilli())
+                .entityId(serviceName)
+                .metrics(pivotMetrics(metrics)) // <--- The crucial pivot
+                .logs(mapLogs(logs))
+                .traces(mapTraces(traces))
                 .build();
     }
 
-    private AnomalyPredictionDTO createDefaultPrediction(LogRecord logRecord) {
-        return AnomalyPredictionDTO.builder()
-                .logId(logRecord.getId())
-                .endpoint(logRecord.getEndpoint())
-                .method(logRecord.getMethod())
-                .msifScore(0.0)
-                .pleScore(0.0)
-                .hybridScore(0.0)
-                .severity("UNKNOWN")
-                .confidence(0.0)
-                .fusionMethod("none")
-                .mlProcessingTimeMs(0L)
-                .mlServiceVersion("disabled")
-                .traceId(logRecord.getTraceId())
-                .timestamp(LocalDateTime.now())
-                .build();
-    }
-
-    @Cacheable(value = "mlServiceHealth", unless = "#result == false")
-    public boolean isHealthy() {
-        if (!mlServiceEnabled) {
-            return false;
+    /**
+     * Pivots List<MetricRecord> (Row-based) to Map<MetricName, List<Point>>
+     * (Columnar).
+     * This matches the Dict[str, List[MetricPoint]] schema in Python.
+     */
+    private Map<String, List<MetricPointDto>> pivotMetrics(List<MetricRecord> metrics) {
+        if (metrics == null || metrics.isEmpty()) {
+            return Collections.emptyMap();
         }
 
-        try {
-            String healthEndpoint = mlServiceUrl + "/health";
-            ResponseEntity<Map> response = restTemplate.getForEntity(healthEndpoint, Map.class);
-            
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Map<String, Object> body = response.getBody();
-                String status = (String) body.get("status");
-                Boolean modelsLoaded = (Boolean) body.getOrDefault("models_loaded", false);
-                
-                log.debug("ML Service health: status={}, models_loaded={}", status, modelsLoaded);
-                
-                boolean healthy = "healthy".equalsIgnoreCase(status) || "UP".equalsIgnoreCase(status);
-                boolean ready = modelsLoaded != null && modelsLoaded;
-                
-                return healthy && ready;
+        Map<String, List<MetricPointDto>> result = new HashMap<>();
+        List<MetricPointDto> cpuPoints = new ArrayList<>();
+        List<MetricPointDto> memPoints = new ArrayList<>();
+        List<MetricPointDto> respPoints = new ArrayList<>();
+
+        for (MetricRecord record : metrics) {
+            long ts = record.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli();
+
+            // Extract CPU
+            if (record.getCpuUsagePercent() != null) {
+                cpuPoints.add(MetricPointDto.builder().timestamp(ts).value(record.getCpuUsagePercent()).build());
             }
-            
-            return false;
-
-        } catch (Exception e) {
-            log.warn("ML Service health check failed: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    public Map<String, Object> getModelInfo() {
-        try {
-            String infoEndpoint = mlServiceUrl + "/api/model-info";
-            ResponseEntity<Map> response = restTemplate.getForEntity(infoEndpoint, Map.class);
-            
-            if (response.getStatusCode() == HttpStatus.OK) {
-                return response.getBody();
+            // Extract Memory
+            if (record.getMemoryUsagePercent() != null) {
+                memPoints.add(MetricPointDto.builder().timestamp(ts).value(record.getMemoryUsagePercent()).build());
             }
-            
-            return null;
-
-        } catch (Exception e) {
-            log.warn("Failed to get ML service model info: {}", e.getMessage());
-            return null;
+            // Extract Response Time
+            if (record.getResponseTimeMs() != null) {
+                respPoints.add(
+                        MetricPointDto.builder().timestamp(ts).value(record.getResponseTimeMs().doubleValue()).build());
+            }
         }
+
+        result.put("cpu_usage", cpuPoints);
+        result.put("memory_usage", memPoints);
+        result.put("response_time", respPoints);
+
+        return result;
     }
 
-    public static class MLServiceException extends RuntimeException {
-        public MLServiceException(String message) {
-            super(message);
-        }
+    private List<LogEventDto> mapLogs(List<LogRecord> logs) {
+        if (logs == null)
+            return Collections.emptyList();
 
-        public MLServiceException(String message, Throwable cause) {
-            super(message, cause);
-        }
+        return logs.stream().map(log -> LogEventDto.builder()
+                .timestamp(log.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli())
+                .level(determineLogLevel(log.getStatusCode()))
+                .message(log.getEndpoint() != null ? log.getEndpoint() : "unknown") // Using endpoint as message proxy
+                                                                                    // for now
+                .template_id(log.getServiceName()) // mapping service to template_id as placeholder
+                .build()).collect(Collectors.toList());
+    }
+
+    private List<TraceSpanDto> mapTraces(List<TraceRecord> traces) {
+        if (traces == null)
+            return Collections.emptyList();
+
+        return traces.stream().map(t -> TraceSpanDto.builder()
+                .traceId(t.getTraceId())
+                .spanId(t.getSpanId())
+                .parentId(t.getParentSpanId())
+                .service(t.getServiceName())
+                .operation(t.getOperationName())
+                .durationMs(t.getDuration() != null ? t.getDuration().doubleValue() : 0.0)
+                .statusCode(t.getStatusCode())
+                .timestamp(t.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli())
+                .build()).collect(Collectors.toList());
+    }
+
+    private String determineLogLevel(Integer statusCode) {
+        if (statusCode == null)
+            return "INFO";
+        if (statusCode >= 500)
+            return "ERROR";
+        if (statusCode >= 400)
+            return "WARN";
+        return "INFO";
+    }
+
+    private PredictionResponseDto createFallbackResponse(String entityId, Instant windowEnd) {
+        PredictionResponseDto response = new PredictionResponseDto();
+        response.setEntityId(entityId);
+        response.setRequestId("fallback-" + UUID.randomUUID());
+
+        PredictionResponseDto.AnomalyScoreResult result = new PredictionResponseDto.AnomalyScoreResult();
+        result.setAnomaly(false);
+        result.setSeverity(0.0);
+        result.setScoreFusion(0.0);
+        result.setConfidence(0.0);
+
+        response.setResult(result);
+        return response;
     }
 }

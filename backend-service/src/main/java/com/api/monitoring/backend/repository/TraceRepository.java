@@ -7,21 +7,27 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface TraceRepository extends JpaRepository<TraceRecord, Long> {
 
-    List<TraceRecord> findAllByOrderByStartTimeDesc(Pageable pageable);
+    // For Multimodal Windows
+    @Query("SELECT t FROM TraceRecord t WHERE t.createdAt >= :start AND t.createdAt < :end ORDER BY t.createdAt ASC")
+    List<TraceRecord> findByCreatedAtBetween(@Param("start") Instant start, @Param("end") Instant end);
 
-    Optional<TraceRecord> findByTraceId(String traceId);
+    // For Controller Pagination
+    List<TraceRecord> findAllByOrderByStartTimeDesc(Pageable pageable);
 
     List<TraceRecord> findByServiceNameOrderByStartTimeDesc(String serviceName, Pageable pageable);
 
+    Optional<TraceRecord> findByTraceId(String traceId);
+
+    // For Stats
     Long countByServiceName(String serviceName);
 
-    // Use 'duration' not 'durationMs' - it's the Java field name!
     @Query("SELECT AVG(t.duration) FROM TraceRecord t WHERE t.serviceName = :serviceName")
     Double averageDurationByServiceName(@Param("serviceName") String serviceName);
 }

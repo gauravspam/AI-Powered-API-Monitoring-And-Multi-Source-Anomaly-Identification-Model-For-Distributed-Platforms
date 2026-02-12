@@ -158,35 +158,35 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, [checkAuth]);
 
-  // Setup axios interceptor to handle 401 errors globally
-  useEffect(() => {
-    let isLoggingOut = false; // Prevent infinite loops
+  // // Setup axios interceptor to handle 401 errors globally
+  // useEffect(() => {
+  //   let isLoggingOut = false; // Prevent infinite loops
     
-    const interceptor = api.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        // Only handle 401 if we're authenticated and not already logging out
-        if (error.response?.status === 401 && isAuthenticated && !isLoggingOut) {
-          // Prevent multiple simultaneous logout calls
-          isLoggingOut = true;
+  //   const interceptor = api.interceptors.response.use(
+  //     (response) => response,
+  //     async (error) => {
+  //       // Only handle 401 if we're authenticated and not already logging out
+  //       if (error.response?.status === 401 && isAuthenticated && !isLoggingOut) {
+  //         // Prevent multiple simultaneous logout calls
+  //         isLoggingOut = true;
           
-          // Clear state immediately to prevent further API calls
-          setUser(null);
-          setIsAuthenticated(false);
+  //         // Clear state immediately to prevent further API calls
+  //         setUser(null);
+  //         setIsAuthenticated(false);
           
-          // Call logout (but don't await to prevent blocking)
-          logout().finally(() => {
-            isLoggingOut = false;
-          });
-        }
-        return Promise.reject(error);
-      }
-    );
+  //         // Call logout (but don't await to prevent blocking)
+  //         logout().finally(() => {
+  //           isLoggingOut = false;
+  //         });
+  //       }
+  //       return Promise.reject(error);
+  //     }
+  //   );
 
-    return () => {
-      api.interceptors.response.eject(interceptor);
-    };
-  }, [isAuthenticated, logout]);
+  //   return () => {
+  //     api.interceptors.response.eject(interceptor);
+  //   };
+  // }, [isAuthenticated, logout]);
 
   // Memoize context value
   const value = useMemo(

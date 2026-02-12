@@ -1,128 +1,60 @@
 package com.api.monitoring.backend.dto;
 
-import java.time.LocalDateTime;
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class LogEntryRequest {
-    private String apiName;
-    private String method;
-    private Double responseTime;
+
+    // Allow mapping from "apiName" or "serviceName" in JSON
+    @JsonAlias({ "apiName", "serviceName" })
+    private String serviceName;
+
+    private String endpoint;
+
+    @JsonAlias({ "method", "httpMethod" })
+    private String httpMethod;
+
     private Integer statusCode;
+    private Long responseTime;
+    private Long requestSizeBytes;
+    private Long responseSizeBytes;
+
+    // Metrics
     private Integer requestCount;
     private Double errorRate;
     private Double cpuUsage;
     private Double memoryUsage;
     private Double networkIo;
     private Double diskIo;
+
+    // Context
     private Integer hourOfDay;
     private Integer dayOfWeek;
     private String timestamp;
+    private String traceId;
 
-    // Constructors
-    public LogEntryRequest() {
-    }
-
-    // Getters and Setters (plain, no @JsonProperty)
+    // Compatibility getters for legacy code
     public String getApiName() {
-        return apiName;
+        return serviceName;
     }
 
     public void setApiName(String apiName) {
-        this.apiName = apiName;
+        this.serviceName = apiName;
     }
 
     public String getMethod() {
-        return method;
+        return httpMethod;
     }
 
     public void setMethod(String method) {
-        this.method = method;
-    }
-
-    public Double getResponseTime() {
-        return responseTime;
-    }
-
-    public void setResponseTime(Double responseTime) {
-        this.responseTime = responseTime;
-    }
-
-    public Integer getStatusCode() {
-        return statusCode;
-    }
-
-    public void setStatusCode(Integer statusCode) {
-        this.statusCode = statusCode;
-    }
-
-    public Integer getRequestCount() {
-        return requestCount;
-    }
-
-    public void setRequestCount(Integer requestCount) {
-        this.requestCount = requestCount;
-    }
-
-    public Double getErrorRate() {
-        return errorRate;
-    }
-
-    public void setErrorRate(Double errorRate) {
-        this.errorRate = errorRate;
-    }
-
-    public Double getCpuUsage() {
-        return cpuUsage;
-    }
-
-    public void setCpuUsage(Double cpuUsage) {
-        this.cpuUsage = cpuUsage;
-    }
-
-    public Double getMemoryUsage() {
-        return memoryUsage;
-    }
-
-    public void setMemoryUsage(Double memoryUsage) {
-        this.memoryUsage = memoryUsage;
-    }
-
-    public Double getNetworkIo() {
-        return networkIo;
-    }
-
-    public void setNetworkIo(Double networkIo) {
-        this.networkIo = networkIo;
-    }
-
-    public Double getDiskIo() {
-        return diskIo;
-    }
-
-    public void setDiskIo(Double diskIo) {
-        this.diskIo = diskIo;
-    }
-
-    public Integer getHourOfDay() {
-        return hourOfDay;
-    }
-
-    public void setHourOfDay(Integer hourOfDay) {
-        this.hourOfDay = hourOfDay;
-    }
-
-    public Integer getDayOfWeek() {
-        return dayOfWeek;
-    }
-
-    public void setDayOfWeek(Integer dayOfWeek) {
-        this.dayOfWeek = dayOfWeek;
-    }
-
-    public String getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(String timestamp) {
-        this.timestamp = timestamp;
+        this.httpMethod = method;
     }
 }

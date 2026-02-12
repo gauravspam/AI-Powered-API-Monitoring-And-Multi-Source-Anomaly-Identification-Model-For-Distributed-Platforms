@@ -18,6 +18,8 @@ public interface AnomalyRepository extends JpaRepository<AnomalyRecord, Long> {
 
     List<AnomalyRecord> findByEndpoint(String apiName);
 
+    long count();
+
     List<AnomalyRecord> findTop100ByEndpointOrderByCreatedAtDesc(
             String apiName);
 

@@ -2,7 +2,6 @@ package com.api.monitoring.backend.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-
 import java.time.LocalDateTime;
 
 @Entity
@@ -42,14 +41,22 @@ public class TraceRecord {
     private Integer statusCode;
 
     @Column(name = "is_error")
-    private Boolean isError;
+    private Boolean isError; // This was missing or named incorrectly
 
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
-    @Column(name = "tags", columnDefinition = "JSONB")
+    @Column(name = "tags", columnDefinition = "TEXT")
     private String tags;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @PrePersist
+    protected void onCreate() {
+        if (createdAt == null)
+            createdAt = LocalDateTime.now();
+        if (isError == null)
+            isError = false;
+    }
 }
