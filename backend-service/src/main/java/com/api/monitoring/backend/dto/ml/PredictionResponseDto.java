@@ -2,7 +2,6 @@ package com.api.monitoring.backend.dto.ml;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
-import java.util.List;
 
 @Data
 public class PredictionResponseDto {
@@ -12,7 +11,16 @@ public class PredictionResponseDto {
     @JsonProperty("entity_id")
     private String entityId;
 
+    @JsonProperty("window_end")
+    private Long windowEnd;
+
     private AnomalyScoreResult result;
+
+    @JsonProperty("processing_time_ms")
+    private Double processingTimeMs;
+
+    @JsonProperty("model_version")
+    private String modelVersion;
 
     @Data
     public static class AnomalyScoreResult {

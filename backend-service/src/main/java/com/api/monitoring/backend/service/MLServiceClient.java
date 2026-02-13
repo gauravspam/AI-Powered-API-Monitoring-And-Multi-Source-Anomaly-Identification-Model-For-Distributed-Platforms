@@ -1,10 +1,6 @@
 package com.api.monitoring.backend.service;
 
-import com.api.monitoring.backend.dto.ml.LogEventDto;
-import com.api.monitoring.backend.dto.ml.MetricPointDto;
-import com.api.monitoring.backend.dto.ml.PredictionResponseDto;
-import com.api.monitoring.backend.dto.ml.PredictionWindowDto;
-import com.api.monitoring.backend.dto.ml.TraceSpanDto;
+import com.api.monitoring.backend.dto.ml.*;
 import com.api.monitoring.backend.model.LogRecord;
 import com.api.monitoring.backend.model.MetricRecord;
 import com.api.monitoring.backend.model.TraceRecord;
@@ -57,7 +53,7 @@ public class MLServiceClient {
 
             log.info("Calling ML Service V2: {} (Metrics: {}, Logs: {}, Traces: {})",
                     url,
-                    request.getMetrics().getOrDefault("cpu_usage", Collections.emptyList()).size(),
+                    request.getMetrics().size(),
                     request.getLogs().size(),
                     request.getTraces().size());
 
@@ -98,7 +94,7 @@ public class MLServiceClient {
                 .windowStart(windowStart.toEpochMilli())
                 .windowEnd(windowEnd.toEpochMilli())
                 .entityId(serviceName)
-                .metrics(pivotMetrics(metrics)) // <--- The crucial pivot
+                .metrics(pivotMetrics(metrics))
                 .logs(mapLogs(logs))
                 .traces(mapTraces(traces))
                 .build();
@@ -107,7 +103,6 @@ public class MLServiceClient {
     /**
      * Pivots List<MetricRecord> (Row-based) to Map<MetricName, List<Point>>
      * (Columnar).
-     * This matches the Dict[str, List[MetricPoint]] schema in Python.
      */
     private Map<String, List<MetricPointDto>> pivotMetrics(List<MetricRecord> metrics) {
         if (metrics == null || metrics.isEmpty()) {
@@ -122,15 +117,12 @@ public class MLServiceClient {
         for (MetricRecord record : metrics) {
             long ts = record.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli();
 
-            // Extract CPU
             if (record.getCpuUsagePercent() != null) {
                 cpuPoints.add(MetricPointDto.builder().timestamp(ts).value(record.getCpuUsagePercent()).build());
             }
-            // Extract Memory
             if (record.getMemoryUsagePercent() != null) {
                 memPoints.add(MetricPointDto.builder().timestamp(ts).value(record.getMemoryUsagePercent()).build());
             }
-            // Extract Response Time
             if (record.getResponseTimeMs() != null) {
                 respPoints.add(
                         MetricPointDto.builder().timestamp(ts).value(record.getResponseTimeMs().doubleValue()).build());
@@ -151,9 +143,8 @@ public class MLServiceClient {
         return logs.stream().map(log -> LogEventDto.builder()
                 .timestamp(log.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli())
                 .level(determineLogLevel(log.getStatusCode()))
-                .message(log.getEndpoint() != null ? log.getEndpoint() : "unknown") // Using endpoint as message proxy
-                                                                                    // for now
-                .template_id(log.getServiceName()) // mapping service to template_id as placeholder
+                .message(log.getEndpoint() != null ? log.getEndpoint() : "unknown")
+                .template_id(log.getServiceName())
                 .build()).collect(Collectors.toList());
     }
 

@@ -1,6 +1,9 @@
 package com.api.monitoring.backend.service;
 
-import com.api.monitoring.backend.dto.*;
+import com.api.monitoring.backend.dto.AnomalyResponse;
+import com.api.monitoring.backend.dto.LogEntryRequest;
+import com.api.monitoring.backend.dto.StatisticsResponse;
+import com.api.monitoring.backend.dto.ml.PredictionResponseDto; // ✅ ADDED
 import com.api.monitoring.backend.model.*;
 import com.api.monitoring.backend.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -40,37 +43,45 @@ public class AnomalyService {
             if (serviceName == null)
                 serviceName = "default-service";
 
-            log.info("Assembling window: {} - {} for service: {}",
-                    windowStart, windowEnd, serviceName);
+            log.info("Assembling window: {} - {} for service: {}", windowStart, windowEnd, serviceName);
 
-            // Fetch recent data from repositories
+            // Fetch recent data
             List<MetricRecord> metrics = metricRepository.findByCreatedAtBetween(windowStart, windowEnd);
             List<LogRecord> logs = logRepository.findByCreatedAtBetween(windowStart, windowEnd);
             List<TraceRecord> traces = traceRepository.findByCreatedAtBetween(windowStart, windowEnd);
 
-            log.debug("Window contents: {} metrics, {} logs, {} traces",
-                    metrics.size(), logs.size(), traces.size());
+            log.debug("Window contents: {} metrics, {} logs, {} traces", metrics.size(), logs.size(), traces.size());
 
-            // Call ML service with structured multimodal data
-            MultimodalResponse mlResponse = mlServiceClient.detectAnomaly(
+            // Call ML service (V2)
+            PredictionResponseDto mlResponse = mlServiceClient.detectAnomaly(
                     metrics, logs, traces,
                     serviceName,
-                    logEntry.getEndpoint(),
                     windowStart, windowEnd);
+
+            // Check if result exists (handle fallback/error cases)
+            if (mlResponse == null || mlResponse.getResult() == null) {
+                log.warn("ML Service returned null response. Skipping anomaly save.");
+                return AnomalyResponse.builder()
+                        .status("UNKNOWN")
+                        .serviceName(serviceName)
+                        .timestamp(Instant.now().toString())
+                        .build();
+            }
 
             // Convert to frontend response
             AnomalyResponse response = convertToAnomalyResponse(mlResponse, logEntry);
 
             // Save anomaly record if detected
-            if ("ANOMALY".equals(mlResponse.getStatus())) {
-                saveAnomalyRecord(mlResponse, logEntry, windowStart, windowEnd);
+            if (mlResponse.getResult().isAnomaly()) {
+                saveAnomalyRecord(mlResponse, logEntry);
             }
 
             return response;
 
         } catch (Exception e) {
             log.error("Anomaly detection failed: {}", e.getMessage(), e);
-            throw new AnomalyProcessingException("Failed to detect anomaly: " + e.getMessage(), e);
+            // Return safe fallback instead of throwing to keep API alive
+            return AnomalyResponse.builder().status("ERROR").build();
         }
     }
 
@@ -78,6 +89,8 @@ public class AnomalyService {
      * Get recent anomalies for dashboard.
      */
     public List<AnomalyResponse> getRecentAnomalies(int limit) {
+        // Limitation: Repository might not support 'limit' natively without Pageable
+        // Using Top10 for now as per original code
         List<AnomalyRecord> records = anomalyRepository.findTop10ByOrderByCreatedAtDesc();
         return records.stream()
                 .map(this::mapRecordToResponse)
@@ -102,31 +115,32 @@ public class AnomalyService {
      */
     public StatisticsResponse getStatistics(String apiName) {
         long total = anomalyRepository.count();
-        long active = anomalyRepository.count(); // Add filter for status=ACTIVE if needed
+        long active = anomalyRepository.count(); // TODO: filter by status
 
         return StatisticsResponse.builder()
                 .totalAnomalies(total)
                 .activeAnomalies(active)
-                .accuracy(95.5)
-                .falsePositiveRate(0.04)
+                .accuracy(95.5) // Placeholder
+                .falsePositiveRate(0.04) // Placeholder
                 .build();
     }
 
     // --- Helper Methods ---
 
-    private AnomalyResponse convertToAnomalyResponse(MultimodalResponse ml, LogEntryRequest logEntry) {
+    private AnomalyResponse convertToAnomalyResponse(PredictionResponseDto ml, LogEntryRequest logEntry) {
         String serviceName = logEntry.getServiceName() != null ? logEntry.getServiceName() : logEntry.getApiName();
+        PredictionResponseDto.AnomalyScoreResult res = ml.getResult();
 
         return AnomalyResponse.builder()
                 .serviceName(serviceName)
                 .endpoint(logEntry.getEndpoint())
-                .status(ml.getStatus())
-                .finalAnomalyScore(ml.getFinalScore())
-                .msifScore(ml.getMsifScore())
-                .pleScore(ml.getPleScore())
-                .confidence(parseConfidence(ml.getConfidence()))
-                .fusionMethod(ml.getFusionMethod())
-                .severity(determineSeverity(ml.getFinalScore()))
+                .status(res.isAnomaly() ? "ANOMALY" : "NORMAL")
+                .finalAnomalyScore(res.getScoreFusion())
+                .msifScore(res.getScoreMsif())
+                .pleScore(res.getScorePle())
+                .confidence(res.getConfidence())
+                .fusionMethod("weighted_fusion_v2")
+                .severity(determineSeverity(res.getSeverity()))
                 .processingTimeMs(ml.getProcessingTimeMs())
                 .timestamp(Instant.now().toString())
                 .build();
@@ -138,48 +152,37 @@ public class AnomalyService {
                 .endpoint(record.getEndpoint())
                 .status(record.getStatus())
                 .finalAnomalyScore(record.getHybridEnsembleScore())
-                .severity(record.getSeverity()) // Corrected: use .severity() builder method
-                .confidence(record.getConfidence()) // Corrected: use .confidence() builder method
+                .severity(record.getSeverity())
+                .confidence(record.getConfidence())
                 .timestamp(record.getCreatedAt().toString())
                 .build();
     }
 
-    private void saveAnomalyRecord(MultimodalResponse ml, LogEntryRequest logEntry, Instant start, Instant end) {
+    private void saveAnomalyRecord(PredictionResponseDto ml, LogEntryRequest logEntry) {
         String serviceName = logEntry.getServiceName() != null ? logEntry.getServiceName() : logEntry.getApiName();
+        PredictionResponseDto.AnomalyScoreResult res = ml.getResult();
 
         AnomalyRecord record = AnomalyRecord.builder()
                 .serviceName(serviceName)
                 .endpoint(logEntry.getEndpoint())
                 .method(logEntry.getMethod() != null ? logEntry.getMethod() : "UNKNOWN")
-                .msifLstmScore(ml.getMsifScore())
-                .pleGruScore(ml.getPleScore())
-                .hybridEnsembleScore(ml.getFinalScore())
-                .fusionMethod(ml.getFusionMethod())
-                .confidence(parseConfidenceScore(ml.getConfidence())) // Corrected: use .confidence() builder method
-                .severity(determineSeverity(ml.getFinalScore())) // Corrected: use .severity() builder method
+                .msifLstmScore(res.getScoreMsif())
+                .pleGruScore(res.getScorePle())
+                .hybridEnsembleScore(res.getScoreFusion())
+                .fusionMethod("weighted_fusion_v2")
+                .confidence(res.getConfidence())
+                .severity(determineSeverity(res.getSeverity()))
                 .status("ACTIVE")
                 .isAcknowledged(false)
                 .isFalsePositive(false)
                 .isResolved(false)
-                .mlServiceVersion("2.0.0")
+                .mlServiceVersion(ml.getModelVersion())
                 .mlProcessingTimeMs(ml.getProcessingTimeMs().longValue())
                 .createdAt(LocalDateTime.now())
                 .build();
 
         anomalyRepository.save(record);
-        log.info("Saved anomaly record: service={}, score={}", serviceName, ml.getFinalScore());
-    }
-
-    private Double parseConfidence(String conf) {
-        if ("HIGH".equals(conf))
-            return 0.9;
-        if ("MEDIUM".equals(conf))
-            return 0.6;
-        return 0.3;
-    }
-
-    private Double parseConfidenceScore(String conf) {
-        return parseConfidence(conf);
+        log.info("Saved anomaly record: service={}, score={}", serviceName, res.getScoreFusion());
     }
 
     private String determineSeverity(Double score) {
