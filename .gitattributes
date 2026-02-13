@@ -1,5 +1,8 @@
+# Track only selected model weights via Git LFS
+ml-service/models/enhanced/*.pth filter=lfs diff=lfs merge=lfs -text
+ml-service/models/encoders/metric/*.pth filter=lfs diff=lfs merge=lfs -text
+ml-service/models/encoders/trace/*.pth filter=lfs diff=lfs merge=lfs -text
+
+# Optional: other large formats (only if you actually use them)
 *.h5 filter=lfs diff=lfs merge=lfs -text
-*.pth filter=lfs diff=lfs merge=lfs -text
 *.pkl filter=lfs diff=lfs merge=lfs -text
-ml-service/models/* filter=lfs diff=lfs merge=lfs -text
-ml-service/checkpoints/* filter=lfs diff=lfs merge=lfs -text

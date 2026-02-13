@@ -1,4 +1,14 @@
 # =============================
+# Python/ML Service
+# =============================
+ml-service/data/external_datasets/microservices_icse2023
+ml-service/data/lo2_raw
+ml-service/data/Microservices_ICSE2023
+ml-service/data/NAB
+ml-service/data/raw
+ml-service/models/encoders/log/log_encoder.pth
+
+# =============================
 # Java/Spring Boot Backend
 # =============================
 backend-service/bin/
@@ -209,9 +219,8 @@ vault-token
 *.pkl
 *.joblib
 *.onnx
-models/
 checkpoints/
-ml-service/models/
+
 
 # Data files
 *.csv
