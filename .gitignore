@@ -216,7 +216,6 @@ ml-service/models/
 # Data files
 *.csv
 *.parquet
-ml-service/data/
 external_datasets/
 
 # TensorFlow
