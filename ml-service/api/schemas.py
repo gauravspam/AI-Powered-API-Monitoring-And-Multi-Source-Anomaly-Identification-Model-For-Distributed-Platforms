@@ -1,19 +1,20 @@
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-# --- INPUT: Multimodal Entities ---
 
 class MetricPoint(BaseModel):
     timestamp: int
     value: float
 
+
 class LogEvent(BaseModel):
     timestamp: int
+    level: str
     message: str
-    level: str = "INFO"
+    service: Optional[str] = None
     template_id: Optional[str] = None
-    attributes: Dict[str, str] = Field(default_factory=dict)
+
 
 class TraceSpan(BaseModel):
     trace_id: str
@@ -22,42 +23,30 @@ class TraceSpan(BaseModel):
     service: str
     operation: str
     duration_ms: float
-    status_code: int = 0
+    status_code: int
     timestamp: int
 
+
 class PredictionWindow(BaseModel):
-    """
-    Represents a time window (e.g. 60s) of raw multimodal data.
-    This replaces the legacy 3-scalar input.
-    """
     window_start: int
     window_end: int
-    entity_id: str  # e.g., service name
+    entity_id: str
+    # Support flexible metric formats
+    metrics: Dict[str, List[MetricPoint]]
+    logs: List[LogEvent] = []
+    traces: List[TraceSpan] = []
 
-    # Structured data (Raw sources, not pre-reduced)
-    metrics: Dict[str, List[MetricPoint]] = Field(default_factory=dict)
-    logs: List[LogEvent] = Field(default_factory=list)
-    traces: List[TraceSpan] = Field(default_factory=list)
-
-class BatchPredictionRequest(BaseModel):
-    windows: List[PredictionWindow]
-
-# --- OUTPUT: Anomaly Scores ---
 
 class AnomalyScore(BaseModel):
     is_anomaly: bool
-    severity: float  # 0.0 to 1.0
-
-    # Sub-model scores for explainability
-    score_msif: float  # Metrics View
-    score_ple: float   # Logs/Sequences View
-    score_fusion: float # Final Weighted Fusion
-
-    # Diagnostics
+    severity: str  # Changed to str (LOW/MEDIUM/HIGH) usually, or float if you prefer
+    score_msif: float
+    score_ple: float
+    score_fusion: float
     confidence: float
-    contributing_factors: List[str] = []
 
-class PredictionResponse(BaseModel):
+
+class PredictResponse(BaseModel):
     request_id: str
     entity_id: str
     window_end: int

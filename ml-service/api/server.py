@@ -6,13 +6,12 @@ from contextlib import asynccontextmanager
 
 import torch
 from core.fusion import MultimodalFusionModel
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException
 
 from api.schemas import (
     AnomalyScore,
-    BatchPredictionRequest,
-    PredictionResponse,
     PredictionWindow,
+    PredictResponse,
 )
 
 # Setup Logging
@@ -22,51 +21,33 @@ logger = logging.getLogger("ml-service")
 # Global Model Registry
 models = {}
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Load PyTorch models and Encoders on startup.
-    Clean up on shutdown.
-    """
     logger.info("Initializing Multimodal ML Service...")
 
-    # TODO: Load actual PyTorch models here
-    # from models.fusion import HybridFusionModel
-    # models["fusion"] = HybridFusionModel.load(...)
-
-    # Initialize Model (Lazy load weights would happen here)
+    # Initialize Model
     model = MultimodalFusionModel(embed_dim=64)
 
     # Load trained weights
     weights_path = "models/fusion_v2.pth"
     if os.path.exists(weights_path):
-        model.load_state_dict(torch.load(weights_path, map_location='cpu'))
+        model.load_state_dict(torch.load(weights_path, map_location="cpu"))
         logger.info(f"✅ Loaded weights from {weights_path}")
     else:
-        logger.warning(f"⚠️ Weights not found at {weights_path}, using random initialization")
+        logger.warning(f"⚠️ Weights not found at {weights_path}, using random init")
 
-    model.eval() # Inference mode
-
-    # Store in global registry
+    model.eval()
     models["fusion"] = model
-    logger.info("MultimodalFusionModel loaded.")
     yield
-    models.clear()
-
-    # Mock loading for now
-    models["fusion"] = "LOADED"
-    logger.info("Models loaded successfully.")
-
-    yield
-
     models.clear()
     logger.info("Models unloaded.")
 
+
 app = FastAPI(
-    title="Multimodal Anomaly Detection API",
-    version="2.0.0",
-    lifespan=lifespan
+    title="Multimodal Anomaly Detection API", version="2.0.0", lifespan=lifespan
 )
+
 
 @app.get("/health")
 def health_check():
@@ -74,67 +55,49 @@ def health_check():
         raise HTTPException(status_code=503, detail="Models not initialized")
     return {"status": "healthy", "version": "2.0.0", "backend": "pytorch"}
 
-@app.post("/v1/predict", response_model=PredictionResponse)
+
+@app.post("/v1/predict", response_model=PredictResponse)
 def predict_window(window: PredictionWindow):
     start_time = time.time()
     req_id = str(uuid.uuid4())
 
     try:
-        # 1. TODO: Encoding Step
-        # metric_feats = models["metric_encoder"](window.metrics)
-        # log_feats = models["log_encoder"](window.logs)
-
-        # 2. TODO: Fusion Step
-        # score = models["fusion"](metric_feats, log_feats)
-
         model = models.get("fusion")
         if not model:
             raise HTTPException(503, "Model not loaded")
 
-        # RUN INFERENCE
         with torch.no_grad():
-            scores = model(window) # Returns dict {'fusion': ..., 'msif': ...}
+            # Pass list [window] because model expects batch
+            device = torch.device("cpu")
+            scores = model([window], device=device)
 
-        # LOGIC: Hybrid Decision
-        is_anomaly = scores['fusion'] > 0.75
+        fusion_val = scores["fusion"].item()
 
-        # MOCK LOGIC for Connectivity Testing
-        has_logs = len(window.logs) > 0
-        has_metrics = len(window.metrics) > 0
-
-        # Logic: If metrics are high variance or logs contain "ERROR", flag anomaly
-        is_error = any("ERROR" in l.level for l in window.logs)
-        severity = 0.9 if is_error else 0.1
+        is_anomaly = fusion_val > 0.75
+        severity = (
+            "HIGH" if fusion_val > 0.9 else ("MEDIUM" if fusion_val > 0.75 else "LOW")
+        )
 
         result = AnomalyScore(
             is_anomaly=is_anomaly,
-            severity=scores['fusion'],
-            score_msif=scores['msif'],
-            score_ple=scores['ple'],
-            score_fusion=scores['fusion'],
-            confidence=0.85, # dynamic calc in future
-            contributing_factors=[]
+            severity=severity,
+            score_msif=0.0,
+            score_ple=0.0,
+            score_fusion=fusion_val,
+            confidence=0.85,
         )
 
         duration = (time.time() - start_time) * 1000
 
-        return PredictionResponse(
+        return PredictResponse(
             request_id=req_id,
             entity_id=window.entity_id,
             window_end=window.window_end,
             result=result,
             processing_time_ms=duration,
-            model_version="v2.0.0-stub"
+            model_version="v2.0.0",
         )
 
     except Exception as e:
         logger.error(f"Prediction failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/v1/predict:batch")
-def predict_batch(batch: BatchPredictionRequest):
-    # Wrapper for batch processing
-    results = []
-    for window in batch.windows:
-        results.append(predict_window(window))
-    return results

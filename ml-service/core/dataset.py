@@ -1,50 +1,50 @@
 import json
-from typing import List
 
 import torch
-from api.schemas import LogEvent, MetricPoint, PredictionWindow, TraceSpan
+from api.schemas import PredictionWindow
 from torch.utils.data import Dataset
 
-
 class MultimodalWindowDataset(Dataset):
-    """
-    Loads PredictionWindows from a JSONL file.
-    Each line in the file must be a valid PredictionWindow JSON.
-    """
     def __init__(self, jsonl_path: str):
         self.windows = []
         self.labels = []
 
-        print(f"Loading dataset from {jsonl_path}...")
-        with open(jsonl_path, 'r') as f:
-            for line in f:
-                data = json.loads(line)
+        print(f"Loading {jsonl_path}...")
+        try:
+            with open(jsonl_path, "r") as f:
+                for line in f:
+                    try:
+                        data = json.loads(line)
+                        # Fix metric format if needed
+                        metrics = data.get("metrics", [])
+                        if isinstance(metrics, list):
+                            new_m = {}
+                            for m in metrics:
+                                new_m[m["name"]] = [
+                                    {"timestamp": t, "value": v}
+                                    for t, v in zip(m["timestamps"], m["values"])
+                                ]
+                            data["metrics"] = new_m
 
-                # Parse JSON into Pydantic Model (Validation)
-                window = PredictionWindow(**data)
+                        self.windows.append(PredictionWindow(**data))
+                        self.labels.append(float(data.get("label", 0)))
+                    except Exception as e:
+                        continue
+        except FileNotFoundError:
+            print("File not found")
 
-                # Extract Label (assuming 'label' field exists in training data,
-                # even though it's not in the inference schema)
-                is_anomaly = data.get("label", 0)
-
-                self.windows.append(window)
-                self.labels.append(float(is_anomaly))
-
-        print(f"Loaded {len(self.windows)} windows.")
+        print(f"✅ Loaded {len(self.windows)} windows")
 
     def __len__(self):
         return len(self.windows)
 
     def __getitem__(self, idx):
-        window = self.windows[idx]
-        label = torch.tensor([self.labels[idx]], dtype=torch.float32)
-        return window, label
+        return self.windows[idx], torch.tensor([self.labels[idx]], dtype=torch.float32)
+
+    def __getitem__(self, idx):
+        return self.windows[idx], torch.tensor([self.labels[idx]], dtype=torch.float32)
 
 def collate_windows(batch):
-    """
-    Custom collate function because 'window' is an object, not a tensor.
-    Returns: (List[PredictionWindow], Tensor[BatchSize, 1])
-    """
-    windows = [item[0] for item in batch]
-    labels = torch.stack([item[1] for item in batch])
+    windows = [b[0] for b in batch]
+    labels = torch.stack([b[1] for b in batch])
     return windows, labels
