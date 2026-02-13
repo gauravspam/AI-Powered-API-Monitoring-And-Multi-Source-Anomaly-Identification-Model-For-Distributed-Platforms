@@ -36,12 +36,10 @@ ml-service/*.pyd
 ml-service/.pytest_cache/
 ml-service/.ipynb_checkpoints/
 ml-service/.env
-ml-service/venv/
 ml-service/venv*/
 ml-service/env/
 ml-service/logs/
-ml-service/data/
-ml-service/venv/
+#ml-service/data/
 ml-service/kaggle_api_dataset/
 ml-service/tf_gpu/
 ml-service/tf_gpu*/
