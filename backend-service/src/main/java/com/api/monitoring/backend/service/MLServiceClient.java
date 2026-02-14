@@ -1,21 +1,19 @@
 package com.api.monitoring.backend.service;
 
-import com.api.monitoring.backend.dto.ml.*;
+import com.api.monitoring.backend.dto.ml.PredictionResponseDto;
+import com.api.monitoring.backend.dto.ml.PredictionWindowDto;
 import com.api.monitoring.backend.model.LogRecord;
 import com.api.monitoring.backend.model.MetricRecord;
 import com.api.monitoring.backend.model.TraceRecord;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -23,165 +21,80 @@ import java.util.stream.Collectors;
 public class MLServiceClient {
 
     private final RestTemplate restTemplate;
+    private final MultimodalDataAggregator aggregator;
 
     @Value("${ml.service.url:http://localhost:9000}")
     private String mlServiceUrl;
 
-    /**
-     * Detect anomaly using Multimodal ML Service V2.
-     * Calls POST /v1/predict with the strictly typed PredictionWindow schema.
-     */
     public PredictionResponseDto detectAnomaly(
-            List<MetricRecord> metrics,
-            List<LogRecord> logs,
-            List<TraceRecord> traces,
+            List<MetricRecord> ignoredMetrics,
+            List<LogRecord> ignoredLogs,
+            List<TraceRecord> ignoredTraces,
             String serviceName,
             Instant windowStart,
             Instant windowEnd) {
-
         try {
-            // 1. Build the V2 Prediction Window
-            PredictionWindowDto request = buildPredictionWindow(
-                    metrics, logs, traces,
-                    serviceName, windowStart, windowEnd);
+            PredictionWindowDto window = aggregator.aggregateWindow(serviceName, windowStart, windowEnd);
+            return callMlService(window);
+        } catch (Exception e) {
+            log.error("❌ ML service call failed: {}", e.getMessage());
+            return createFallbackResponse(serviceName);
+        }
+    }
 
-            // 2. Prepare Endpoint
-            String url = mlServiceUrl + "/v1/predict";
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<PredictionWindowDto> entity = new HttpEntity<>(request, headers);
+    public PredictionResponseDto detectAnomalyDirect(PredictionWindowDto window) {
+        try {
+            return callMlService(window);
+        } catch (Exception e) {
+            log.error("❌ ML service call failed (Direct): {}", e.getMessage());
+            String serviceName = (window.getContext() != null) ? window.getContext().get("service_name") : "unknown";
+            return createFallbackResponse(serviceName);
+        }
+    }
 
-            log.info("Calling ML Service V2: {} (Metrics: {}, Logs: {}, Traces: {})",
-                    url,
-                    request.getMetrics().size(),
-                    request.getLogs().size(),
-                    request.getTraces().size());
-
-            // 3. Execute
+    private PredictionResponseDto callMlService(PredictionWindowDto window) {
+        try {
             PredictionResponseDto response = restTemplate.postForObject(
-                    url,
-                    entity,
+                    mlServiceUrl + "/v1/predict",
+                    window,
                     PredictionResponseDto.class);
 
-            if (response != null && response.getResult() != null) {
-                log.info("ML V2 Prediction: IsAnomaly={}, Severity={}, FusionScore={}",
-                        response.getResult().isAnomaly(),
-                        response.getResult().getSeverity(),
-                        response.getResult().getScoreFusion());
+            if (response == null) {
+                throw new RuntimeException("Received null response from ML Service");
             }
 
+            if (response.getResult() == null) {
+                PredictionResponseDto.AnomalyScoreResult result = new PredictionResponseDto.AnomalyScoreResult();
+
+                if (response.getFlatIsAnomaly() != null) {
+                    result.setAnomaly(response.getFlatIsAnomaly());
+                }
+
+                if (response.getFlatFinalScore() != null) {
+                    result.setScoreFusion(response.getFlatFinalScore());
+                    result.setSeverity(response.getFlatFinalScore() > 0.8 ? "CRITICAL"
+                            : (response.getFlatFinalScore() > 0.6 ? "HIGH" : "LOW"));
+                    result.setConfidence(0.9);
+                }
+
+                response.setResult(result);
+            }
             return response;
 
         } catch (Exception e) {
-            log.error("ML Service V2 call failed: {}", e.getMessage());
-            return createFallbackResponse(serviceName, windowEnd);
+            log.error("Exception during ML service call", e);
+            throw e;
         }
     }
 
-    /**
-     * Assembles the PredictionWindowDto from raw DB entities.
-     * Pivots row-based MetricRecords into column-based Map<String, List<Point>>.
-     */
-    private PredictionWindowDto buildPredictionWindow(
-            List<MetricRecord> metrics,
-            List<LogRecord> logs,
-            List<TraceRecord> traces,
-            String serviceName,
-            Instant windowStart,
-            Instant windowEnd) {
-
-        return PredictionWindowDto.builder()
-                .windowStart(windowStart.toEpochMilli())
-                .windowEnd(windowEnd.toEpochMilli())
-                .entityId(serviceName)
-                .metrics(pivotMetrics(metrics))
-                .logs(mapLogs(logs))
-                .traces(mapTraces(traces))
-                .build();
-    }
-
-    /**
-     * Pivots List<MetricRecord> (Row-based) to Map<MetricName, List<Point>>
-     * (Columnar).
-     */
-    private Map<String, List<MetricPointDto>> pivotMetrics(List<MetricRecord> metrics) {
-        if (metrics == null || metrics.isEmpty()) {
-            return Collections.emptyMap();
-        }
-
-        Map<String, List<MetricPointDto>> result = new HashMap<>();
-        List<MetricPointDto> cpuPoints = new ArrayList<>();
-        List<MetricPointDto> memPoints = new ArrayList<>();
-        List<MetricPointDto> respPoints = new ArrayList<>();
-
-        for (MetricRecord record : metrics) {
-            long ts = record.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli();
-
-            if (record.getCpuUsagePercent() != null) {
-                cpuPoints.add(MetricPointDto.builder().timestamp(ts).value(record.getCpuUsagePercent()).build());
-            }
-            if (record.getMemoryUsagePercent() != null) {
-                memPoints.add(MetricPointDto.builder().timestamp(ts).value(record.getMemoryUsagePercent()).build());
-            }
-            if (record.getResponseTimeMs() != null) {
-                respPoints.add(
-                        MetricPointDto.builder().timestamp(ts).value(record.getResponseTimeMs().doubleValue()).build());
-            }
-        }
-
-        result.put("cpu_usage", cpuPoints);
-        result.put("memory_usage", memPoints);
-        result.put("response_time", respPoints);
-
-        return result;
-    }
-
-    private List<LogEventDto> mapLogs(List<LogRecord> logs) {
-        if (logs == null)
-            return Collections.emptyList();
-
-        return logs.stream().map(log -> LogEventDto.builder()
-                .timestamp(log.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli())
-                .level(determineLogLevel(log.getStatusCode()))
-                .message(log.getEndpoint() != null ? log.getEndpoint() : "unknown")
-                .template_id(log.getServiceName())
-                .build()).collect(Collectors.toList());
-    }
-
-    private List<TraceSpanDto> mapTraces(List<TraceRecord> traces) {
-        if (traces == null)
-            return Collections.emptyList();
-
-        return traces.stream().map(t -> TraceSpanDto.builder()
-                .traceId(t.getTraceId())
-                .spanId(t.getSpanId())
-                .parentId(t.getParentSpanId())
-                .service(t.getServiceName())
-                .operation(t.getOperationName())
-                .durationMs(t.getDuration() != null ? t.getDuration().doubleValue() : 0.0)
-                .statusCode(t.getStatusCode())
-                .timestamp(t.getCreatedAt().toInstant(java.time.ZoneOffset.UTC).toEpochMilli())
-                .build()).collect(Collectors.toList());
-    }
-
-    private String determineLogLevel(Integer statusCode) {
-        if (statusCode == null)
-            return "INFO";
-        if (statusCode >= 500)
-            return "ERROR";
-        if (statusCode >= 400)
-            return "WARN";
-        return "INFO";
-    }
-
-    private PredictionResponseDto createFallbackResponse(String entityId, Instant windowEnd) {
+    private PredictionResponseDto createFallbackResponse(String entityId) {
         PredictionResponseDto response = new PredictionResponseDto();
         response.setEntityId(entityId);
         response.setRequestId("fallback-" + UUID.randomUUID());
 
         PredictionResponseDto.AnomalyScoreResult result = new PredictionResponseDto.AnomalyScoreResult();
         result.setAnomaly(false);
-        result.setSeverity(0.0);
+        result.setSeverity("LOW");
         result.setScoreFusion(0.0);
         result.setConfidence(0.0);
 

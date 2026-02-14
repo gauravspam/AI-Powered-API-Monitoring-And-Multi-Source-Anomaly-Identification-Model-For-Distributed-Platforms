@@ -3,9 +3,15 @@ package com.api.monitoring.backend.service;
 import com.api.monitoring.backend.dto.AnomalyResponse;
 import com.api.monitoring.backend.dto.LogEntryRequest;
 import com.api.monitoring.backend.dto.StatisticsResponse;
-import com.api.monitoring.backend.dto.ml.PredictionResponseDto; // ✅ ADDED
-import com.api.monitoring.backend.model.*;
-import com.api.monitoring.backend.repository.*;
+import com.api.monitoring.backend.dto.ml.PredictionResponseDto;
+import com.api.monitoring.backend.model.AnomalyRecord;
+import com.api.monitoring.backend.model.LogRecord;
+import com.api.monitoring.backend.model.MetricRecord;
+import com.api.monitoring.backend.model.TraceRecord;
+import com.api.monitoring.backend.repository.AnomalyRepository;
+import com.api.monitoring.backend.repository.LogRepository;
+import com.api.monitoring.backend.repository.MetricRepository;
+import com.api.monitoring.backend.repository.TraceRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -28,9 +34,6 @@ public class AnomalyService {
     private final TraceRepository traceRepository;
     private final AnomalyRepository anomalyRepository;
 
-    /**
-     * Detect anomaly using multimodal window-based approach.
-     */
     @Transactional
     public AnomalyResponse detectAnomaly(LogEntryRequest logEntry) {
         try {
@@ -38,27 +41,25 @@ public class AnomalyService {
             Instant windowEnd = Instant.now();
             Instant windowStart = windowEnd.minus(60, ChronoUnit.SECONDS);
 
-            // Handle service name alias
-            String serviceName = logEntry.getServiceName() != null ? logEntry.getServiceName() : logEntry.getApiName();
+            String serviceName = (logEntry.getServiceName() != null) ? logEntry.getServiceName()
+                    : logEntry.getApiName();
             if (serviceName == null)
                 serviceName = "default-service";
 
-            log.info("Assembling window: {} - {} for service: {}", windowStart, windowEnd, serviceName);
+            log.info("Assembling window {} - {} for service {}", windowStart, windowEnd, serviceName);
 
-            // Fetch recent data
+            // Fetch data (Metrics, Logs, Traces) could be passed empty if handled by
+            // Aggregator inside Client,
+            // but keeping signature for compatibility if Client uses them.
             List<MetricRecord> metrics = metricRepository.findByCreatedAtBetween(windowStart, windowEnd);
             List<LogRecord> logs = logRepository.findByCreatedAtBetween(windowStart, windowEnd);
             List<TraceRecord> traces = traceRepository.findByCreatedAtBetween(windowStart, windowEnd);
 
-            log.debug("Window contents: {} metrics, {} logs, {} traces", metrics.size(), logs.size(), traces.size());
-
-            // Call ML service (V2)
+            // Call ML Service
             PredictionResponseDto mlResponse = mlServiceClient.detectAnomaly(
-                    metrics, logs, traces,
-                    serviceName,
-                    windowStart, windowEnd);
+                    metrics, logs, traces, serviceName, windowStart, windowEnd);
 
-            // Check if result exists (handle fallback/error cases)
+            // Handle Null Response
             if (mlResponse == null || mlResponse.getResult() == null) {
                 log.warn("ML Service returned null response. Skipping anomaly save.");
                 return AnomalyResponse.builder()
@@ -68,38 +69,31 @@ public class AnomalyService {
                         .build();
             }
 
-            // Convert to frontend response
-            AnomalyResponse response = convertToAnomalyResponse(mlResponse, logEntry);
-
-            // Save anomaly record if detected
+            // Save if Anomaly
             if (mlResponse.getResult().isAnomaly()) {
                 saveAnomalyRecord(mlResponse, logEntry);
             }
 
-            return response;
+            return convertToAnomalyResponse(mlResponse, logEntry);
 
         } catch (Exception e) {
             log.error("Anomaly detection failed: {}", e.getMessage(), e);
-            // Return safe fallback instead of throwing to keep API alive
-            return AnomalyResponse.builder().status("ERROR").build();
+            // Fallback response
+            return AnomalyResponse.builder()
+                    .status("ERROR")
+                    .serviceName(logEntry.getApiName())
+                    .timestamp(Instant.now().toString())
+                    .build();
         }
     }
 
-    /**
-     * Get recent anomalies for dashboard.
-     */
     public List<AnomalyResponse> getRecentAnomalies(int limit) {
-        // Limitation: Repository might not support 'limit' natively without Pageable
-        // Using Top10 for now as per original code
         List<AnomalyRecord> records = anomalyRepository.findTop10ByOrderByCreatedAtDesc();
         return records.stream()
                 .map(this::mapRecordToResponse)
                 .collect(Collectors.toList());
     }
 
-    /**
-     * Acknowledge an anomaly.
-     */
     @Transactional
     public boolean acknowledgeAnomaly(Long id) {
         return anomalyRepository.findById(id).map(record -> {
@@ -110,13 +104,9 @@ public class AnomalyService {
         }).orElse(false);
     }
 
-    /**
-     * Get statistics for a specific API or all.
-     */
     public StatisticsResponse getStatistics(String apiName) {
         long total = anomalyRepository.count();
-        long active = anomalyRepository.count(); // TODO: filter by status
-
+        long active = anomalyRepository.count(); // TODO: filter by status='ACTIVE'
         return StatisticsResponse.builder()
                 .totalAnomalies(total)
                 .activeAnomalies(active)
@@ -128,7 +118,7 @@ public class AnomalyService {
     // --- Helper Methods ---
 
     private AnomalyResponse convertToAnomalyResponse(PredictionResponseDto ml, LogEntryRequest logEntry) {
-        String serviceName = logEntry.getServiceName() != null ? logEntry.getServiceName() : logEntry.getApiName();
+        String serviceName = (logEntry.getServiceName() != null) ? logEntry.getServiceName() : logEntry.getApiName();
         PredictionResponseDto.AnomalyScoreResult res = ml.getResult();
 
         return AnomalyResponse.builder()
@@ -140,10 +130,37 @@ public class AnomalyService {
                 .pleScore(res.getScorePle())
                 .confidence(res.getConfidence())
                 .fusionMethod("weighted_fusion_v2")
-                .severity(determineSeverity(res.getSeverity()))
+                .severity(res.getSeverity()) // FIXED: Direct string assignment
                 .processingTimeMs(ml.getProcessingTimeMs())
                 .timestamp(Instant.now().toString())
                 .build();
+    }
+
+    private void saveAnomalyRecord(PredictionResponseDto ml, LogEntryRequest logEntry) {
+        String serviceName = (logEntry.getServiceName() != null) ? logEntry.getServiceName() : logEntry.getApiName();
+        PredictionResponseDto.AnomalyScoreResult res = ml.getResult();
+
+        AnomalyRecord record = AnomalyRecord.builder()
+                .serviceName(serviceName)
+                .endpoint(logEntry.getEndpoint())
+                .method(logEntry.getMethod() != null ? logEntry.getMethod() : "UNKNOWN")
+                .msifLstmScore(res.getScoreMsif())
+                .pleGruScore(res.getScorePle())
+                .hybridEnsembleScore(res.getScoreFusion())
+                .fusionMethod("weighted_fusion_v2")
+                .confidence(res.getConfidence())
+                .severity(res.getSeverity()) // FIXED: Direct string assignment
+                .status("ACTIVE")
+                .isAcknowledged(false)
+                .isFalsePositive(false)
+                .isResolved(false)
+                .mlServiceVersion(ml.getModelVersion())
+                .mlProcessingTimeMs(ml.getProcessingTimeMs() != null ? ml.getProcessingTimeMs().longValue() : 0L)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        anomalyRepository.save(record);
+        log.info("💾 Saved anomaly record: service={}, score={}", serviceName, res.getScoreFusion());
     }
 
     private AnomalyResponse mapRecordToResponse(AnomalyRecord record) {
@@ -156,42 +173,5 @@ public class AnomalyService {
                 .confidence(record.getConfidence())
                 .timestamp(record.getCreatedAt().toString())
                 .build();
-    }
-
-    private void saveAnomalyRecord(PredictionResponseDto ml, LogEntryRequest logEntry) {
-        String serviceName = logEntry.getServiceName() != null ? logEntry.getServiceName() : logEntry.getApiName();
-        PredictionResponseDto.AnomalyScoreResult res = ml.getResult();
-
-        AnomalyRecord record = AnomalyRecord.builder()
-                .serviceName(serviceName)
-                .endpoint(logEntry.getEndpoint())
-                .method(logEntry.getMethod() != null ? logEntry.getMethod() : "UNKNOWN")
-                .msifLstmScore(res.getScoreMsif())
-                .pleGruScore(res.getScorePle())
-                .hybridEnsembleScore(res.getScoreFusion())
-                .fusionMethod("weighted_fusion_v2")
-                .confidence(res.getConfidence())
-                .severity(determineSeverity(res.getSeverity()))
-                .status("ACTIVE")
-                .isAcknowledged(false)
-                .isFalsePositive(false)
-                .isResolved(false)
-                .mlServiceVersion(ml.getModelVersion())
-                .mlProcessingTimeMs(ml.getProcessingTimeMs().longValue())
-                .createdAt(LocalDateTime.now())
-                .build();
-
-        anomalyRepository.save(record);
-        log.info("Saved anomaly record: service={}, score={}", serviceName, res.getScoreFusion());
-    }
-
-    private String determineSeverity(Double score) {
-        if (score >= 0.9)
-            return "CRITICAL";
-        if (score >= 0.7)
-            return "HIGH";
-        if (score >= 0.5)
-            return "MEDIUM";
-        return "LOW";
     }
 }

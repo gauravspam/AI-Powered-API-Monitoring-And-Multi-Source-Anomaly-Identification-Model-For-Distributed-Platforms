@@ -32,23 +32,21 @@ public class OpenSearchLogService {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenSearchLogService.class);
     private static final String INDEX_PREFIX = "api-logs-";
-    
+
     @Autowired(required = false)
     @Qualifier("openSearchClient")
     private RestHighLevelClient openSearchClient;
-    
+
     @Autowired
     private ObjectMapper objectMapper;
 
     @PostConstruct
     public void init() {
-        logger.info("========================================");
         if (openSearchClient != null) {
-            logger.info("✓ OpenSearchLogService initialized WITH RestHighLevelClient");
+            logger.info("✓ OpenSearchLogService initialized");
         } else {
-            logger.warn("✗ OpenSearchLogService initialized but RestHighLevelClient is NULL!");
+            logger.warn("⚠ OpenSearchLogService running without OpenSearch client");
         }
-        logger.info("========================================");
     }
 
     public long getTotalRequests() {
@@ -106,10 +104,10 @@ public class OpenSearchLogService {
         try {
             String logId = UUID.randomUUID().toString();
             logDTO.setLogId(logId);
-            
-            String indexName = INDEX_PREFIX + 
-                LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy.MM.dd"));
-            
+
+            String indexName = INDEX_PREFIX +
+                    LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy.MM.dd"));
+
             Map<String, Object> logMap = new HashMap<>();
             logMap.put("logId", logDTO.getLogId());
             logMap.put("serviceName", logDTO.getServiceName());
@@ -120,18 +118,18 @@ public class OpenSearchLogService {
             logMap.put("metadata", logDTO.getMetadata());
             logMap.put("traceId", logDTO.getTraceId());
             logMap.put("spanId", logDTO.getSpanId());
-            
+
             String jsonLog = objectMapper.writeValueAsString(logMap);
-            
+
             IndexRequest request = new IndexRequest(indexName)
-                .id(logId)
-                .source(jsonLog, XContentType.JSON);
-            
+                    .id(logId)
+                    .source(jsonLog, XContentType.JSON);
+
             IndexResponse response = openSearchClient.index(request, RequestOptions.DEFAULT);
-            
+
             logger.info("✓ Indexed log to OpenSearch: {} in index: {}", logId, indexName);
             return response.getId();
-            
+
         } catch (IOException e) {
             logger.error("✗ Failed to index log to OpenSearch", e);
             return UUID.randomUUID().toString();
@@ -151,11 +149,11 @@ public class OpenSearchLogService {
             sourceBuilder.sort("timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
-            
+
             SearchResponse response = openSearchClient.search(searchRequest, RequestOptions.DEFAULT);
             logger.info("✓ Found {} logs in OpenSearch", response.getHits().getTotalHits().value);
             return parseSearchResponse(response);
-            
+
         } catch (IOException e) {
             logger.error("✗ Failed to fetch recent logs from OpenSearch", e);
             return new ArrayList<>();
@@ -174,10 +172,10 @@ public class OpenSearchLogService {
             sourceBuilder.sort("timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
-            
+
             SearchResponse response = openSearchClient.search(searchRequest, RequestOptions.DEFAULT);
             return parseSearchResponse(response);
-            
+
         } catch (IOException e) {
             logger.error("Failed to search logs in OpenSearch", e);
             return new ArrayList<>();
@@ -196,10 +194,10 @@ public class OpenSearchLogService {
             sourceBuilder.sort("timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
-            
+
             SearchResponse response = openSearchClient.search(searchRequest, RequestOptions.DEFAULT);
             return parseSearchResponse(response);
-            
+
         } catch (IOException e) {
             logger.error("Failed to fetch logs by service from OpenSearch", e);
             return new ArrayList<>();
@@ -218,19 +216,48 @@ public class OpenSearchLogService {
             sourceBuilder.sort("timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
-            
+
             SearchResponse response = openSearchClient.search(searchRequest, RequestOptions.DEFAULT);
             return parseSearchResponse(response);
-            
+
         } catch (IOException e) {
             logger.error("Failed to fetch logs by level from OpenSearch", e);
             return new ArrayList<>();
         }
     }
 
+    public List<LogDTO> getLogsByServiceAndTimeRange(String serviceName, java.time.Instant start,
+            java.time.Instant end) {
+        if (openSearchClient == null)
+            return new ArrayList<>();
+
+        try {
+            SearchRequest searchRequest = new SearchRequest(INDEX_PREFIX + "*");
+            SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+
+            // Query: ServiceName match AND Timestamp Range
+            var boolQuery = QueryBuilders.boolQuery()
+                    .must(QueryBuilders.matchQuery("serviceName", serviceName))
+                    .filter(QueryBuilders.rangeQuery("timestamp")
+                            .from(start.toEpochMilli())
+                            .to(end.toEpochMilli()));
+
+            sourceBuilder.query(boolQuery);
+            sourceBuilder.size(500); // Limit logs per window
+            sourceBuilder.sort("timestamp", SortOrder.ASC);
+            searchRequest.source(sourceBuilder);
+
+            SearchResponse response = openSearchClient.search(searchRequest, RequestOptions.DEFAULT);
+            return parseSearchResponse(response);
+
+        } catch (IOException e) {
+            logger.error("Failed to fetch logs by time range", e);
+            return new ArrayList<>();
+        }
+    }
+
     private List<LogDTO> parseSearchResponse(SearchResponse response) {
         List<LogDTO> logs = new ArrayList<>();
-        
         for (SearchHit hit : response.getHits().getHits()) {
             try {
                 Map<String, Object> sourceMap = hit.getSourceAsMap();
@@ -239,22 +266,28 @@ public class OpenSearchLogService {
                 log.setServiceName((String) sourceMap.get("serviceName"));
                 log.setLevel((String) sourceMap.get("level"));
                 log.setMessage((String) sourceMap.get("message"));
-                log.setSource((String) sourceMap.get("source"));
-                
-                if (sourceMap.get("timestamp") != null) {
-                    log.setTimestamp(objectMapper.convertValue(sourceMap.get("timestamp"), java.time.Instant.class));
+
+                // Handle timestamp conversion safely
+                Object ts = sourceMap.get("timestamp");
+                if (ts instanceof String) {
+                    log.setTimestamp(java.time.Instant.parse((String) ts));
+                } else if (ts instanceof Long) {
+                    log.setTimestamp(java.time.Instant.ofEpochMilli((Long) ts));
                 }
-                
-                log.setMetadata((Map<String, Object>) sourceMap.get("metadata"));
-                log.setTraceId((String) sourceMap.get("traceId"));
-                log.setSpanId((String) sourceMap.get("spanId"));
-                
+
                 logs.add(log);
             } catch (Exception e) {
-                logger.warn("Failed to parse log from search hit", e);
+                // ignore malformed logs
             }
         }
-        
         return logs;
     }
+
+    // public TrafficMetricsDTO getTrafficMetrics() { return new TrafficMetricsDTO(); }
+    //     public String indexLog(LogDTO log) { return UUID.randomUUID().toString(); }
+    //     public List<LogDTO> getRecentLogs(int limit) { return new ArrayList<>(); }
+    //     public List<LogDTO> searchLogs(String q, int l) { return new ArrayList<>(); }
+    //     public List<LogDTO> getLogsByService(String s, int l) { return new ArrayList<>(); }
+    //     public List<LogDTO> getLogsByLevel(String l, int limit) { return new ArrayList<>(); }
+    // }
 }
