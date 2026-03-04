@@ -2,7 +2,6 @@
 
 > **Enterprise-grade API monitoring and anomaly detection platform for distributed microservices**
 
-
 ## 📋 Summary
 
 This system represents a production-grade, enterprise-ready **distributed API anomaly detection platform** that integrates real-time multimodal data (API logs, metrics, traces)

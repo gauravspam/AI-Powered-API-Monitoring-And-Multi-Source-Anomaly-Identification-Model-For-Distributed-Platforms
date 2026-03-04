@@ -52,7 +52,7 @@ JOBS = [
         "tree": True,
         "exclude_artifacts": True,
         "exclude_dir": ["data"],
-        "prune_dir": ["logs", "tf_gpu", "venv"],
+        "prune_dir": ["logs", "tf_gpu", "venv", "plots"],
     },
 ]
 
@@ -175,7 +175,6 @@ def main() -> int:
         return 1
 
     return 0
-    
+
 if __name__ == "__main__":
     raise SystemExit(main())
-
