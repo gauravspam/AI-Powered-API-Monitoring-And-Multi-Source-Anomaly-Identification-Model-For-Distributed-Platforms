@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Engine Configuration and Model Ensemble Control Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #f9fafb;
+      --panel: #ffffff;
+      --panel-2: #f5f5f5;
+      --text: #1a1a1a;
+      --muted: #666666;
+      --accent: #ff7a59;
+      --accent-2: #3dd6c0;
+      --accent-3: #ff9500;
+      --line: #e0e0e0;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Space Grotesk", sans-serif;
+      color: var(--text);
+      background: radial-gradient(1200px 800px at 10% 10%, #f0f4f8, transparent 55%),
+        radial-gradient(1000px 700px at 90% 20%, #e8f0f8, transparent 60%),
+        linear-gradient(180deg, #f5f7fa 0%, #f9fafb 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+
+    .stage {
+      width: min(1200px, 100%);
+      display: grid;
+      gap: 24px;
+      grid-template-columns: 1.1fr 1fr;
+      animation: fadeIn 0.9s ease both;
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+        var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:before {
+      content: "";
+      position: absolute;
+      top: -40px;
+      right: -40px;
+      width: 140px;
+      height: 140px;
+      background: radial-gradient(circle, rgba(61, 214, 192, 0.15), transparent 70%);
+      filter: blur(2px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 30px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent-3);
+      margin: 0 0 12px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select {
+      background: #ffffff;
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .pill {
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      padding: 8px 14px;
+      color: var(--muted);
+      font-size: 13px;
+      background: #f5f5f5;
+    }
+
+    .switch {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+    }
+
+    .switch input {
+      width: 42px;
+      height: 22px;
+      appearance: none;
+      background: #d0d0d0;
+      border-radius: 999px;
+      position: relative;
+      outline: none;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .switch input:checked {
+      background: var(--accent-2);
+    }
+
+    .switch input:before {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #ffffff;
+      transition: 0.2s ease;
+    }
+
+    .switch input:checked:before {
+      transform: translateX(20px);
+    }
+
+    .meters {
+      display: grid;
+      gap: 12px;
+    }
+
+    .meter {
+      display: grid;
+      gap: 8px;
+    }
+
+    .bar {
+      height: 8px;
+      border-radius: 999px;
+      background: #e0e0e0;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bar span {
+      position: absolute;
+      inset: 0;
+      width: 68%;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      border-radius: 999px;
+      animation: fill 1.2s ease both;
+    }
+
+    .ensemble {
+      display: grid;
+      gap: 16px;
+    }
+
+    .ensemble-item {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      background: #f5f5f5;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    .ensemble-item h3 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .ensemble-meta {
+      display: flex;
+      gap: 10px;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .cta {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    button {
+      border: none;
+      padding: 12px 16px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #111015;
+    }
+
+    .secondary {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--line);
+    }
+
+    .legend {
+      display: grid;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .legend-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fill {
+      from {
+        width: 0;
+      }
+      to {
+        width: 68%;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .stage {
+        grid-template-columns: 1fr;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage">
+    <section class="card">
+      <h1>Engine Configuration</h1>
+      <div class="subtitle">Runtime controls for anomaly pipeline, signal routing, and alert tolerance.</div>
+
+      <div class="section-title">Core Runtime</div>
+      <div class="grid">
+        <div class="field">
+          <label for="engine">Engine Mode</label>
+          <select id="engine">
+            <option>Balanced</option>
+            <option>Latency First</option>
+            <option>Precision First</option>
+            <option>Fail-Safe</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="window">Window Size (s)</label>
+          <input id="window" type="number" value="60" min="10" max="300" />
+        </div>
+        <div class="field">
+          <label for="threshold">Alert Threshold</label>
+          <input id="threshold" type="number" value="0.72" step="0.01" min="0" max="1" />
+        </div>
+        <div class="field">
+          <label for="cooldown">Cooldown (s)</label>
+          <input id="cooldown" type="number" value="180" min="30" max="900" />
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top: 20px;">Signal Intake</div>
+      <div class="pill-row">
+        <div class="pill">metrics: 146 streams</div>
+        <div class="pill">logs: 2.3k lines/min</div>
+        <div class="pill">traces: 812 spans/min</div>
+        <div class="pill">entity: cluster-a</div>
+      </div>
+
+      <div class="section-title" style="margin-top: 20px;">Feature Gates</div>
+      <div class="meters">
+        <div class="switch">
+          <div>
+            <div style="font-weight: 600;">Adaptive Normalization</div>
+            <div class="subtitle" style="margin: 4px 0 0;">Auto-scale for bursty traffic patterns.</div>
+          </div>
+          <input type="checkbox" checked />
+        </div>
+        <div class="switch">
+          <div>
+            <div style="font-weight: 600;">Context Memory</div>
+            <div class="subtitle" style="margin: 4px 0 0;">Preserve last 20 evaluation windows.</div>
+          </div>
+          <input type="checkbox" checked />
+        </div>
+        <div class="switch">
+          <div>
+            <div style="font-weight: 600;">Alert Throttling</div>
+            <div class="subtitle" style="margin: 4px 0 0;">Debounce noise from spike storms.</div>
+          </div>
+          <input type="checkbox" />
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top: 20px;">System Budget</div>
+      <div class="meter">
+        <div class="legend-row">
+          <span>Compute Utilization</span>
+          <span>68%</span>
+        </div>
+        <div class="bar"><span></span></div>
+      </div>
+      <div class="legend">
+        <div class="legend-row">
+          <span>GPU Pool</span>
+          <span>2/4 active</span>
+        </div>
+        <div class="legend-row">
+          <span>Inference SLA</span>
+          <span>120 ms p95</span>
+        </div>
+      </div>
+
+      <div class="cta">
+        <button class="primary">Apply Config</button>
+        <button class="secondary">Save Preset</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h1>Model Ensemble Control Panel</h1>
+      <div class="subtitle">Fine-tune expert balance, confidence blending, and fallback rules.</div>
+
+      <div class="section-title">Active Ensemble</div>
+      <div class="ensemble">
+        <div class="ensemble-item">
+          <h3>MSIF-LSTM</h3>
+          <div class="ensemble-meta">
+            <span>weight: 0.45</span>
+            <span>latency: 38 ms</span>
+            <span>status: hot</span>
+          </div>
+          <div class="field">
+            <label>Confidence Bias</label>
+            <input type="number" value="0.08" step="0.01" min="-0.2" max="0.2" />
+          </div>
+        </div>
+
+        <div class="ensemble-item">
+          <h3>PLE-GRU</h3>
+          <div class="ensemble-meta">
+            <span>weight: 0.35</span>
+            <span>latency: 42 ms</span>
+            <span>status: hot</span>
+          </div>
+          <div class="field">
+            <label>Confidence Bias</label>
+            <input type="number" value="0.04" step="0.01" min="-0.2" max="0.2" />
+          </div>
+        </div>
+
+        <div class="ensemble-item">
+          <h3>Hybrid Fusion</h3>
+          <div class="ensemble-meta">
+            <span>weight: 0.20</span>
+            <span>latency: 12 ms</span>
+            <span>status: warm</span>
+          </div>
+          <div class="field">
+            <label>Conflict Threshold</label>
+            <input type="number" value="0.25" step="0.01" min="0" max="1" />
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top: 20px;">Fallback Strategy</div>
+      <div class="grid">
+        <div class="field">
+          <label>Primary Fallback</label>
+          <select>
+            <option>Max Confidence</option>
+            <option>Weighted Average</option>
+            <option>Risk Averse</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Consensus Band</label>
+          <input type="number" value="0.12" step="0.01" min="0" max="0.5" />
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-top: 20px;">Deployment Lane</div>
+      <div class="pill-row">
+        <div class="pill">region: us-east</div>
+        <div class="pill">lane: canary-03</div>
+        <div class="pill">rollout: 20%</div>
+        <div class="pill">guardrail: strict</div>
+      </div>
+
+      <div class="cta">
+        <button class="primary">Deploy Weights</button>
+        <button class="secondary">Export Snapshot</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
