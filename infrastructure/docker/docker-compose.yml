@@ -102,11 +102,11 @@ services:
         ports:
             - "3000:80"
         environment:
-            - REACT_APP_API_URL=http://localhost:8081
+            - REACT_APP_API_URL=http://localhost:8080
             - REACT_APP_OPENSEARCH_URL=http://localhost:9200
-        depends_on:
-            backend:
-                condition: service_healthy
+        # depends_on:
+        #     backend:
+        #         condition: service_healthy
         networks:
             - monitoring-net
         restart: unless-stopped
@@ -134,9 +134,42 @@ services:
             retries: 3
         restart: unless-stopped
 
+    fluentd:
+        build:
+            context: ./fluentd
+            dockerfile: Dockerfile
+        container_name: fluentd
+        ports:
+            - "24224:24224"      # Forward protocol (TCP)
+            - "24224:24224/udp"  # Forward protocol (UDP)
+            - "9880:9880"        # HTTP input
+            - "24231:24231"      # Prometheus metrics
+            - "8888:8888"        # Health check
+        volumes:
+            - ./fluent.conf:/fluentd/etc/fluent.conf:ro
+            - fluentd_buffer:/fluentd/log
+        environment:
+            - FLUENTD_CONF=fluent.conf
+            # OpenSearch connection details available in config
+            - OPENSEARCH_HOST=opensearch
+            - OPENSEARCH_PORT=9200
+        networks:
+            - monitoring-net
+        depends_on:
+            opensearch:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8888/api/plugins.json"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        restart: unless-stopped
+
 networks:
     monitoring-net:
 
 volumes:
     postgres_data:
     opensearch_data:
+    fluentd_buffer:
