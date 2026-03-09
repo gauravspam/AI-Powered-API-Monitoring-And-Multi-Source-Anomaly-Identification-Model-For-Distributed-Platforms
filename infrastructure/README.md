@@ -16,6 +16,56 @@ Complete containerized deployment stack for API monitoring platform including Po
 
 ## 📚 Architecture
 
+**Observability Strategy: Option B - Specialized Signal Pipelines**
+
+This project implements a **hybrid observability architecture** where each signal type (logs, metrics, traces) flows through an optimized path:
+
+```
+┌───────────────────────────────────────────────────────────┐
+│                    SERVICE LAYER                          │
+│     (Backend API, Frontend, ML Service, etc.)             │
+└───────┬──────────────────────┬─────────────────────┬──────┘
+        │                      │                     │
+        │ Logs                 │ Metrics             │ Traces
+        │ (JSON)               │ (JSON/REST)         │ (JSON/REST)
+        ▼                      ▼                     ▼
+   ┌─────────┐         ┌────────────┐        ┌────────────┐
+   │Fluentd  │         │ Backend    │        │ Backend    │
+   │ :24224  │         │ API        │        │ API        │
+   │ :9880   │         │ /api/      │        │ /api/      │
+   └────┬────┘         │ metrics    │        │ traces     │
+        │              └──────┬─────┘        └──────┬─────┘
+        │                     │                     │
+        ▼                     ▼                     ▼
+   ┌─────────┐         ┌──────────────────────────────┐
+   │OpenSearch│        │       PostgreSQL             │
+   │  :9200  │         │ - systemmetrics              │
+   │         │         │ - distributedtraces          │
+   │ Logs    │         │ - apilogs                    │
+   │ Storage │         │ - anomalydetections          │
+   └─────────┘         └──────────┬───────────────────┘
+                                  │
+                                  ▼
+                       ┌────────────────────┐
+                       │   ML Service       │
+                       │ Anomaly Detection  │
+                       └────────────────────┘
+```
+
+### Signal Flow Summary
+
+| Signal | Collector | Transport | Storage | Reason |
+|--------|-----------|-----------|---------|---------|
+| **Logs** | Fluentd | Forward/HTTP | OpenSearch | High-volume, full-text search |
+| **Metrics** | Backend API | REST | PostgreSQL | Relational, ML-ready |
+| **Traces** | Backend API | REST | PostgreSQL | Relational, correlation |
+
+**See**: [📖 ARCHITECTURE_OPTION_B.md](../docs/ARCHITECTURE_OPTION_B.md) for complete details
+
+---
+
+## 📚 Architecture (Legacy)
+
 ```
 Infrastructure Stack (Docker Compose)
 │
@@ -65,6 +115,379 @@ docker compose ps
 
 ```bash
 # Check all services are running
+docker compose ps
+
+# Test backend health
+curl http://localhost:8081/actuator/health
+
+# Test frontend
+curl http://localhost:3000
+
+# Test OpenSearch
+curl http://localhost:9200
+
+# Test Fluentd health
+curl http://localhost:8888/healthcheck
+
+# Test Fluentd metrics (Prometheus format)
+curl http://localhost:24231/metrics
+```
+
+---
+
+## 🧪 Testing the Data Pipelines
+
+### 1. Test Log Ingestion (Fluentd → OpenSearch)
+
+**Send a log via HTTP**:
+```bash
+curl -X POST http://localhost:9880/app.test \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Test log from curl",
+    "level": "INFO",
+    "service": "test-service",
+    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
+  }'
+```
+
+**Verify in OpenSearch**:
+```bash
+# Search recent logs
+curl -X GET "http://localhost:9200/logs-*/_search?pretty" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": {
+      "match": {
+        "message": "Test log from curl"
+      }
+    },
+    "size": 10,
+    "sort": [{"@timestamp": "desc"}]
+  }'
+```
+
+**Check Fluentd buffer status**:
+```bash
+# Inspect buffer files
+docker compose exec fluentd ls -lh /fluentd/log/
+
+# View Fluentd logs
+docker compose logs fluentd | tail -50
+```
+
+### 2. Test Metrics Ingestion (Backend API → PostgreSQL)
+
+**Send a metric**:
+```bash
+curl -X POST http://localhost:8081/api/metrics \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceName": "test-service",
+    "cpuUsage": 45.2,
+    "memoryUsage": 62.8,
+    "diskIoBytes": 1048576,
+    "networkIoBytes": 2097152,
+    "responseTimeMs": 150,
+    "requestCount": 1200,
+    "errorRate": 0.02
+  }'
+```
+
+**Verify in PostgreSQL**:
+```bash
+# Connect to database
+docker compose exec postgres psql -U api_monitor -d api_monitoring
+
+# Query recent metrics
+SELECT id, service_name, cpu_usage_percent, memory_usage_percent, 
+       response_time_ms, metric_timestamp 
+FROM systemmetrics 
+ORDER BY metric_timestamp DESC 
+LIMIT 10;
+```
+
+### 3. Test Trace Ingestion (Backend API → PostgreSQL)
+
+**Send a trace span**:
+```bash
+curl -X POST http://localhost:8081/api/traces/ingest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "traceId": "test-trace-'$(date +%s)'",
+    "spanId": "span-001",
+    "serviceName": "test-service",
+    "operationName": "GET /test",
+    "startTime": "'$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)'",
+    "endTime": "'$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)'",
+    "duration": 123,
+    "statusCode": 200,
+    "tags": {
+      "http.method": "GET",
+      "http.url": "/test"
+    }
+  }'
+```
+
+**Verify in PostgreSQL**:
+```bash
+# Query recent traces
+docker compose exec postgres psql -U api_monitor -d api_monitoring -c \
+  "SELECT trace_id, span_id, service_name, operation_name, duration, start_time 
+   FROM distributedtraces 
+   ORDER BY start_time DESC 
+   LIMIT 10;"
+```
+
+---
+
+## 📊 Monitoring & Observability
+
+### Fluentd Monitoring
+
+**Health Check**:
+```bash
+curl http://localhost:8888/healthcheck
+# Expected: 200 OK
+```
+
+**Prometheus Metrics**:
+```bash
+curl http://localhost:24231/metrics
+# Metrics include:
+# - fluentd_output_status_buffer_total_bytes
+# - fluentd_output_status_retry_count
+# - fluentd_output_status_emit_records
+```
+
+**Buffer Status**:
+```bash
+# Check buffer directory
+docker compose exec fluentd du -sh /fluentd/log/*
+
+# Watch buffer size in real-time
+watch -n 2 'docker compose exec fluentd du -sh /fluentd/log/*'
+```
+
+### OpenSearch Monitoring
+
+**Cluster Health**:
+```bash
+curl http://localhost:9200/_cluster/health?pretty
+```
+
+**Index Statistics**:
+```bash
+curl http://localhost:9200/_cat/indices/logs-*?v
+```
+
+**Count Logs**:
+```bash
+curl http://localhost:9200/logs-*/_count?pretty
+```
+
+### PostgreSQL Monitoring
+
+**Table Sizes**:
+```bash
+docker compose exec postgres psql -U api_monitor -d api_monitoring -c \
+  "SELECT 
+     schemaname, 
+     tablename, 
+     pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS size
+   FROM pg_tables 
+   WHERE schemaname = 'public' 
+   ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;"
+```
+
+**Record Counts**:
+```bash
+docker compose exec postgres psql -U api_monitor -d api_monitoring -c \
+  "SELECT 
+     'systemmetrics' AS table_name, COUNT(*) AS count FROM systemmetrics
+   UNION ALL
+   SELECT 'distributedtraces', COUNT(*) FROM distributedtraces
+   UNION ALL
+   SELECT 'apilogs', COUNT(*) FROM apilogs
+   UNION ALL
+   SELECT 'anomalydetections', COUNT(*) FROM anomalydetections;"
+```
+
+---
+
+## 🔧 Configuration Files
+
+### Fluentd Configuration
+
+**Location**: `./fluent.conf`
+
+**Key Settings**:
+- Receives logs on ports 24224 (forward) and 9880 (HTTP)
+- Buffers to `/fluentd/log/` for crash recovery
+- Flushes to OpenSearch every 10 seconds or 5MB
+- Creates daily indices: `logs-YYYY.MM.DD`
+- Health check on port 8888
+- Prometheus metrics on port 24231
+
+**Edit and reload**:
+```bash
+# Edit configuration
+nano ./fluent.conf
+
+# Restart Fluentd to apply changes
+docker compose restart fluentd
+
+# Watch logs for errors
+docker compose logs -f fluentd
+```
+
+### Backend Application Properties
+
+**Location**: `../../backend-service/src/main/resources/application-docker.properties`
+
+**Key Settings** (Docker profile):
+```properties
+# PostgreSQL
+spring.datasource.url=jdbc:postgresql://postgres:5432/api_monitoring
+spring.datasource.username=api_monitor
+spring.datasource.password=api_monitor_pwd
+
+# OpenSearch (for log queries via backend)
+opensearch.enabled=true
+opensearch.host=opensearch
+opensearch.port=9200
+opensearch.scheme=http
+```
+
+---
+
+## 🚨 Troubleshooting
+
+### Fluentd Not Receiving Logs
+
+**1. Check Fluentd is running**:
+```bash
+docker compose ps fluentd
+docker compose logs fluentd | tail -50
+```
+
+**2. Test connectivity**:
+```bash
+# Test HTTP input
+curl -X POST http://localhost:9880/test \
+  -H "Content-Type: application/json" \
+  -d '{"message": "connectivity test"}'
+
+# Check if port 24224 is listening
+nc -zv localhost 24224
+```
+
+**3. Check buffer directory**:
+```bash
+docker compose exec fluentd ls -la /fluentd/log/
+```
+
+### OpenSearch Connection Issues
+
+**1. Check OpenSearch health**:
+```bash
+curl http://localhost:9200/_cluster/health?pretty
+```
+
+**2. Check Fluentd → OpenSearch connectivity**:
+```bash
+# From Fluentd container
+docker compose exec fluentd curl -v opensearch:9200
+```
+
+**3. Inspect OpenSearch logs**:
+```bash
+docker compose logs opensearch | grep -i error
+```
+
+### Metrics/Traces Not Appearing in PostgreSQL
+
+**1. Check backend is running**:
+```bash
+curl http://localhost:8081/actuator/health
+```
+
+**2. Test API endpoint directly**:
+```bash
+curl -X POST http://localhost:8081/api/metrics \
+  -H "Content-Type: application/json" \
+  -d '{
+    "serviceName": "test",
+    "cpuUsage": 50.0,
+    "memoryUsage": 60.0
+  }'
+```
+
+**3. Check backend logs**:
+```bash
+docker compose logs backend | grep -i error
+```
+
+**4. Verify database connection**:
+```bash
+docker compose exec postgres psql -U api_monitor -d api_monitoring -c "\dt"
+```
+
+### Container Resource Issues
+
+**Check resource usage**:
+```bash
+docker stats
+
+# Check disk usage
+docker system df
+```
+
+**Clean up unused resources**:
+```bash
+# Remove stopped containers
+docker compose down
+
+# Remove unused images
+docker image prune
+
+# Remove unused volumes (CAUTION: data loss!)
+docker volume prune
+```
+
+---
+
+## 📖 Additional Resources
+
+- **Architecture Guide**: [../docs/ARCHITECTURE_OPTION_B.md](../docs/ARCHITECTURE_OPTION_B.md)
+- **API Contracts**: [../docs/api-contracts.md](../docs/api-contracts.md)
+- **Fluentd Documentation**: https://docs.fluentd.org/
+- **OpenSearch Documentation**: https://opensearch.org/docs/
+- **Spring Boot Actuator**: https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html
+
+---
+
+## 🎯 Quick Reference
+
+| Task | Command |
+|------|---------|
+| Start all services | `docker compose up -d` |
+| Stop all services | `docker compose down` |
+| View all logs | `docker compose logs -f` |
+| Restart service | `docker compose restart <service>` |
+| Send test log | `curl -X POST http://localhost:9880/test -d '{"message":"test"}'` |
+| Send test metric | `curl -X POST http://localhost:8081/api/metrics -H "Content-Type: application/json" -d '{...}'` |
+| Query OpenSearch | `curl http://localhost:9200/logs-*/_search?pretty` |
+| Query PostgreSQL | `docker compose exec postgres psql -U api_monitor -d api_monitoring` |
+| Fluentd health | `curl http://localhost:8888/healthcheck` |
+| Fluentd metrics | `curl http://localhost:24231/metrics` |
+
+---
+
+### Verify Services
+
+```bash
+# Check all services are running
 docker compose logs -f
 
 # Test backend health
@@ -80,6 +503,37 @@ curl -k -u admin:Str0ng@ApiMon#2025 https://localhost:9200
 ---
 
 ## 📦 Services Overview
+
+| Service | Image | Port | Purpose | Signal Type |
+|---------|-------|------|---------|-------------|
+| **Frontend** | nginx:alpine | 3000 (host) → 80 | React dashboard UI | - |
+| **Backend** | Spring Boot 3.2 | 8081 (host) → 8080 | REST API + Metrics/Traces ingestion | Metrics, Traces, Anomalies |
+| **OpenSearch** | opensearchproject/opensearch:2.17 | 9200 | Log storage & search | Logs |
+| **Fluentd** | Custom (v1.17) | 24224, 9880 | Log collector & shipper | Logs |
+| **PostgreSQL** | postgres:16 | 5433 (host) → 5432 | Relational data store | Metrics, Traces, Anomalies |
+| **Fake Server** | Node.js | 8082 | Mock API for testing | - |
+
+### Fluentd Ports
+
+- **24224** (TCP/UDP): Fluentd forward protocol (primary log ingestion)
+- **9880**: HTTP input (alternative log ingestion)
+- **24231**: Prometheus metrics (Fluentd monitoring)
+- **8888**: Health check endpoint
+
+### Data Flow Details
+
+**Logs**:  
+Services → Fluentd (:24224 or :9880) → OpenSearch (:9200)
+
+**Metrics**:  
+Services → Backend API (:8080/api/metrics) → PostgreSQL (:5432)
+
+**Traces**:  
+Services → Backend API (:8080/api/traces/ingest) → PostgreSQL (:5432)
+
+---
+
+## 📦 Services Overview (Legacy)
 
 | Service | Image | Port | Purpose |
 |---------|-------|------|---------|
