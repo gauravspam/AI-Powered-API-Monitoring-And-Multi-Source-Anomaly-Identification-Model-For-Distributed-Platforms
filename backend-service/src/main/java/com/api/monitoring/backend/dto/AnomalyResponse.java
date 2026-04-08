@@ -14,7 +14,12 @@ public class AnomalyResponse {
     private String severity;
     private Double confidence;
     private String timestamp;
-    private Long id; // For acknowledge endpoint
+    private Long id;
+    private String environment;
+    private String serviceName;
+    private String endpoint;
+    private Double hybridEnsembleScore;
+    private String source;
 
     // Constructors
     public AnomalyResponse() {
@@ -33,6 +38,8 @@ public class AnomalyResponse {
 
     @JsonProperty("acknowledged")
     private Boolean acknowledged;
+
+    // Note: environment is declared above
 
     public Integer getStage() {
         return stage;
@@ -118,5 +125,45 @@ public class AnomalyResponse {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getEnvironment() {
+        return environment;
+    }
+
+    public void setEnvironment(String environment) {
+        this.environment = environment;
+    }
+
+    public String getServiceName() {
+        return serviceName;
+    }
+
+    public void setServiceName(String serviceName) {
+        this.serviceName = serviceName;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public void setEndpoint(String endpoint) {
+        this.endpoint = endpoint;
+    }
+
+    public Double getHybridEnsembleScore() {
+        return hybridEnsembleScore;
+    }
+
+    public void setHybridEnsembleScore(Double hybridEnsembleScore) {
+        this.hybridEnsembleScore = hybridEnsembleScore;
+    }
+
+    public String getSource() {
+        return source;
+    }
+
+    public void setSource(String source) {
+        this.source = source;
     }
 }

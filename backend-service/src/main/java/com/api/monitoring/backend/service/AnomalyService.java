@@ -6,6 +6,7 @@ import com.api.monitoring.backend.dto.LogEntryRequest;
 import com.api.monitoring.backend.dto.StatisticsResponse;
 import com.api.monitoring.backend.model.AnomalyRecord;
 import com.api.monitoring.backend.model.LogRecord;
+import com.api.monitoring.backend.model.MetricRecord;
 import com.api.monitoring.backend.repository.AnomalyRepository;
 import com.api.monitoring.backend.repository.MetricRepository;
 import com.api.monitoring.backend.util.FeatureEngineer;
@@ -24,7 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Slf4j
 public class AnomalyService {
 
-    private static final double SAVE_THRESHOLD = 0.40;
+    private static final double SAVE_THRESHOLD = 0.0;
 
     private static final double TH_LOW = 0.30;
     private static final double TH_MEDIUM = 0.50;
@@ -52,9 +53,9 @@ public class AnomalyService {
         int safeLimit = Math.max(1, Math.min(limit, 200));
         log.info("Fetching recent anomalies, limit={}", safeLimit);
 
-        List<AnomalyRecord> anomalies = anomalyRepository.findTop10ByOrderByCreatedAtDesc();
+        List<AnomalyRecord> anomalies = anomalyRepository.findRecentAnomalies(
+                org.springframework.data.domain.PageRequest.of(0, safeLimit));
         return anomalies.stream()
-                .limit(safeLimit)
                 .map(this::convertToResponse)
                 .collect(Collectors.toList());
     }
@@ -95,7 +96,8 @@ public class AnomalyService {
                 .hourOfDay(logEntry.getHourOfDay())
                 .dayOfWeek(logEntry.getDayOfWeek())
                 // apilogs.servicename is marked nullable=false in your entity; keep a default
-                .serviceName("api-monitoring")
+                .serviceName(logEntry.getServiceName() != null ? logEntry.getServiceName() : "api-monitoring")
+                .environment(logEntry.getEnvironment() != null ? logEntry.getEnvironment() : "production")
                 .build();
 
         AnomalyPredictionDTO prediction;
@@ -148,6 +150,21 @@ public class AnomalyService {
         // Save anomalies above threshold (tunable)
         if (hybrid >= SAVE_THRESHOLD) {
             try {
+                // Also save to system_metrics table for overview dashboard
+                MetricRecord metricRecord = new MetricRecord();
+                metricRecord.setServiceName(endpoint != null ? endpoint : "unknown");
+                metricRecord.setEndpoint(endpoint);
+                metricRecord.setEnvironment(logEntry.getEnvironment() != null ? logEntry.getEnvironment() : "production");
+                metricRecord.setMetricTimestamp(LocalDateTime.now());
+                metricRecord.setResponseTimeMs(doubleToLongMs(defaultIfNull(logEntry.getResponseTime(), 0.0)));
+                metricRecord.setErrorRate(defaultIfNull(logEntry.getErrorRate(), 0.0));
+                metricRecord.setCpuUsagePercent(defaultIfNull(logEntry.getCpuUsage(), 0.0));
+                metricRecord.setMemoryUsagePercent(defaultIfNull(logEntry.getMemoryUsage(), 0.0));
+                metricRecord.setRequestCount(defaultIfNull(logEntry.getRequestCount(), 1));
+                metricRecord.setNetworkIoBytes(doubleToLong(defaultIfNull(logEntry.getNetworkIo(), 0.0)));
+                metricRecord.setDiskIoBytes(doubleToLong(defaultIfNull(logEntry.getDiskIo(), 0.0)));
+                metricRepository.save(metricRecord);
+
                 AnomalyRecord anomalyRecord = AnomalyRecord.builder()
                         .endpoint(endpoint)
                         .method(record.getMethod())
@@ -164,8 +181,8 @@ public class AnomalyService {
                         .isResolved(false)
                         .isFalsePositive(false)
                         .traceId(traceId)
-                        .serviceName("api-monitoring")
-                        .environment("production")
+                        .serviceName(endpoint != null ? endpoint : "unknown")
+                        .environment(logEntry.getEnvironment() != null ? logEntry.getEnvironment() : "production")
                         .createdAt(LocalDateTime.now())
                         .createdBy("system")
                         .build();
@@ -248,6 +265,28 @@ public class AnomalyService {
         }
     }
 
+    @Transactional
+    public boolean resolveAnomaly(Long id) {
+        if (id == null)
+            return false;
+
+        try {
+            AnomalyRecord anomaly = anomalyRepository.findById(id).orElse(null);
+            if (anomaly == null)
+                return false;
+
+            anomaly.setStatus("RESOLVED");
+            anomaly.setResolvedAt(java.time.LocalDateTime.now());
+            anomaly.setResolvedBy("system");
+
+            anomalyRepository.save(anomaly);
+            return true;
+        } catch (Exception e) {
+            log.error("Error resolving anomaly id={}: {}", id, e.getMessage(), e);
+            return false;
+        }
+    }
+
     public long getActiveAlertsCount() {
         return anomalyRepository.findAll().stream()
                 .filter(a -> "ACTIVE".equalsIgnoreCase(a.getStatus()))
@@ -265,10 +304,30 @@ public class AnomalyService {
         AnomalyResponse response = new AnomalyResponse();
         response.setId(record.getId());
         response.setApiName(record.getEndpoint());
+        response.setServiceName(record.getServiceName());
+        response.setEndpoint(record.getEndpoint());
         response.setSeverity(record.getSeverity());
-        response.setFinalAnomalyScore(record.getHybridEnsembleScore());
+        
+        // Fallback score logic - use hybrid, then LSTM, then GRU, else 0
+        Double score = record.getHybridEnsembleScore();
+        if (score == null || score == 0.0) {
+            score = record.getMsifLstmScore();
+        }
+        if (score == null || score == 0.0) {
+            score = record.getPleGruScore();
+        }
+        if (score == null) {
+            score = 0.0;
+        }
+        response.setHybridEnsembleScore(score);
+        response.setFinalAnomalyScore(score);
+        
+        // Source indicates which ML model detected it
+        response.setSource(record.getFusionMethod());
+        
         response.setConfidence(record.getConfidence());
         response.setStatus(record.getStatus());
+        response.setEnvironment(record.getEnvironment());
         response.setTimestamp(record.getCreatedAt() != null ? record.getCreatedAt().toString() : null);
         return response;
     }

@@ -31,7 +31,7 @@ import java.util.*;
 public class OpenSearchLogService {
 
     private static final Logger logger = LoggerFactory.getLogger(OpenSearchLogService.class);
-    private static final String INDEX_PREFIX = "api-logs-";
+    private static final String INDEX_PREFIX = "logs-";
     
     @Autowired(required = false)
     @Qualifier("openSearchClient")
@@ -148,7 +148,7 @@ public class OpenSearchLogService {
             SearchRequest searchRequest = new SearchRequest(INDEX_PREFIX + "*");
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             sourceBuilder.query(QueryBuilders.matchAllQuery());
-            sourceBuilder.sort("timestamp", SortOrder.DESC);
+            sourceBuilder.sort("@timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
             
@@ -171,7 +171,7 @@ public class OpenSearchLogService {
             SearchRequest searchRequest = new SearchRequest(INDEX_PREFIX + "*");
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             sourceBuilder.query(QueryBuilders.queryStringQuery(query));
-            sourceBuilder.sort("timestamp", SortOrder.DESC);
+            sourceBuilder.sort("@timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
             
@@ -193,7 +193,7 @@ public class OpenSearchLogService {
             SearchRequest searchRequest = new SearchRequest(INDEX_PREFIX + "*");
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             sourceBuilder.query(QueryBuilders.matchQuery("serviceName", serviceName));
-            sourceBuilder.sort("timestamp", SortOrder.DESC);
+            sourceBuilder.sort("@timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
             
@@ -215,7 +215,7 @@ public class OpenSearchLogService {
             SearchRequest searchRequest = new SearchRequest(INDEX_PREFIX + "*");
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             sourceBuilder.query(QueryBuilders.matchQuery("level", level));
-            sourceBuilder.sort("timestamp", SortOrder.DESC);
+            sourceBuilder.sort("@timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
             
@@ -236,18 +236,54 @@ public class OpenSearchLogService {
                 Map<String, Object> sourceMap = hit.getSourceAsMap();
                 LogDTO log = new LogDTO();
                 log.setLogId((String) sourceMap.get("logId"));
-                log.setServiceName((String) sourceMap.get("serviceName"));
+                
+                // Try to get serviceName, fallback to extracting from log_tag
+                String serviceName = (String) sourceMap.get("serviceName");
+                if (serviceName == null || serviceName.isBlank()) {
+                    String logTag = (String) sourceMap.get("@log_tag");
+                    if (logTag != null && logTag.contains(".")) {
+                        String[] parts = logTag.split("\\.");
+                        if (parts.length >= 2) {
+                            serviceName = parts[1];
+                        }
+                    }
+                }
+                // Filter out Fluentd log level tags leaking into serviceName
+                if (serviceName != null && (serviceName.equals("info") || serviceName.equals("warn") 
+                        || serviceName.equals("error") || serviceName.equals("debug"))) {
+                    serviceName = "unknown";
+                }
+                log.setServiceName(serviceName);
+                
                 log.setLevel((String) sourceMap.get("level"));
                 log.setMessage((String) sourceMap.get("message"));
                 log.setSource((String) sourceMap.get("source"));
                 
                 if (sourceMap.get("timestamp") != null) {
                     log.setTimestamp(objectMapper.convertValue(sourceMap.get("timestamp"), java.time.Instant.class));
+                } else if (sourceMap.get("@timestamp") != null) {
+                    log.setTimestamp(objectMapper.convertValue(sourceMap.get("@timestamp"), java.time.Instant.class));
                 }
                 
                 log.setMetadata((Map<String, Object>) sourceMap.get("metadata"));
                 log.setTraceId((String) sourceMap.get("traceId"));
                 log.setSpanId((String) sourceMap.get("spanId"));
+                
+                // Try to get environment, fallback to log_category, then default to production
+                String environment = (String) sourceMap.get("environment");
+                if (environment == null || environment.isBlank()) {
+                    Object logCategory = sourceMap.get("log_category");
+                    if (logCategory != null && !logCategory.toString().equals("application")) {
+                        environment = logCategory.toString();
+                    }
+                }
+                // Default to production if still not set
+                if (environment == null || environment.isBlank() || environment.equals("application")) {
+                    environment = "production";
+                }
+                log.setEnvironment(environment);
+                
+                log.setCorrelationId((String) sourceMap.getOrDefault("correlationId", sourceMap.get("traceId")));
                 
                 logs.add(log);
             } catch (Exception e) {

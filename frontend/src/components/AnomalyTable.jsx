@@ -4,7 +4,6 @@ import { Box } from '@mui/material';
 
 const columns = [
   { field: 'id', headerName: 'ID', width: 80 },
-  { field: 'serviceName', headerName: 'Service', width: 150 },
   { field: 'endpoint', headerName: 'Endpoint', width: 200 },
   { field: 'environment', headerName: 'Environment', width: 130 },
   {
@@ -23,7 +22,7 @@ const columns = [
     field: 'detectedAt',
     headerName: 'Detected At',
     width: 180,
-    valueFormatter: (value) => new Date(value).toLocaleString(),
+    valueFormatter: (value) => value ? new Date(value).toLocaleString() : "—",
   },
   {
     field: 'status',

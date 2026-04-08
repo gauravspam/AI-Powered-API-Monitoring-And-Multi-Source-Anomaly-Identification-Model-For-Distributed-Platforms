@@ -37,10 +37,19 @@ const prefetchData = () => {
   if (!initialFetchPromise && !cachedData.services) {
     initialFetchPromise = Promise.all([
       api.get('/services').catch(() => ({ data: [] })),
-      api.get('/dashboard/anomalies').catch(() => ({ data: [] })),
+      api.get('/anomalies/recent', { params: { limit: 50 } }).catch(() => ({ data: [] })),
     ]).then(([servicesResponse, anomaliesResponse]) => {
       const services = servicesResponse.data || [];
-      const anomalies = anomaliesResponse.data || [];
+      const anomalies = (anomaliesResponse.data || []).map(a => ({
+        id: a.id,
+        serviceName: a.apiName ?? a.apiname ?? "unknown",
+        endpoint: a.endpoint ?? a.apiName ?? a.apiname ?? "unknown",
+        environment: a.environment ?? "unknown",
+        severity: a.severity?.toLowerCase() ?? "medium",
+        score: a.finalanomalyscore ?? a.finalAnomalyScore ?? a.hybridEnsembleScore ?? 0,
+        detectedAt: a.timestamp,
+        status: a.status?.toLowerCase() ?? "active",
+      }));
 
       // Check if we got actual data
       if (services.length === 0 && anomalies.length === 0) {
@@ -103,7 +112,11 @@ const columns = [
     field: 'lastDeploymentAt',
     headerName: 'Last Deployment',
     width: 180,
-    valueFormatter: (value) => new Date(value).toLocaleString(),
+    valueFormatter: (value) => {
+      if (!value) return "—";
+      const d = new Date(value.endsWith("Z") ? value : value + "Z");
+      return isNaN(d) ? "—" : d.toLocaleString();
+    },
   },
   {
     field: 'requestPerMin',
@@ -141,7 +154,7 @@ export const Services = () => {
 
       const [servicesResponse, anomaliesResponse] = await Promise.all([
         api.get('/services').catch(() => ({ data: [] })),
-        api.get('/dashboard/anomalies').catch(() => ({ data: [] })),
+        api.get('/anomalies/recent', { params: { limit: 50 } }).catch(() => ({ data: [] })),
       ]);
 
       // Don't update if component unmounted
@@ -149,7 +162,16 @@ export const Services = () => {
 
       lastFetchTime.current = Date.now();
       const newServices = servicesResponse.data || [];
-      const newAnomalies = anomaliesResponse.data || [];
+      const newAnomalies = (anomaliesResponse.data || []).map(a => ({
+        id: a.id,
+        serviceName: a.apiName ?? a.apiname ?? "unknown",
+        endpoint: a.endpoint ?? a.apiName ?? a.apiname ?? "unknown",
+        environment: a.environment ?? "unknown",
+        severity: a.severity?.toLowerCase() ?? "medium",
+        score: a.finalanomalyscore ?? a.finalAnomalyScore ?? a.hybridEnsembleScore ?? 0,
+        detectedAt: a.timestamp,
+        status: a.status?.toLowerCase() ?? "active",
+      }));
 
       // Fast shallow comparison - only update if lengths differ
       const shouldUpdate =

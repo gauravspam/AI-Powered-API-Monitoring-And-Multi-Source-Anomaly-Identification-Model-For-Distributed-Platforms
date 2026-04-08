@@ -2,7 +2,7 @@ spring:
     application:
         name: api-monitoring-backend
     datasource:
-        url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:api_monitoring}
+        url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:api_monitoring}
         username: ${POSTGRES_USER:api_monitor}
         password: ${POSTGRES_PASSWORD:api_monitor_pwd}
         driver-class-name: org.postgresql.Driver
@@ -24,11 +24,11 @@ server:
 
 opensearch:
     enabled: true
-    host: ${OPENSEARCH_HOST:opensearch}
-    port: ${OPENSEARCH_PORT:9200}
-    scheme: ${OPENSEARCH_SCHEME:http}
-    username: ${OPENSEARCH_USERNAME:admin}
-    password: ${OPENSEARCH_PASSWORD:admin}
+    host: localhost
+    port: 9200
+    scheme: http
+    username: admin
+    password: admin
 
 python:
     service:
@@ -39,6 +39,6 @@ logging:
         level: "%d{yyyy-MM-dd HH:mm:ss} %-5level %logger{36} - %msg%n"
 
 fluentd:
-    host: fluentd
-    port: 9880
-    path: /api-logs.${spring.application.name}
+    enabled: true
+    host: localhost
+    port: 24224

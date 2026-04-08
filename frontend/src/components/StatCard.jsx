@@ -1,13 +1,15 @@
 import { Paper, Typography, Box, useTheme } from '@mui/material';
-import { TrendingUp, TrendingDown } from '@mui/icons-material';
+import { TrendingUp, TrendingDown, TrendingFlat } from '@mui/icons-material';
 
 export const StatCard = ({ label, value, unit, trend, trendDirection, icon: Icon }) => {
   const theme = useTheme();
-  const TrendIcon = trendDirection === 'up' ? TrendingUp : TrendingDown;
+  const TrendIcon = trendDirection === 'up' ? TrendingUp : trendDirection === 'down' ? TrendingDown : TrendingFlat;
   const trendColor =
     trendDirection === 'up'
       ? theme.palette.success.main
-      : theme.palette.error.main;
+      : trendDirection === 'down'
+        ? theme.palette.error.main
+        : theme.palette.text.secondary;
 
   return (
     <Paper

@@ -262,7 +262,10 @@ export const Alerts = () => {
   const relatedLogs = useMemo(() => {
     if (!selectedAlert) return [];
     return logEvents
-      .filter((log) => log.serviceName === selectedAlert.serviceName)
+      .filter((log) =>
+        log.serviceName === selectedAlert.serviceName ||
+        log.message?.includes(selectedAlert.endpoint ?? "")
+      )
       .slice(0, 5);
   }, [selectedAlert, logEvents]);
 
@@ -371,7 +374,7 @@ export const Alerts = () => {
                   Source
                 </Typography>
                 <Typography variant="body1" fontWeight="medium">
-                  {selectedAlert.source}
+                  {selectedAlert.endpoint ?? selectedAlert.serviceName ?? "ML Ensemble"}
                 </Typography>
               </Box>
               <Box sx={{ mb: 2 }}>
@@ -379,7 +382,7 @@ export const Alerts = () => {
                   Last Updated
                 </Typography>
                 <Typography variant="body1" fontWeight="medium">
-                  {new Date(selectedAlert.lastUpdatedAt).toLocaleString()}
+                  {new Date(selectedAlert.lastUpdatedAt ?? selectedAlert.timestamp).toLocaleString()}
                 </Typography>
               </Box>
 
