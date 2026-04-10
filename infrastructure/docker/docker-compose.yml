@@ -7,7 +7,7 @@ services:
             POSTGRES_USER: api_monitor
             POSTGRES_PASSWORD: api_monitor_pwd
         ports:
-            - "5433:5432" # Use 5433 on host to avoid conflict
+            - "5433:5432"
         volumes:
             - postgres_data:/var/lib/postgresql/data
         networks:
@@ -53,98 +53,17 @@ services:
             retries: 5
         restart: unless-stopped
 
-    backend:
-        build:
-            context: ../../backend-service
-            dockerfile: Dockerfile
-        container_name: api-monitoring-backend
-        environment:
-            SPRING_PROFILES_ACTIVE: docker
-            SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring
-            SPRING_DATASOURCE_USERNAME: api_monitor
-            SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
-            SPRING_FLYWAY_ENABLED: "true"
-            SPRING_FLYWAY_BASELINE_ON_MIGRATE: "false"
-            SPRING_JPA_HIBERNATE_DDL_AUTO: validate
-            LOGGING_LEVEL_ROOT: INFO
-            LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE: DEBUG
-            OPENSEARCH_ENABLED: "true"
-            OPENSEARCH_HOST: opensearch
-            OPENSEARCH_PORT: "9200"
-            OPENSEARCH_SCHEME: http
-            OPENSEARCH_USERNAME: admin
-            OPENSEARCH_PASSWORD: Admin@123
-            ML_SERVICE_URL: http://host.docker.internal:9000
-        ports:
-            - "8081:8080" # Use 8081 to avoid conflict with your running backend
-        restart: unless-stopped
-        depends_on:
-            postgres:
-                condition: service_healthy
-            opensearch:
-                condition: service_healthy
-        networks:
-            - monitoring-net
-        extra_hosts:
-            - "host.docker.internal:host-gateway"
-        healthcheck:
-            test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
-            interval: 30s
-            timeout: 10s
-            retries: 10
-            start_period: 120s
-
-    frontend:
-        build:
-            context: ../../frontend
-            dockerfile: Dockerfile
-        container_name: api-monitoring-frontend
-        ports:
-            - "3000:80"
-        environment:
-            - REACT_APP_API_URL=http://localhost:8080
-            - REACT_APP_OPENSEARCH_URL=http://localhost:9200
-        # depends_on:
-        #     backend:
-        #         condition: service_healthy
-        networks:
-            - monitoring-net
-        restart: unless-stopped
-
-    fake-server:
-        build:
-            context: ../../frontend/fake-server
-            dockerfile: Dockerfile
-        container_name: fake-server
-        ports:
-            - "8082:8082"
-        networks:
-            - monitoring-net
-        healthcheck:
-            test:
-                [
-                    "CMD",
-                    "wget",
-                    "--spider",
-                    "-q",
-                    "http://localhost:8082/health",
-                ]
-            interval: 10s
-            timeout: 5s
-            retries: 3
-        restart: unless-stopped
-
     fluentd:
         build:
             context: ./fluentd
             dockerfile: Dockerfile
         container_name: fluentd
         ports:
-            - "24224:24224"      # Forward protocol (TCP)
-            - "24224:24224/udp"  # Forward protocol (UDP)
-            - "9880:9880"        # HTTP input
-            - "24231:24231"      # Prometheus metrics
-            - "8888:8888"        # Health check
+            - "24224:24224" # Forward protocol (TCP)
+            - "24224:24224/udp" # Forward protocol (UDP)
+            - "9880:9880" # HTTP input
+            - "24231:24231" # Prometheus metrics
+            - "8888:8888" # Health check
         volumes:
             - ./fluent.conf:/fluentd/etc/fluent.conf:ro
             - fluentd_buffer:/fluentd/log
@@ -159,12 +78,100 @@ services:
             opensearch:
                 condition: service_healthy
         healthcheck:
-            test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8888/api/plugins.json"]
+            test:
+                [
+                    "CMD",
+                    "wget",
+                    "--spider",
+                    "-q",
+                    "http://127.0.0.1:8888/api/plugins.json",
+                ]
             interval: 10s
             timeout: 5s
             retries: 5
             start_period: 30s
         restart: unless-stopped
+
+    # backend:
+    #     build:
+    #         context: ../../backend-service
+    #         dockerfile: Dockerfile
+    #     container_name: api-monitoring-backend
+    #     environment:
+    #         SPRING_PROFILES_ACTIVE: docker
+    #         SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/api_monitoring
+    #         SPRING_DATASOURCE_USERNAME: api_monitor
+    #         SPRING_DATASOURCE_PASSWORD: api_monitor_pwd
+    #         SPRING_FLYWAY_ENABLED: "true"
+    #         SPRING_FLYWAY_BASELINE_ON_MIGRATE: "false"
+    #         SPRING_JPA_HIBERNATE_DDL_AUTO: validate
+    #         LOGGING_LEVEL_ROOT: INFO
+    #         LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE: DEBUG
+    #         OPENSEARCH_ENABLED: "true"
+    #         OPENSEARCH_HOST: opensearch
+    #         OPENSEARCH_PORT: "9200"
+    #         OPENSEARCH_SCHEME: http
+    #         OPENSEARCH_USERNAME: admin
+    #         OPENSEARCH_PASSWORD: Admin@123
+    #         ML_SERVICE_URL: http://host.docker.internal:9000
+    #     ports:
+    #         - "8081:8080" # Use 8081 to avoid conflict with your running backend
+    #     restart: unless-stopped
+    #     depends_on:
+    #         postgres:
+    #             condition: service_healthy
+    #         opensearch:
+    #             condition: service_healthy
+    #     networks:
+    #         - monitoring-net
+    #     extra_hosts:
+    #         - "host.docker.internal:host-gateway"
+    #     healthcheck:
+    #         test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+    #         interval: 30s
+    #         timeout: 10s
+    #         retries: 10
+    #         start_period: 120s
+
+    # frontend:
+    #     build:
+    #         context: ../../frontend
+    #         dockerfile: Dockerfile
+    #     container_name: api-monitoring-frontend
+    #     ports:
+    #         - "3000:80"
+    #     environment:
+    #         - REACT_APP_API_URL=http://localhost:8080
+    #         - REACT_APP_OPENSEARCH_URL=http://localhost:9200
+    #     # depends_on:
+    #     #     backend:
+    #     #         condition: service_healthy
+    #     networks:
+    #         - monitoring-net
+    #     restart: unless-stopped
+
+    # fake-server:
+    #     build:
+    #         context: ../../frontend/fake-server
+    #         dockerfile: Dockerfile
+    #     container_name: fake-server
+    #     ports:
+    #         - "8082:8082"
+    #     networks:
+    #         - monitoring-net
+    #     healthcheck:
+    #         test:
+    #             [
+    #                 "CMD",
+    #                 "wget",
+    #                 "--spider",
+    #                 "-q",
+    #                 "http://localhost:8082/health",
+    #             ]
+    #         interval: 10s
+    #         timeout: 5s
+    #         retries: 3
+    #     restart: unless-stopped
 
 networks:
     monitoring-net:

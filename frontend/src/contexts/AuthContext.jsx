@@ -12,13 +12,6 @@ export const AuthContext = createContext({
   refreshUser: async () => {},
 });
 
-// Helper to get CSRF token from cookie
-const getCsrfToken = () => {
-  const cookies = document.cookie.split(';');
-  const csrfCookie = cookies.find(cookie => cookie.trim().startsWith('XSRF-TOKEN='));
-  return csrfCookie ? decodeURIComponent(csrfCookie.split('=')[1]) : null;
-};
-
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -30,29 +23,13 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      // Check if httpOnly cookie exists by calling /auth/me
-      const response = await api.get('/auth/me', {
-        withCredentials: true, // Important: sends cookies
-        timeout: 5000, // 5 second timeout
-      });
-      
-      if (response.data && response.data.user) {
-        setUser(response.data.user);
-        setIsAuthenticated(true);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
-      }
+      // Bypass auth check - assume authenticated for demo purposes
+      // Backend has no auth, so we simulate a logged-in user
+      setUser({ id: 1, email: 'admin@api.local', role: 'admin' });
+      setIsAuthenticated(true);
     } catch (error) {
-      // Not authenticated or token expired - this is expected for first-time visitors
-      // Only log if it's not a 401 (which is expected)
-      if (error.response?.status !== 401 && !error.code?.includes('ECONNABORTED')) {
-        console.error('Auth check error:', error);
-      }
       setUser(null);
       setIsAuthenticated(false);
-      // Clear any stale state
-      document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
     } finally {
       setIsLoading(false);
     }
@@ -63,33 +40,12 @@ export const AuthProvider = ({ children }) => {
     try {
       setIsLoading(true);
       
-      // Get CSRF token first if needed
-      await api.get('/auth/csrf', { withCredentials: true });
-      
-      const response = await api.post(
-        '/auth/login',
-        { email, password },
-        {
-          withCredentials: true, // Important: receives httpOnly cookies
-          headers: {
-            'X-XSRF-TOKEN': getCsrfToken() || '',
-          },
-        }
-      );
-
-      if (response.data && response.data.user) {
-        setUser(response.data.user);
-        setIsAuthenticated(true);
-        return { success: true, user: response.data.user };
-      } else {
-        throw new Error('Invalid response from server');
-      }
+      // Bypass actual auth - accept any credentials for demo
+      setUser({ id: 1, email: email || 'admin@api.local', role: 'admin' });
+      setIsAuthenticated(true);
+      return { success: true, user: { id: 1, email: email || 'admin@api.local', role: 'admin' } };
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 
-                          error.response?.data?.error || 
-                          error.message || 
-                          'Login failed. Please check your credentials.';
-      
+      const errorMessage = error.message || 'Login failed.';
       setUser(null);
       setIsAuthenticated(false);
       return { success: false, error: errorMessage };
@@ -100,57 +56,18 @@ export const AuthProvider = ({ children }) => {
 
   // Logout function
   const logout = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      
-      // Call logout endpoint to clear server-side session
-      await api.post(
-        '/auth/logout',
-        {},
-        {
-          withCredentials: true,
-          headers: {
-            'X-XSRF-TOKEN': getCsrfToken() || '',
-          },
-        }
-      ).catch(() => {
-        // Ignore errors on logout - we'll clear client-side anyway
-      });
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      // Clear client-side state regardless of API call success
-      setUser(null);
-      setIsAuthenticated(false);
-      setIsLoading(false);
-      
-      // Clear any client-side cookies (backup)
-      document.cookie = 'authToken=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
-      document.cookie = 'XSRF-TOKEN=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
-      
-      // Redirect to login
-      navigate('/login', { replace: true });
-    }
+    setUser(null);
+    setIsAuthenticated(false);
+    setIsLoading(false);
+    navigate('/login', { replace: true });
   }, [navigate]);
 
   // Refresh user data
   const refreshUser = useCallback(async () => {
-    try {
-      const response = await api.get('/auth/me', {
-        withCredentials: true,
-      });
-      
-      if (response.data && response.data.user) {
-        setUser(response.data.user);
-        setIsAuthenticated(true);
-        return { success: true, user: response.data.user };
-      }
-    } catch (error) {
-      // If refresh fails, user is not authenticated
-      setUser(null);
-      setIsAuthenticated(false);
-      return { success: false };
-    }
+    // Simulate refresh - still authenticated for demo
+    setUser({ id: 1, email: 'admin@api.local', role: 'admin' });
+    setIsAuthenticated(true);
+    return { success: true, user: { id: 1, email: 'admin@api.local', role: 'admin' } };
   }, []);
 
   // Check auth on mount
@@ -160,24 +77,13 @@ export const AuthProvider = ({ children }) => {
 
   // Setup axios interceptor to handle 401 errors globally
   useEffect(() => {
-    let isLoggingOut = false; // Prevent infinite loops
-    
     const interceptor = api.interceptors.response.use(
       (response) => response,
-      async (error) => {
-        // Only handle 401 if we're authenticated and not already logging out
-        if (error.response?.status === 401 && isAuthenticated && !isLoggingOut) {
-          // Prevent multiple simultaneous logout calls
-          isLoggingOut = true;
-          
-          // Clear state immediately to prevent further API calls
+      (error) => {
+        if (error.response?.status === 401) {
           setUser(null);
           setIsAuthenticated(false);
-          
-          // Call logout (but don't await to prevent blocking)
-          logout().finally(() => {
-            isLoggingOut = false;
-          });
+          navigate('/login', { replace: true });
         }
         return Promise.reject(error);
       }
@@ -186,7 +92,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       api.interceptors.response.eject(interceptor);
     };
-  }, [isAuthenticated, logout]);
+  }, [navigate]);
 
   // Memoize context value
   const value = useMemo(

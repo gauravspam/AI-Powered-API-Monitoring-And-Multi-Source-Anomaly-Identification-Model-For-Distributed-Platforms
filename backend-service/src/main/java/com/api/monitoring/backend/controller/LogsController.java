@@ -7,6 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,5 +85,33 @@ public class LogsController {
             @RequestParam(defaultValue = "100") int limit) {
         List<LogDTO> logs = logService.getLogsByLevel(level, limit);
         return ResponseEntity.ok(logs);
+    }
+
+    @GetMapping("/events")
+    public ResponseEntity<List<LogDTO>> getLogEvents(
+            @RequestParam(defaultValue = "100") int limit) {
+        return ResponseEntity.ok(logService.getRecentLogs(limit));
+    }
+
+    @GetMapping("/streams")
+    public ResponseEntity<List<Map<String, Object>>> getLogStreams(
+            @RequestParam(defaultValue = "20") int limit) {
+        List<LogDTO> recent = logService.getRecentLogs(200);
+        Map<String, Map<String, Object>> streamMap = new LinkedHashMap<>();
+        for (LogDTO log : recent) {
+            String svcKey = log.getServiceName() != null && !log.getServiceName().isBlank()
+                ? log.getServiceName() : "unknown";
+            streamMap.computeIfAbsent(svcKey, k -> {
+                Map<String, Object> s = new HashMap<>();
+                s.put("id", k);
+                s.put("serviceName", k);
+                s.put("status", "active");
+                s.put("source", "fluentd");
+                s.put("environment", log.getEnvironment() != null ? log.getEnvironment() : "production");
+                s.put("ingestionLagSec", 0.0);
+                return s;
+            });
+        }
+        return ResponseEntity.ok(new ArrayList<>(streamMap.values()));
     }
 }

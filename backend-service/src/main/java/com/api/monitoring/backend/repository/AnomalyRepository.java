@@ -4,6 +4,7 @@ import com.api.monitoring.backend.model.AnomalyRecord;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,6 +24,9 @@ public interface AnomalyRepository extends JpaRepository<AnomalyRecord, Long> {
 
     @Query("SELECT a FROM AnomalyRecord a ORDER BY a.createdAt DESC")
     List<AnomalyRecord> findRecentAnomalies();
+
+    @Query("SELECT a FROM AnomalyRecord a ORDER BY a.createdAt DESC")
+    List<AnomalyRecord> findRecentAnomalies(Pageable pageable);
 
     List<AnomalyRecord> findTop10ByOrderByCreatedAtDesc();
 

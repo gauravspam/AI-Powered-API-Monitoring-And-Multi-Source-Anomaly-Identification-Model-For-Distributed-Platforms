@@ -45,7 +45,11 @@ const columns = [
     field: 'lastRetrainAt',
     headerName: 'Last Retrain',
     width: 180,
-    valueFormatter: (value) => value ? new Date(value).toLocaleString() : 'N/A',
+    valueFormatter: (value) => {
+      if (!value) return "N/A";
+      const d = new Date(value.endsWith("Z") ? value : value + "Z");
+      return isNaN(d) ? "N/A" : d.toLocaleString();
+    },
   },
   {
     field: 'accuracy',

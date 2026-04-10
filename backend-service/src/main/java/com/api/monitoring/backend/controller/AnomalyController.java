@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/anomalies")
-@CrossOrigin(origins = "*") // Useful for frontend dev
+@CrossOrigin(origins = "*")
 @Slf4j
 public class AnomalyController {
 

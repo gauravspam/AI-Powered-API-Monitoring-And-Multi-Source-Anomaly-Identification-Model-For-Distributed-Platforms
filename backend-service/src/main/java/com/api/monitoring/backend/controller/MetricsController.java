@@ -99,6 +99,25 @@ public class MetricsController {
         return ResponseEntity.ok(metricRepository.findTop100ByOrderByMetricTimestampDesc());
     }
 
+    @GetMapping("/traffic")
+    public ResponseEntity<List<Map<String, Object>>> getTrafficMetrics(
+            @RequestParam(defaultValue = "50") int limit) {
+        List<MetricRecord> metrics = metricRepository.findTop100ByOrderByMetricTimestampDesc();
+        List<Map<String, Object>> trafficData = metrics.stream()
+                .limit(Math.min(limit, metrics.size()))
+                .map(m -> {
+                    Map<String, Object> point = new HashMap<>();
+                    point.put("timestamp", m.getMetricTimestamp() != null ? m.getMetricTimestamp().toString() : "");
+                    point.put("requestsPerSec", m.getRequestCount() != null ? m.getRequestCount() : 0);
+                    point.put("responseTimeMs", m.getResponseTimeMs() != null ? m.getResponseTimeMs() : 0);
+                    point.put("errorRate", m.getErrorRate() != null ? m.getErrorRate() : 0.0);
+                    return point;
+                })
+                .collect(java.util.stream.Collectors.toList());
+        java.util.Collections.reverse(trafficData);
+        return ResponseEntity.ok(trafficData);
+    }
+
     @GetMapping("/api/{apiId}")
     public ResponseEntity<List<MetricRecord>> getMetricsByApiId(@PathVariable Long apiId) {
         return ResponseEntity.ok(metricRepository.findByApiLogId(apiId));

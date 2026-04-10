@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Entity
 @Table(name = "distributed_traces")
@@ -48,7 +49,8 @@ public class TraceRecord {
     private String errorMessage;
 
     @Column(name = "tags", columnDefinition = "JSONB")
-    private String tags;
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    private Map<String, Object> tags;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

@@ -41,6 +41,10 @@ dependencies {
     implementation 'org.apache.httpcomponents:httpclient:4.5.14'
     implementation 'org.apache.httpcomponents:httpcore:4.4.16'
 
+    // Fluentd Logging
+    implementation 'com.sndyuk:logback-more-appenders:1.8.8'
+    implementation 'org.fluentd:fluent-logger:0.3.4'
+
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

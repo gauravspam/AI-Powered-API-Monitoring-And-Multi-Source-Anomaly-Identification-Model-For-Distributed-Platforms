@@ -50,6 +50,9 @@ public class MetricRecord {
     @Column(name = "metric_timestamp", nullable = false)
     private LocalDateTime metricTimestamp;
 
+    @Column(name = "environment", length = 50)
+    private String environment;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 }

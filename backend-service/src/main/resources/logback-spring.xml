@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <springProperty scope="context" name="APP_NAME" source="spring.application.name" defaultValue="api-monitoring-backend"/>
+    <springProperty scope="context" name="FLUENTD_HOST" source="fluentd.host" defaultValue="localhost"/>
+    <springProperty scope="context" name="FLUENTD_PORT" source="fluentd.port" defaultValue="24224"/>
+    <springProperty scope="context" name="ACTIVE_PROFILE" source="spring.profiles.active" defaultValue="default"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <appender name="FLUENTD" class="ch.qos.logback.more.appenders.DataFluentAppender">
+        <tag>app.backend</tag>
+        <label>app</label>
+        <remoteHost>${FLUENTD_HOST}</remoteHost>
+        <port>${FLUENTD_PORT}</port>
+    </appender>
+
+    <appender name="ASYNC_FLUENTD" class="ch.qos.logback.classic.AsyncAppender">
+        <discardingThreshold>0</discardingThreshold>
+        <queueSize>2048</queueSize>
+        <appender-ref ref="FLUENTD"/>
+        <includeCallerData>false</includeCallerData>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ASYNC_FLUENTD"/>
+    </root>
+
+    <logger name="org.hibernate.SQL" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    <logger name="org.hibernate.type" level="TRACE" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+</configuration>

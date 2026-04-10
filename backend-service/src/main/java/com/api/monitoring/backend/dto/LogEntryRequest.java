@@ -16,6 +16,8 @@ public class LogEntryRequest {
     private Integer hourOfDay;
     private Integer dayOfWeek;
     private String timestamp;
+    private String environment = "production";
+    private String serviceName = "api-monitoring";
 
     // Constructors
     public LogEntryRequest() {
@@ -124,5 +126,21 @@ public class LogEntryRequest {
 
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
+    }
+
+    public String getEnvironment() {
+        return environment;
+    }
+
+    public void setEnvironment(String environment) {
+        this.environment = environment;
+    }
+
+    public String getServiceName() {
+        return serviceName;
+    }
+
+    public void setServiceName(String serviceName) {
+        this.serviceName = serviceName;
     }
 }

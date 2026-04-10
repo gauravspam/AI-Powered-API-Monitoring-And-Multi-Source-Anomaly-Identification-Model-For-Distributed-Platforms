@@ -62,7 +62,7 @@ export const AlertList = ({ alerts, onSelect, onAcknowledge, onResolve }) => {
             <StatusChip value={alert.source} type="status" />
           </Box>
           <Box sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}>
-            Service: {alert.serviceName} | Created: {new Date(alert.createdAt).toLocaleString()}
+            Service: {alert.serviceName} | Created: {alert.createdAt ? new Date(alert.createdAt).toLocaleString() : "—"}
           </Box>
         </Paper>
       ))}

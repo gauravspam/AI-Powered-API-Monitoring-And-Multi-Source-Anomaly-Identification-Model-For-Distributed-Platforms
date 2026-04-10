@@ -6,8 +6,20 @@ const port = 8082;
 
 // Mock data
 const users = [
-    { id: "1", email: "admin@example.com", password: "admin123", name: "Admin", role: "admin" },
-    { id: "2", email: "user@example.com", password: "user123", name: "User", role: "user" }
+    {
+        id: "1",
+        email: "admin@example.com",
+        password: "admin123",
+        name: "Admin",
+        role: "admin",
+    },
+    {
+        id: "2",
+        email: "user@example.com",
+        password: "user123",
+        name: "User",
+        role: "user",
+    },
 ];
 
 let settingsConfig = {
@@ -23,8 +35,8 @@ let settingsConfig = {
         gcp: 0.75,
         azure: 0.75,
         multiCloud: 0.75,
-    }
-}
+    },
+};
 
 const mockData = {
     kpiCards: require("./data/mockDashboard").kpiCards,
@@ -35,14 +47,17 @@ const mockData = {
     logStreams: require("./data/mockLogs").logStreams,
     logEvents: require("./data/mockLogs").logEvents,
     models: require("./data/mockModels").models,
-    services: require("./data/mockServices").services
+    services: require("./data/mockServices").services,
 };
 
 // In-memory storage
 const sessions = new Map();
 
 // Simple token functions
-const generateToken = (userId) => Buffer.from(JSON.stringify({ userId, exp: Date.now() + 24 * 60 * 60 * 1000 })).toString("base64");
+const generateToken = (userId) =>
+    Buffer.from(
+        JSON.stringify({ userId, exp: Date.now() + 24 * 60 * 60 * 1000 }),
+    ).toString("base64");
 const verifyToken = (token) => {
     try {
         const payload = JSON.parse(Buffer.from(token, "base64").toString());
@@ -74,14 +89,18 @@ const authenticate = (req, res, next) => {
 // Public endpoints
 app.get("/health", (req, res) => res.send("OK"));
 app.get("/api/auth/csrf", (req, res) => {
-    const csrf = Buffer.from(Math.random().toString()).toString("base64").slice(0, 32);
+    const csrf = Buffer.from(Math.random().toString())
+        .toString("base64")
+        .slice(0, 32);
     res.cookie("XSRF-TOKEN", csrf, { httpOnly: false, maxAge: 15 * 60 * 1000 });
     res.json({ csrfToken: csrf });
 });
 
 app.post("/api/auth/login", (req, res) => {
     const { email, password } = req.body;
-    const user = users.find(u => u.email === email && u.password === password);
+    const user = users.find(
+        (u) => u.email === email && u.password === password,
+    );
 
     if (!user) return res.status(401).json({ error: "Invalid credentials" });
 
@@ -89,7 +108,10 @@ app.post("/api/auth/login", (req, res) => {
     sessions.set(sessionId, { user });
 
     const token = generateToken(sessionId);
-    res.cookie("authToken", token, { httpOnly: true, maxAge: 24 * 60 * 60 * 1000 });
+    res.cookie("authToken", token, {
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000,
+    });
     res.json({ success: true, user: user });
 });
 
@@ -103,20 +125,35 @@ app.get("/api/auth/me", authenticate, (req, res) => {
 });
 
 // Protected endpoints
-app.get("/api/dashboard/kpi", authenticate, (req, res) => res.json(mockData.kpiCards));
-app.get("/api/dashboard/env-summary", authenticate, (req, res) => res.json(mockData.environmentSummary));
-app.get("/api/dashboard/anomalies", authenticate, (req, res) => res.json(mockData.recentAnomalies));
-app.get("/api/dashboard/traffic", authenticate, (req, res) => res.json(mockData.trafficSeries));
+app.get("/api/dashboard/kpi", authenticate, (req, res) =>
+    res.json(mockData.kpiCards),
+);
+app.get("/api/dashboard/env-summary", authenticate, (req, res) =>
+    res.json(mockData.environmentSummary),
+);
+app.get("/api/dashboard/anomalies", authenticate, (req, res) =>
+    res.json(mockData.recentAnomalies),
+);
+app.get("/api/dashboard/traffic", authenticate, (req, res) =>
+    res.json(mockData.trafficSeries),
+);
 
 app.get("/api/alerts", authenticate, (req, res) => res.json(mockData.alerts));
-app.post("/api/alerts/:id/acknowledge", authenticate, (req, res) => res.json({ success: true }));
+app.post("/api/alerts/:id/acknowledge", authenticate, (req, res) =>
+    res.json({ success: true }),
+);
 
-app.get("/api/logs/streams", authenticate, (req, res) => res.json(mockData.logStreams));
-app.get("/api/logs/events", authenticate, (req, res) => res.json(mockData.logEvents));
+app.get("/api/logs/streams", authenticate, (req, res) =>
+    res.json(mockData.logStreams),
+);
+app.get("/api/logs/events", authenticate, (req, res) =>
+    res.json(mockData.logEvents),
+);
 
 app.get("/api/models", authenticate, (req, res) => res.json(mockData.models));
-app.get("/api/services", authenticate, (req, res) => res.json(mockData.services));
-
+app.get("/api/services", authenticate, (req, res) =>
+    res.json(mockData.services),
+);
 
 // Adding mock API for getting current configuration
 app.get("/api/settings/configuration", authenticate, (req, res) => {
@@ -125,9 +162,8 @@ app.get("/api/settings/configuration", authenticate, (req, res) => {
 
 // Adding mock API for updating alerting and thresholds
 app.post("/api/settings/update", authenticate, (req, res) => {
-    
-    Object.assign(settingsConfig.alerting, req.body.alerting)
-    Object.assign(settingsConfig.thresholds, req.body.thresholds)
+    Object.assign(settingsConfig.alerting, req.body.alerting);
+    Object.assign(settingsConfig.thresholds, req.body.thresholds);
 
     res.json({ success: true });
 });

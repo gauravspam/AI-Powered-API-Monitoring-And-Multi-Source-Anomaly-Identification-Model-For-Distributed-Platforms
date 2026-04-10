@@ -174,15 +174,13 @@ public class TracesController {
             trace.setStartTime(LocalDateTime.now(ZoneOffset.UTC));
         }
 
-        // Serialize tags: DTO has Map<String, String>, Entity stores as JSON String
+        // Tags: DTO has Map<String, String>, Entity now uses Map<String, Object>
         if (dto.getTags() != null && !dto.getTags().isEmpty()) {
-            try {
-                trace.setTags(objectMapper.writeValueAsString(dto.getTags()));
-            } catch (JsonProcessingException e) {
-                trace.setTags("{}");
-            }
+            trace.setTags(new HashMap<>(dto.getTags()));
         }
 
+        trace.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        
         return trace;
     }
 
@@ -201,17 +199,13 @@ public class TracesController {
             dto.setTimestamp(trace.getStartTime().toInstant(ZoneOffset.UTC));
         }
 
-        // Deserialize tags: Entity stores as JSON String, DTO has Map<String, String>
-        if (trace.getTags() != null && !trace.getTags().isBlank()) {
-            try {
-                Map<String, String> tagsMap = objectMapper.readValue(
-                        trace.getTags(),
-                        new TypeReference<Map<String, String>>() {
-                        });
-                dto.setTags(tagsMap);
-            } catch (JsonProcessingException e) {
-                dto.setTags(new HashMap<>());
+        // Tags: Entity now uses Map<String, Object>, DTO has Map<String, String>
+        if (trace.getTags() != null && !trace.getTags().isEmpty()) {
+            Map<String, String> stringTags = new HashMap<>();
+            for (Map.Entry<String, Object> entry : trace.getTags().entrySet()) {
+                stringTags.put(entry.getKey(), String.valueOf(entry.getValue()));
             }
+            dto.setTags(stringTags);
         }
 
         return dto;
