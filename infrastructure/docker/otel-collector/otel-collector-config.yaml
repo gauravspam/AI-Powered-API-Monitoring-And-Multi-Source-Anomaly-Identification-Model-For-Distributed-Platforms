@@ -1,0 +1,73 @@
+# OpenTelemetry Collector Configuration
+# For collecting telemetry from cloud services and SaaS applications
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  # OTLP receiver for gRPC
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus metrics receiver
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          static_configs:
+            - targets: [localhost:8889]
+
+processors:
+  # Batchprocessor for efficient data transfer
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+  # Add resource attributes
+  resource:
+    attributes:
+      - key: service.name
+        value: otel-collector
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: upsert
+
+exporters:
+  # Forward to Fluentd
+  fluentdforward:
+    endpoint: fluentd:24224
+    tls:
+      insecure: true
+
+  # Debug exporter for testing
+  logging:
+    loglevel: debug
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, memory_limiter, resource]
+      exporters: [fluentdforward, logging]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [batch, memory_limiter, resource]
+      exporters: [fluentdforward, logging]
+    logs:
+      receivers: [otlp]
+      processors: [batch, memory_limiter, resource]
+      exporters: [fluentdforward, logging]
