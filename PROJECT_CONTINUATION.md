@@ -240,6 +240,110 @@ VITE_API_URL=http://localhost:8080/api
 3. **Database Migrations**
    - Flyway migration V2 for environment column in system_metrics
 
+## GPU Training
+
+### Prerequisites
+
+Before training the ML models, ensure your system has:
+
+1. **NVIDIA GPU** with CUDA compute capability 3.5+
+2. **CUDA Toolkit** 11.8 or later
+3. **cuDNN** 8.x or later
+4. **PyTorch with CUDA** support
+
+### Install PyTorch with CUDA
+
+```bash
+# Install PyTorch with CUDA 11.8 support (recommended for most GPUs)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# Or for CUDA 12.1
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+```
+
+### Training Scripts
+
+All training scripts are located in `ml-service/training/`:
+
+| Script | Purpose | Data Source |
+|--------|---------|-------------|
+| `pretrain/train_metric_encoder.py` | Pre-train metric encoder | `data/raw/smd/train/` (SMD dataset) |
+| `pretrain/train_log_encoder.py` | Pre-train log encoder (BERT) | `data/raw/loghub/HDFS.log` |
+| `pretrain/train_trace_encoder.py` | Pre-train trace encoder | `data/raw/deathstar/flat_csv/` |
+| `fusion/train_msif_enhanced.py` | Train MSIF-LSTM fusion model | `data/raw/train_ticket/AIOps挑战赛数据/2020_04_11/` |
+| `fusion/train_ple_enhanced.py` | Train PLE-GRU fusion model | `data/raw/train_ticket/AIOps挑战赛数据/2020_04_11/` |
+
+### Training Commands
+
+```bash
+cd ml-service
+
+# Install dependencies
+pip install -r requirements.txt
+
+# 1. Pre-train Metric Encoder (~5-10 minutes on GPU)
+python training/pretrain/train_metric_encoder.py
+
+# 2. Pre-train Log Encoder (~10-20 minutes on GPU, requires BERT)
+python training/pretrain/train_log_encoder.py
+
+# 3. Pre-train Trace Encoder (~5-10 minutes on GPU)
+python training/pretrain/train_trace_encoder.py
+
+# 4. Train MSIF-LSTM Fusion Model (~10-15 minutes on GPU)
+python training/fusion/train_msif_enhanced.py
+
+# 5. Train PLE-GRU Fusion Model (~10-15 minutes on GPU)
+python training/fusion/train_ple_enhanced.py
+```
+
+### Expected Training Time
+
+| Model | GPU Training Time | CPU Training Time |
+|-------|-------------------|-------------------|
+| Metric Encoder | ~5-10 min | ~30-60 min |
+| Log Encoder (BERT) | ~10-20 min | ~2-4 hours |
+| Trace Encoder | ~5-10 min | ~30-60 min |
+| MSIF-LSTM | ~10-15 min | ~1-2 hours |
+| PLE-GRU | ~10-15 min | ~1-2 hours |
+| **Total** | ~40-60 min | ~5-8 hours |
+
+### Model Output Locations
+
+Trained models are saved to:
+
+- `ml-service/models/encoders/metric/metric_encoder_pretrained.pth`
+- `ml-service/models/encoders/log/log_encoder.pth`
+- `ml-service/models/encoders/trace/trace_encoder.pth`
+- `ml-service/models/enhanced/msif_lstm.pth`
+- `ml-service/models/enhanced/ple_gru.pth`
+
+### Verifying Training Results
+
+After training, test the ML service:
+
+```bash
+# Test multimodal endpoint with high anomaly values
+curl -X POST http://localhost:9000/predict/multimodal \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metrics": {"cpu_usage": 95, "memory_usage": 90, "error_rate": 5.0},
+    "logs": [{"level": "ERROR", "message": "Connection timeout"}],
+    "traces": [{"service": "api-gateway", "duration": 5000, "success": false}]
+  }'
+
+# Expected: Higher anomaly score (0.7-0.95) instead of ~1e-07
+```
+
+### Sample Data Generation
+
+If you don't have the original datasets, the training scripts will automatically generate synthetic data for training. However, for best results:
+
+1. **SMD Dataset** (for Metric Encoder): Download from [Server Machine Dataset](https://github.com/China-UK-ZeroTrust/AI-MOps)
+2. **HDFS Logs** (for Log Encoder): Download from [Loghub](https://github.com/logpai/loghub)
+3. **DeathStarBench** (for Trace Encoder): Download from [DeathStarBench](https://github.com/cs-au-dc/DeathStarBench)
+4. **AIOps Challenge Data**: Use provided data in `data/raw/train_ticket/`
+
 ## Next Tasks (Priority Order)
 
 ### High Priority
