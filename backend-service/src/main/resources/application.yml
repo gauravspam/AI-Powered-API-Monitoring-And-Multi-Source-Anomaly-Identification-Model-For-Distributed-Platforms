@@ -91,7 +91,7 @@ opensearch:
     scheme: http
     username: admin
     password: admin
-    enabled: false
+    enabled: true
 
 # Python ML Service
 python:
