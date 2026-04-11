@@ -1,49 +1,59 @@
-"""
-Backend API for Smart Polling
+package com.api.monitoring.backend.controller;
 
-Provides endpoints for frontend to check for new predictions
-without full data refresh
-"""
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
-from datetime import datetime
-from typing import Optional
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
+@RestController
+@RequestMapping("/api/predictions")
+public class PredictionController {
 
-class PredictionMetadata:
-    """Lightweight prediction metadata for smart polling"""
-    
-    def __init__(self):
-        self.prediction_id: Optional[str] = None
-        self.prediction_time: Optional[str] = None
-        self.severity: Optional[str] = None
-        self.alert_count: int = 0
-        
-    def update(self, prediction_id: str, severity: str, alert_count: int):
-        """Update prediction metadata"""
-        self.prediction_id = prediction_id
-        self.prediction_time = datetime.utcnow().isoformat() + "Z"
-        self.severity = severity
-        self.alert_count = alert_count
-        
-    def to_dict(self):
-        """Convert to dictionary"""
-        return {
-            "prediction_id": self.prediction_id,
-            "prediction_time": self.prediction_time,
-            "severity": self.severity,
-            "alert_count": self.alert_count
+    private static final AtomicReference<PredictionMetadata> latestPrediction = 
+        new AtomicReference<>(new PredictionMetadata());
+
+    @GetMapping("/latest")
+    public ResponseEntity<Map<String, Object>> getLatestPrediction() {
+        PredictionMetadata metadata = latestPrediction.get();
+        return ResponseEntity.ok(metadata.toMap());
+    }
+
+    public static void updatePrediction(String predictionId, String severity, int alertCount) {
+        latestPrediction.set(new PredictionMetadata(predictionId, severity, alertCount));
+    }
+
+    private static class PredictionMetadata {
+        private String predictionId;
+        private String predictionTime;
+        private String severity;
+        private int alertCount;
+
+        public PredictionMetadata() {
+            this.predictionId = null;
+            this.predictionTime = null;
+            this.severity = null;
+            this.alertCount = 0;
         }
 
+        public PredictionMetadata(String predictionId, String severity, int alertCount) {
+            this.predictionId = predictionId;
+            this.predictionTime = Instant.now().toString();
+            this.severity = severity;
+            this.alertCount = alertCount;
+        }
 
-# Global metadata instance
-_latest_prediction = PredictionMetadata()
-
-
-def update_prediction(prediction_id: str, severity: str, alert_count: int):
-    """Update the latest prediction metadata"""
-    _latest_prediction.update(prediction_id, severity, alert_count)
-
-
-def get_latest_prediction():
-    """Get the latest prediction metadata"""
-    return _latest_prediction.to_dict()
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new HashMap<>();
+            map.put("prediction_id", predictionId);
+            map.put("prediction_time", predictionTime);
+            map.put("severity", severity);
+            map.put("alert_count", alertCount);
+            return map;
+        }
+    }
+}
