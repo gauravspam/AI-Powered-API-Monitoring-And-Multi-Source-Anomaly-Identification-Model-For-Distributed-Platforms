@@ -173,7 +173,7 @@ services:
     #         retries: 3
     #     restart: unless-stopped
 
-vault:
+    vault:
         image: hashicorp/vault:1.15
         container_name: vault
         environment:
