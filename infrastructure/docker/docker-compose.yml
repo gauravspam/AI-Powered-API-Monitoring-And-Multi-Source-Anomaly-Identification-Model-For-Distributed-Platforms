@@ -173,6 +173,31 @@ services:
     #         retries: 3
     #     restart: unless-stopped
 
+vault:
+        image: hashicorp/vault:1.15
+        container_name: vault
+        environment:
+            - VAULT_ADDR=http://0.0.0.0:8200
+            - VAULT_API_ADDR=http://vault:8200
+            - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+            - VAULT_DEV_ROOT_TOKEN_ID=root_token
+            - VAULT_SEAL_TYPE=shamir
+        ports:
+            - "8200:8200"
+        volumes:
+            - vault_data:/vault/data
+            - ./vault/config.hcl:/vault/config.hcl:ro
+        networks:
+            - monitoring-net
+        healthcheck:
+            test: ["CMD", "wget", "--spider", "-q", "http://localhost:8200/v1/sys/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+        cap_add:
+            - IPC_LOCK
+
 networks:
     monitoring-net:
 
@@ -180,3 +205,4 @@ volumes:
     postgres_data:
     opensearch_data:
     fluentd_buffer:
+    vault_data:
