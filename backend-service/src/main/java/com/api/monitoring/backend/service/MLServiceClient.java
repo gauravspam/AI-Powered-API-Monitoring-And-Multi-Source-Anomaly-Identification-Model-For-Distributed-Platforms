@@ -26,16 +26,16 @@ public class MLServiceClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${ml.service.url:http://localhost:9000}")
+    @Value("${python.service.url:http://localhost:9000}")
     private String mlServiceUrl;
 
-    @Value("${ml.service.enabled:true}")
+    @Value("${python.service.enabled:true}")
     private boolean mlServiceEnabled;
 
-    @Value("${ml.service.timeout:10}")
+    @Value("${python.service.timeout:30}")
     private int timeoutSeconds;
 
-    @Value("${ml.service.version:1.0.0}")
+    @Value("${python.service.version:1.0.0}")
     private String mlServiceVersion;
 
     @Autowired
