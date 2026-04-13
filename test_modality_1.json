@@ -1,0 +1,2 @@
+# Test 1: Metrics only
+{"metrics": {"cpu_usage": 30, "memory_usage": 40, "response_time_ms": 50, "error_rate": 0}}

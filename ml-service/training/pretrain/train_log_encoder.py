@@ -81,10 +81,14 @@ class LogDataset(Dataset):
 class LogEncoder(nn.Module):
     def __init__(self, embedding_dim=128):
         super(LogEncoder, self).__init__()
-        self.bert = BertModel.from_pretrained("bert-base-uncased")
-
+        # Use TinyBERT-4 instead of BERT for 7.5x smaller model (14.5M vs 109M params)
+        # Hidden size: 312 (vs BERT's 768), Layers: 4 (vs BERT's 12)
+        from transformers import TinyBertModel
+        self.bert = TinyBertModel.from_pretrained("huawei-noah/TinyBERT_General_4L_312D")
+        self.bert_hidden_size = 312  # TinyBERT hidden size
+        
         self.projection = nn.Sequential(
-            nn.Linear(768, 256),
+            nn.Linear(self.bert_hidden_size, 256),
             nn.ReLU(),
             nn.Dropout(0.1),
             nn.Linear(256, embedding_dim),

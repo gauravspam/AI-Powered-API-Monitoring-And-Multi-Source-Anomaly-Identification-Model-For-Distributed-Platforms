@@ -1,0 +1,13 @@
+{
+  "apiName": "user-profile-api",
+  "method": "GET",
+  "responseTime": 850,
+  "statusCode": 200,
+  "requestCount": 250,
+  "errorRate": 8,
+  "cpuUsage": 72,
+  "memoryUsage": 68,
+  "networkIo": 150000,
+  "diskIo": 200000,
+  "timestamp": "2026-04-12T12:30:00"
+}

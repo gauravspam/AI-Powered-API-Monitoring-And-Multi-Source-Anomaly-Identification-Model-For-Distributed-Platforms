@@ -1,0 +1,16 @@
+{
+  "apiName": "test-traces-only",
+  "method": "GET",
+  "responseTime": 200,
+  "statusCode": 200,
+  "requestCount": 50,
+  "errorRate": 0,
+  "cpuUsage": 30,
+  "memoryUsage": 40,
+  "networkIo": 10000,
+  "diskIo": 5000,
+  "timestamp": "2026-04-12T12:00:00",
+  "traces": [
+    {"duration": 5000, "status_code": 503}
+  ]
+}

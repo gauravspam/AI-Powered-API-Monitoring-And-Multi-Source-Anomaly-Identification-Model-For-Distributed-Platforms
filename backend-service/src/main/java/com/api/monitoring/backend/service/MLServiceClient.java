@@ -18,6 +18,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -115,6 +116,118 @@ public class MLServiceClient {
         } catch (Exception e) {
             log.error("❌ Unexpected error calling ML Service for log {}: {}",
                     logRecord.getId(), e.getMessage(), e);
+            throw new MLServiceException("Unexpected error: " + e.getMessage(), e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public AnomalyPredictionDTO predictAnomalyMultimodal(
+            LogRecord logRecord,
+            List<Map<String, String>> logs,
+            List<Map<String, Object>> traces,
+            Map<String, Object> metrics) {
+        long startTime = System.currentTimeMillis();
+        
+        if (!mlServiceEnabled) {
+            log.warn("ML Service is disabled. Returning default prediction.");
+            return createDefaultPrediction(logRecord);
+        }
+
+        try {
+            log.info("Calling ML Service (multimodal) for endpoint: {}", logRecord.getEndpoint());
+
+            Map<String, Object> requestPayload = new HashMap<>();
+            
+            // Add metrics if provided
+            if (metrics != null) {
+                requestPayload.put("metrics", metrics);
+            } else {
+                // Fallback to log record fields
+                Map<String, Object> fallbackMetrics = new HashMap<>();
+                fallbackMetrics.put("cpu_usage", logRecord.getCpuUsage() != null ? logRecord.getCpuUsage() : 0.0);
+                fallbackMetrics.put("memory_usage", logRecord.getMemoryUsage() != null ? logRecord.getMemoryUsage() : 0.0);
+                fallbackMetrics.put("response_time_ms", logRecord.getResponseTimeMs() != null ? logRecord.getResponseTimeMs() : 0);
+                fallbackMetrics.put("error_rate", logRecord.getErrorRate() != null ? logRecord.getErrorRate() : 0.0);
+                requestPayload.put("metrics", fallbackMetrics);
+            }
+            
+            // Add logs if provided
+            if (logs != null && !logs.isEmpty()) {
+                requestPayload.put("logs", logs);
+            }
+            
+            // Add traces if provided
+            if (traces != null && !traces.isEmpty()) {
+                requestPayload.put("traces", traces);
+            }
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.set("X-Trace-Id", logRecord.getTraceId() != null ? logRecord.getTraceId() : "unknown");
+            headers.set("X-Request-Source", "backend-service-multimodal");
+
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestPayload, headers);
+
+            String endpoint = mlServiceUrl + "/predict/flexible";
+            log.debug("POST {} (multimodal)", endpoint);
+            log.debug("Request body: {}", requestPayload);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                endpoint,
+                HttpMethod.POST,
+                request,
+                Map.class
+            );
+
+            long duration = System.currentTimeMillis() - startTime;
+
+            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
+                Map<String, Object> mlResponse = response.getBody();
+                
+                Double finalScore = ((Number) mlResponse.getOrDefault("final_score", 0.0)).doubleValue();
+                String severity = (String) mlResponse.getOrDefault("severity", "NORMAL");
+                Double confidence = ((Number) mlResponse.getOrDefault("confidence", 0.5)).doubleValue();
+                Double msifScore = ((Number) mlResponse.getOrDefault("msif_score", 0.0)).doubleValue();
+                Double pleScore = ((Number) mlResponse.getOrDefault("ple_score", 0.0)).doubleValue();
+                String fusionMethod = (String) mlResponse.getOrDefault("fusion_method", "flexible_multimodal");
+                
+                log.info("✅ ML prediction SUCCESS (multimodal): final_score={}, severity={}, duration={}ms",
+                        finalScore, severity, duration);
+
+                return AnomalyPredictionDTO.builder()
+                        .logId(logRecord.getId())
+                        .endpoint(logRecord.getEndpoint())
+                        .method(logRecord.getMethod())
+                        .msifScore(msifScore)
+                        .pleScore(pleScore)
+                        .hybridScore(finalScore)
+                        .severity(severity)
+                        .confidence(confidence)
+                        .fusionMethod(fusionMethod)
+                        .mlProcessingTimeMs(duration)
+                        .mlServiceVersion(mlServiceVersion)
+                        .traceId(logRecord.getTraceId())
+                        .timestamp(LocalDateTime.now())
+                        .build();
+            } else {
+                log.error("ML Service (multimodal) returned non-OK status: {}", response.getStatusCode());
+                throw new MLServiceException("ML Service returned status: " + response.getStatusCode());
+            }
+
+        } catch (HttpClientErrorException e) {
+            log.error("❌ ML Service (multimodal) client error: {} - {}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new MLServiceException("Client error calling ML service: " + e.getMessage(), e);
+
+        } catch (HttpServerErrorException e) {
+            log.error("❌ ML Service (multimodal) server error: {}", e.getStatusCode());
+            throw e;
+
+        } catch (ResourceAccessException e) {
+            log.error("❌ ML Service (multimodal) network error: {}", e.getMessage());
+            throw e;
+
+        } catch (Exception e) {
+            log.error("❌ Unexpected error calling ML Service (multimodal): {}", e.getMessage(), e);
             throw new MLServiceException("Unexpected error: " + e.getMessage(), e);
         }
     }

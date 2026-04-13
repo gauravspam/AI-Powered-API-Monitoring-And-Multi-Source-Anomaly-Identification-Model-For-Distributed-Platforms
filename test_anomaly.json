@@ -1,0 +1,13 @@
+{
+  "apiName": "test-api",
+  "method": "GET",
+  "responseTime": 2500,
+  "statusCode": 500,
+  "requestCount": 100,
+  "errorRate": 45,
+  "cpuUsage": 98,
+  "memoryUsage": 95,
+  "networkIo": 500000,
+  "diskIo": 800000,
+  "timestamp": "2026-04-12T12:00:00"
+}

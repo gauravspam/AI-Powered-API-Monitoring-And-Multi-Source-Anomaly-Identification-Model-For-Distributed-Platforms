@@ -409,6 +409,34 @@ flowchart LR
 
 ## ML Models
 
+### Training Datasets
+
+The models are trained on the following datasets:
+
+#### Pre-trained Encoders
+
+| Encoder | Training Dataset | Description |
+|---------|-----------------|--------------|
+| **Metric Encoder** | SMD Dataset (Server Machine Dataset) | 38-dimensional system metrics (CPU, memory, disk I/O, network) collected from 28 servers over 5 weeks |
+| **Log Encoder** | HDFS Dataset + BERT | Pre-trained BERT-base-uncased fine-tuned on Hadoop Distributed File System logs for log classification |
+| **Trace Encoder** | DeathStarBench | Graph neural network trained on microservice call chains from containerized applications |
+
+#### ML Models (MSIF-LSTM & PLE-GRU)
+
+| Model | Training Dataset | Description |
+|-------|-----------------|--------------|
+| **MSIF-LSTM** | AIOps 2020 Challenge (Train Ticket) | Trained on platform metrics, traces, and business metrics from train-ticket system. Uses fault labels from `fault_labels_preselection.csv` for supervised learning |
+| **PLE-GRU** | AIOps 2020 Challenge (Train Ticket) | Same dataset as MSIF-LSTM, different architecture for ensemble diversity |
+
+**Dataset Details:**
+- **AIOps 2020 Challenge**: Multi-modal dataset from train-ticket microservice system
+  - Platform Metrics: OS, Docker, Redis, Oracle metrics (5 categories)
+  - Trace Metrics: 6 types of distributed traces  
+  - Business Metrics: ESB service calls
+  - Fault Labels: 81 labeled anomalies for supervised training
+
+---
+
 ### MSIF-LSTM (Multi-Scale Isolation Forest + LSTM)
 
 **Purpose:** Short-term anomaly detection with temporal awareness

@@ -1,0 +1,13 @@
+{
+  "apiName": "cpu-spike-api",
+  "method": "GET",
+  "responseTime": 300,
+  "statusCode": 200,
+  "requestCount": 100,
+  "errorRate": 5,
+  "cpuUsage": 95,
+  "memoryUsage": 50,
+  "networkIo": 100000,
+  "diskIo": 100000,
+  "timestamp": "2026-04-12T12:05:00"
+}

@@ -180,23 +180,6 @@
 		</filter>
 	</filteredResources>
 </projectDescription>
-arguments=--init-script C\:\\Users\\Admin\\.cache\\opencode\\bin\\jdtls\\config_win\\org.eclipse.osgi\\58\\0\\.cp\\gradle\\init\\init.gradle
-auto.sync=false
-build.scans.enabled=false
-connection.gradle.distribution=GRADLE_DISTRIBUTION(WRAPPER)
-connection.project.dir=
-eclipse.preferences.version=1
-gradle.user.home=
-java.home=C\:/Program Files/Eclipse Adoptium/jdk-21.0.10.7-hotspot
-jvm.arguments=
-offline.mode=false
-override.workspace.settings=true
-show.console.view=true
-show.executions.view=true
-eclipse.preferences.version=1
-org.eclipse.jdt.apt.aptEnabled=true
-org.eclipse.jdt.apt.genSrcDir=bin/generated-sources/annotations
-org.eclipse.jdt.apt.genTestSrcDir=bin/generated-test-sources/annotations
     │   │   │           │   └── ApiMonitoringBackendApplication.class (cat-excluded by ancestor dir)
     │   │   │           └── config
     │   │   │               └── LoggingAspect.class (cat-excluded by ancestor dir)
@@ -246,6 +229,7 @@ org.eclipse.jdt.apt.genTestSrcDir=bin/generated-test-sources/annotations
     │   │   │               │   │   ├── MetricsController.java
     │   │   │               │   │   ├── ModelsController.java
     │   │   │               │   │   ├── OverviewController.java
+    │   │   │               │   │   ├── PredictionController.java
     │   │   │               │   │   ├── ServicesController.java
     │   │   │               │   │   └── TracesController.java
     │   │   │               │   ├── dto
@@ -320,6 +304,7 @@ org.eclipse.jdt.apt.genTestSrcDir=bin/generated-test-sources/annotations
     ├── .factorypath
     ├── .project
     ├── Dockerfile
+    ├── SETUP_AND_API_REFERENCE.md
     ├── build.gradle
     ├── gradlew
     ├── gradlew.bat
@@ -333,12 +318,23 @@ org.eclipse.jdt.apt.genTestSrcDir=bin/generated-test-sources/annotations
 
 ============== backend-service/.project ==============
 
-
-============== backend-service/.settings/org.eclipse.buildship.core.prefs ==============
-
-
-============== backend-service/.settings/org.eclipse.jdt.apt.core.prefs ==============
-
+arguments=--init-script C\:\\Users\\Admin\\.cache\\opencode\\bin\\jdtls\\config_win\\org.eclipse.osgi\\58\\0\\.cp\\gradle\\init\\init.gradle
+auto.sync=false
+build.scans.enabled=false
+connection.gradle.distribution=GRADLE_DISTRIBUTION(WRAPPER)
+connection.project.dir=
+eclipse.preferences.version=1
+gradle.user.home=
+java.home=C\:/Program Files/Eclipse Adoptium/jdk-21.0.10.7-hotspot
+jvm.arguments=
+offline.mode=false
+override.workspace.settings=true
+show.console.view=true
+show.executions.view=true
+eclipse.preferences.version=1
+org.eclipse.jdt.apt.aptEnabled=true
+org.eclipse.jdt.apt.genSrcDir=bin/generated-sources/annotations
+org.eclipse.jdt.apt.genTestSrcDir=bin/generated-test-sources/annotations
 eclipse.preferences.version=1
 org.eclipse.jdt.core.compiler.codegen.targetPlatform=17
 org.eclipse.jdt.core.compiler.compliance=17
@@ -376,7 +372,812 @@ EXPOSE 8081
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8081/health || exit 1
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
-plugins {
+# API Monitoring Backend Service - Setup & API Reference Guide
+
+## Overview
+
+This is the Spring Boot backend for the AI-Powered API Monitoring and Anomaly Detection system. It provides REST APIs for ingesting metrics, logs, and traces from distributed services, stores them in PostgreSQL, and integrates with a Python ML service for anomaly detection.
+
+**Base URL:** `http://localhost:8080`
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Starting the Backend](#starting-the-backend)
+3. [Starting PostgreSQL](#starting-postgresql)
+4. [API Endpoints](#api-endpoints)
+5. [Request/Response Examples](#requestresponse-examples)
+6. [Configuration](#configuration)
+7. [Database Schema](#database-schema)
+8. [Building & Running](#building--running)
+9. [Testing with curl](#testing-with-curl)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Java | 17+ | Required for Spring Boot 3.x |
+| PostgreSQL | 15+ | Runs on port 5433 (Docker maps 5432→5433) |
+| Gradle | 8.x | Included via gradlew wrapper |
+
+### Database Credentials
+
+| Property | Value |
+|----------|-------|
+| Database | `api_monitoring` |
+| Username | `api_monitor` |
+| Password | `api_monitor_pwd` |
+
+---
+
+## Starting the Backend
+
+### Step 1: Ensure PostgreSQL is Running
+
+```powershell
+docker ps -a | findstr postgres
+```
+
+If not running, start it:
+
+```powershell
+docker run -d --name postgres-api-monitor -e POSTGRES_DB=api_monitoring -e POSTGRES_USER=api_monitor -e POSTGRES_PASSWORD=api_monitor_pwd -p 5433:5432 postgres:15
+```
+
+### Step 2: Start the Backend
+
+```powershell
+cd backend-service
+.\gradlew bootRun
+```
+
+The backend will start on **http://localhost:8080**
+
+You should see output like:
+```
+Tomcat started on port 8080 (http)
+Started ApiMonitoringBackendApplication in X.XXX seconds
+```
+
+---
+
+## Starting PostgreSQL
+
+### Option A: Docker (Recommended)
+
+```bash
+# Create and start PostgreSQL container
+docker run -d `
+  --name postgres-api-monitor `
+  -e POSTGRES_DB=api_monitoring `
+  -e POSTGRES_USER=api_monitor `
+  -e POSTGRES_PASSWORD=api_monitor_pwd `
+  -p 5433:5432 `
+  postgres:15
+```
+
+### Option B: Docker Compose
+
+```bash
+cd infrastructure/docker
+docker-compose up -d postgres
+```
+
+### Verify Connection
+
+```powershell
+# Check if PostgreSQL is accepting connections
+docker logs postgres-api-monitor
+
+# Test connection from backend (automatic on startup)
+# If tables don't exist, Hibernate will create them via ddl-auto: update
+```
+
+---
+
+## API Endpoints
+
+### 1. Health Check Endpoints
+
+Used to verify the service is running and healthy.
+
+| Method | Endpoint | Description | Response |
+|--------|----------|-------------|----------|
+| GET | `/health` | Basic health check | `{"status": "UP", "service": "api-monitoring-backend"}` |
+| GET | `/actuator/health` | Spring Actuator health | Detailed health with DB status |
+
+**Example:**
+```bash
+curl http://localhost:8080/health
+# Response: {"status":"UP","service":"api-monitoring-backend"}
+```
+
+---
+
+### 2. Metrics Endpoints (`/api/metrics`)
+
+Used to ingest and retrieve API performance metrics (CPU, memory, response time, error rate, etc.).
+
+| Method | Endpoint | Description | Query Params |
+|--------|----------|-------------|-------------|
+| POST | `/api/metrics` | Ingest a single metric | - |
+| POST | `/api/metrics/batch` | Ingest multiple metrics | - |
+| GET | `/api/metrics/recent` | Get recent metrics | `limit` (default: 100) |
+| GET | `/api/metrics/traffic` | Get traffic data | `limit` (default: 50) |
+| GET | `/api/metrics/api/{apiId}` | Get metrics by API ID | `apiId` (path) |
+
+#### POST /api/metrics - Request Body
+
+```json
+{
+  "apiId": 1,
+  "serviceName": "user-service",
+  "cpuUsage": 45.2,
+  "memoryUsage": 62.8,
+  "diskIoBytes": 1024000,
+  "networkIoBytes": 512000,
+  "responseTimeMs": 125,
+  "requestCount": 1500,
+  "errorRate": 0.02,
+  "timestamp": "2026-04-11T10:30:00"
+}
+```
+
+#### POST /api/metrics - Response
+
+```json
+{
+  "status": "success",
+  "message": "Metric saved successfully",
+  "id": 123,
+  "timestamp": "2026-04-11T10:30:00"
+}
+```
+
+#### GET /api/metrics/recent?limit=10 - Response
+
+```json
+[
+  {
+    "id": 123,
+    "apiLogId": 1,
+    "serviceName": "user-service",
+    "cpuUsagePercent": 45.2,
+    "memoryUsagePercent": 62.8,
+    "diskIoBytes": 1024000,
+    "networkIoBytes": 512000,
+    "responseTimeMs": 125,
+    "requestCount": 1500,
+    "errorRate": 0.02,
+    "metricTimestamp": "2026-04-11T10:30",
+    "createdAt": "2026-04-11T10:30:00"
+  }
+]
+```
+
+---
+
+### 3. Logs Endpoints (`/api/logs`)
+
+Used to ingest and search application logs (typically forwarded via Fluentd to OpenSearch).
+
+| Method | Endpoint | Description | Query Params |
+|--------|----------|-------------|-------------|
+| POST | `/api/logs` | Ingest a log entry | - |
+| POST | `/api/logs/batch` | Ingest multiple logs | - |
+| GET | `/api/logs/recent` | Get recent logs | `limit` (default: 100) |
+| GET | `/api/logs/search` | Search logs | `query`, `limit` |
+| GET | `/api/logs/service/{serviceName}` | Get logs by service | `serviceName`, `limit` |
+| GET | `/api/logs/level/{level}` | Get logs by level | `level` (INFO, ERROR, WARN), `limit` |
+| GET | `/api/logs/events` | Get log events | `limit` |
+| GET | `/api/logs/streams` | Get log streams | `limit` |
+
+#### POST /api/logs - Request Body
+
+```json
+{
+  "serviceName": "user-service",
+  "level": "INFO",
+  "message": "User login successful",
+  "environment": "production",
+  "timestamp": "2026-04-11T10:30:00Z"
+}
+```
+
+#### GET /api/logs/search?query=error&limit=5 - Response
+
+```json
+[
+  {
+    "id": "log-123",
+    "serviceName": "payment-service",
+    "level": "ERROR",
+    "message": "Payment processing failed: timeout",
+    "environment": "production",
+    "timestamp": "2026-04-11T10:28:00Z"
+  }
+]
+```
+
+---
+
+### 4. Traces Endpoints (`/api/traces`)
+
+Used to ingest and retrieve distributed tracing data (OpenTelemetry-compatible).
+
+| Method | Endpoint | Description | Query Params |
+|--------|----------|-------------|-------------|
+| POST | `/api/traces/ingest` | Ingest a trace | - |
+| POST | `/api/traces/ingest/batch` | Ingest multiple traces | - |
+| GET | `/api/traces/recent` | Get recent traces | `page`, `size` |
+| GET | `/api/traces/service/{serviceName}` | Get traces by service | `serviceName`, `page`, `size` |
+| GET | `/api/traces/search` | Search traces | `serviceName`, `startTime`, `endTime`, `page`, `size` |
+| GET | `/api/traces/stats/{serviceName}` | Get service statistics | `serviceName` |
+| GET | `/api/traces/{traceId}` | Get trace by ID | `traceId` |
+
+#### POST /api/traces/ingest - Request Body
+
+```json
+{
+  "traceId": "abc-123-def",
+  "spanId": "span-456",
+  "parentSpanId": "span-789",
+  "serviceName": "payment-service",
+  "operationName": "POST /payment/process",
+  "duration": 250,
+  "statusCode": 200,
+  "timestamp": "2026-04-11T10:30:00Z",
+  "tags": {
+    "http.method": "POST",
+    "endpoint": "/payment/process",
+    "database.query": "SELECT * FROM payments"
+  }
+}
+```
+
+#### POST /api/traces/ingest - Response
+
+```json
+{
+  "id": 456,
+  "traceId": "abc-123-def",
+  "status": "success",
+  "message": "Trace ingested successfully"
+}
+```
+
+#### GET /api/traces/stats/payment-service - Response
+
+```json
+{
+  "serviceName": "payment-service",
+  "totalTraces": 1250,
+  "averageDurationMs": 185.5
+}
+```
+
+---
+
+### 5. Anomalies Endpoints (`/api/anomalies`)
+
+Used to analyze logs for anomalies and retrieve detected anomalies. Integrates with Python ML service for anomaly detection.
+
+| Method | Endpoint | Description | Query Params |
+|--------|----------|-------------|-------------|
+| POST | `/api/anomalies/analyze` | Analyze a log for anomalies | - |
+| GET | `/api/anomalies/recent` | Get recent anomalies | `limit` (default: 10) |
+| GET | `/api/anomalies/severity/{severity}` | Get by severity | `severity` (HIGH, MEDIUM, LOW) |
+| GET | `/api/anomalies/critical` | Get critical anomalies | `limit` |
+| GET | `/api/anomalies/unacknowledged` | Get unacknowledged anomalies | - |
+| POST | `/api/anomalies/{id}/acknowledge` | Acknowledge an anomaly | `id` (path), optional `username` |
+| POST | `/api/anomalies/{id}/resolve` | Resolve an anomaly | `id` (path) |
+| GET | `/api/anomalies/stats` | Get anomaly statistics | `apiName` |
+
+#### POST /api/anomalies/analyze - Request Body
+
+```json
+{
+  "apiName": "user-service",
+  "endpoint": "/api/users",
+  "method": "POST",
+  "statusCode": 500,
+  "responseTime": 5200,
+  "errorMessage": "Connection timeout",
+  "timestamp": "2026-04-11T10:30:00"
+}
+```
+
+#### POST /api/anomalies/analyze - Response
+
+```json
+{
+  "id": 89,
+  "apiName": "user-service",
+  "severity": "HIGH",
+  "hybridEnsembleScore": 0.92,
+  "isolationForestScore": 0.88,
+  "lstmScore": 0.85,
+  "autoencoderScore": 0.78,
+  "status": "ACTIVE",
+  "detectedAt": "2026-04-11T10:30:00",
+  "description": "High error rate detected with response time anomaly"
+}
+```
+
+#### GET /api/anomalies/recent?limit=5 - Response
+
+```json
+[
+  {
+    "id": 89,
+    "apiName": "user-service",
+    "endpoint": "/api/users",
+    "severity": "HIGH",
+    "hybridEnsembleScore": 0.92,
+    "status": "ACTIVE",
+    "detectedAt": "2026-04-11T10:30:00"
+  },
+  {
+    "id": 88,
+    "apiName": "payment-service",
+    "endpoint": "/payment/checkout",
+    "severity": "MEDIUM",
+    "hybridEnsembleScore": 0.71,
+    "status": "ACKNOWLEDGED",
+    "detectedAt": "2026-04-11T10:25:00"
+  }
+]
+```
+
+---
+
+### 6. Alerts Endpoints (`/api/alerts`)
+
+Used to manage alerts (synonym for anomalies in this system).
+
+| Method | Endpoint | Description | Query Params |
+|--------|----------|-------------|-------------|
+| GET | `/api/alerts` | Get all alerts | `limit` (default: 50) |
+| POST | `/api/alerts/{id}/acknowledge` | Acknowledge an alert | `id` (path) |
+| POST | `/api/alerts/{id}/resolve` | Resolve an alert | `id` (path) |
+
+---
+
+### 7. Overview & Dashboard Endpoints
+
+Used to get dashboard data and service overviews.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/overview` | Get dashboard overview with metrics summaries |
+| GET | `/api/overview/environment-summary` | Get environment summary |
+| GET | `/api/services` | Get all monitored services |
+| GET | `/api/dashboard/anomalies` | Get anomalies for dashboard |
+| GET | `/api/models` | Get ML models info |
+
+#### GET /api/overview - Response
+
+```json
+{
+  "totalServices": 12,
+  "totalMetrics": 15420,
+  "totalLogs": 8950,
+  "totalTraces": 4520,
+  "totalAnomalies": 23,
+  "activeAnomalies": 5,
+  "services здоровых": 10,
+  "services в деградации": 2,
+  "services недоступны": 0
+}
+```
+
+#### GET /api/services - Response
+
+```json
+[
+  {
+    "id": 1,
+    "name": "api-gateway",
+    "ownerTeam": "Platform Team",
+    "environment": "production",
+    "status": "healthy",
+    "avgLatencyMs": 45,
+    "errorRate": 0.02,
+    "anomalyRate": 0.1,
+    "lastDeploymentAt": "2026-04-06T10:00:00",
+    "requestPerMin": 1200,
+    "tags": ["api", "gateway"]
+  }
+]
+```
+
+#### GET /api/models - Response
+
+```json
+[
+  {
+    "id": 1,
+    "name": "MSIF-LSTM",
+    "version": "1.0.0",
+    "type": "LSTM",
+    "status": "online",
+    "latencyMs": 45,
+    "throughputPerSec": 220,
+    "accuracy": 94.2,
+    "lastRetrainAt": "2026-04-08T10:00:00"
+  }
+]
+```
+
+---
+
+## Request/Response Examples
+
+### Complete Workflow Example
+
+#### Step 1: Ingest a Metric
+
+```bash
+curl -X POST http://localhost:8080/api/metrics \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiId": 1,
+    "serviceName": "user-service",
+    "cpuUsage": 45.2,
+    "memoryUsage": 62.8,
+    "responseTimeMs": 125,
+    "requestCount": 1500,
+    "errorRate": 0.02
+  }'
+```
+
+#### Step 2: Check Recent Metrics
+
+```bash
+curl http://localhost:8080/api/metrics/recent?limit=5
+```
+
+#### Step 3: Analyze for Anomalies
+
+```bash
+curl -X POST http://localhost:8080/api/anomalies/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiName": "user-service",
+    "endpoint": "/api/users",
+    "method": "POST",
+    "statusCode": 500,
+    "responseTime": 5200,
+    "errorMessage": "Connection timeout"
+  }'
+```
+
+#### Step 4: Get Overview
+
+```bash
+curl http://localhost:8080/api/overview
+```
+
+---
+
+## Configuration
+
+### Main Configuration File
+
+`src/main/resources/application.yml`
+
+```yaml
+spring:
+  application:
+    name: api-monitoring-backend
+    version: 1.0.0
+
+  datasource:
+    url: jdbc:postgresql://localhost:5433/api_monitoring?timezone=Asia/Kolkata
+    username: api_monitor
+    password: api_monitor_pwd
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  jpa:
+    hibernate:
+      ddl-auto: update  # Creates missing tables, safe (no data loss)
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+
+server:
+  port: 8080
+
+# Python ML Service
+python:
+  service:
+    url: http://localhost:9000
+    enabled: true
+    timeout: 30
+
+# Fluentd (log forwarding)
+fluentd:
+  enabled: true
+  host: localhost
+  port: 24224
+```
+
+### Key Settings Explained
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `server.port` | 8080 | HTTP listener port |
+| `spring.datasource.url` | - | PostgreSQL JDBC URL |
+| `spring.jpa.hibernate.ddl-auto` | update | Table auto-creation mode |
+| `python.service.url` | http://localhost:9000 | ML service endpoint |
+| `python.service.enabled` | true | Enable ML integration |
+| `fluentd.enabled` | true | Enable Fluentd log forwarding |
+| `opensearch.enabled` | false | Enable OpenSearch (optional) |
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ML_SERVICE_URL` | Python ML service URL | http://localhost:9000 |
+| `ML_SERVICE_ENABLED` | Enable ML service | true |
+| `SPRING_PROFILES_ACTIVE` | Spring profile | default |
+| `POSTGRES_HOST` | Database host | localhost |
+| `POSTGRES_PORT` | Database port | 5433 |
+
+---
+
+## Database Schema
+
+### Tables (auto-created by Hibernate)
+
+The backend automatically creates these tables in PostgreSQL via Hibernate's `ddl-auto: update`.
+
+| Table | Entity | Description |
+|-------|--------|-------------|
+| `metric_record` | MetricRecord | API performance metrics |
+| `log_record` | LogRecord | Application logs |
+| `trace_record` | TraceRecord | Distributed traces |
+| `anomaly_record` | AnomalyRecord | Detected anomalies |
+| `alert_record` | AlertRecord | Alert records |
+| `system_metrics` | SystemMetrics | System-level metrics |
+
+### metric_record Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGINT | Primary key, auto-generated |
+| `api_log_id` | BIGINT | Foreign key to log |
+| `service_name` | VARCHAR(255) | Service name |
+| `cpu_usage_percent` | DOUBLE | CPU usage % |
+| `memory_usage_percent` | DOUBLE | Memory usage % |
+| `disk_io_bytes` | BIGINT | Disk I/O bytes |
+| `network_io_bytes` | BIGINT | Network I/O bytes |
+| `response_time_ms` | BIGINT | Response time in ms |
+| `request_count` | BIGINT | Request count |
+| `error_rate` | DOUBLE | Error rate (0-1) |
+| `metric_timestamp` | TIMESTAMP | Metric timestamp |
+| `created_at` | TIMESTAMP | Record creation time |
+
+### anomaly_record Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | BIGINT | Primary key |
+| `service_name` | VARCHAR(255) | Service name |
+| `endpoint` | VARCHAR(500) | API endpoint |
+| `severity` | VARCHAR(20) | HIGH, MEDIUM, LOW |
+| `hybrid_ensemble_score` | DOUBLE | Ensemble model score |
+| `isolation_forest_score` | DOUBLE | Isolation Forest score |
+| `lstm_score` | DOUBLE | LSTM model score |
+| `autoencoder_score` | DOUBLE | Autoencoder score |
+| `status` | VARCHAR(20) | ACTIVE, ACKNOWLEDGED, RESOLVED |
+| `detected_at` | TIMESTAMP | Detection time |
+
+---
+
+## Building & Running
+
+### Build the Project
+
+```powershell
+.\gradlew build
+```
+
+### Run in Development
+
+```powershell
+.\gradlew bootRun
+```
+
+### Run with Specific Profile
+
+```powershell
+# Use Docker profile (reads environment variables)
+.\gradlew bootRun --args="--spring.profiles.active=docker"
+```
+
+### Clean and Rebuild
+
+```powershell
+.\gradlew clean build
+```
+
+### Run Tests
+
+```powershell
+.\gradlew test
+```
+
+---
+
+## Testing with curl
+
+```bash
+# 1. Health check
+curl http://localhost:8080/health
+
+# 2. Get recent metrics
+curl http://localhost:8080/api/metrics/recent?limit=10
+
+# 3. Get traffic data
+curl http://localhost:8080/api/metrics/traffic?limit=50
+
+# 4. Search logs
+curl "http://localhost:8080/api/logs/search?query=error&limit=10"
+
+# 5. Get recent traces
+curl http://localhost:8080/api/traces/recent?page=0&size=10
+
+# 6. Get service statistics
+curl http://localhost:8080/api/traces/stats/user-service
+
+# 7. Get recent anomalies
+curl http://localhost:8080/api/anomalies/recent?limit=10
+
+# 8. Get critical anomalies
+curl http://localhost:8080/api/anomalies/critical?limit=5
+
+# 9. Get all services
+curl http://localhost:8080/api/services
+
+# 10. Get dashboard overview
+curl http://localhost:8080/api/overview
+
+# 11. Get ML models info
+curl http://localhost:8080/api/models
+```
+
+---
+
+## Troubleshooting
+
+### Issue: Port 8080 Already in Use
+
+**Error:**
+```
+Port 8080 was already in use
+```
+
+**Solution:**
+```powershell
+# Find the process using port 8080
+netstat -ano | findstr 8080
+
+# Kill the process (replace PID with actual process ID)
+taskkill /PID <PID> /F
+
+# Or change the port in application.yml
+# server.port: 8081
+```
+
+### Issue: PostgreSQL Connection Refused
+
+**Error:**
+```
+org.postgresql.util.PSQLException: Connection refused
+```
+
+**Solution:**
+```powershell
+# Check if PostgreSQL container is running
+docker ps | findstr postgres
+
+# Start the container
+docker start postgres-api-monitor
+
+# Or recreate if needed
+docker rm postgres-api-monitor
+docker run -d --name postgres-api-monitor -e POSTGRES_DB=api_monitoring -e POSTGRES_USER=api_monitor -e POSTGRES_PASSWORD=api_monitor_pwd -p 5433:5432 postgres:15
+```
+
+### Issue: Tables Not Created
+
+**Error:**
+```
+relation "metric_record" does not exist
+```
+
+**Solution:**
+1. Verify `ddl-auto: update` is set in application.yml
+2. Restart the backend - Hibernate will create missing tables
+3. Check PostgreSQL connection is working
+
+### Issue: Timezone Error
+
+**Error:**
+```
+FATAL: invalid value for parameter "TimeZone": "Asia/Calcutta"
+```
+
+**Solution:**
+- PostgreSQL renamed "Asia/Calcutta" to "Asia/Kolkata" in 2001
+- The JDBC URL already includes `timezone=Asia/Kolkata`
+- If still failing, add JVM property in build.gradle:
+```groovy
+bootRun {
+    systemProperty 'user.timezone', 'UTC'
+}
+```
+
+### Issue: ML Service Not Available
+
+**Error:**
+```
+ML service request failed
+```
+
+**Solution:**
+```powershell
+# Check if ML service is running
+curl http://localhost:9000/health
+
+# Start ML service if not running
+cd ml-service/api
+pip install -r requirements.txt
+python app_multimodal.py
+
+# Or disable ML service in application.yml
+python:
+  service:
+    enabled: false
+```
+
+### Issue: CORS Errors in Frontend
+
+**Error:**
+```
+Access to fetch at 'http://localhost:8080/api/...' has been blocked by CORS policy
+```
+
+**Solution:**
+- Backend already has CORS configured in CorsConfig.java
+- Ensure frontend is calling correct port (8080)
+- Check VITE_API_URL in frontend/.env
+
+---
+
+## Related Files
+
+| File | Description |
+|------|-------------|
+| `src/main/resources/application.yml` | Main configuration |
+| `src/main/java/.../ApiMonitoringBackendApplication.java` | Main class |
+| `src/main/java/.../controller/*.java` | REST controllers |
+| `src/main/java/.../service/*.java` | Business logic |
+| `src/main/java/.../repository/*.java` | Data access |
+| `src/main/java/.../model/*.java` | Entity models |
+| `src/main/java/.../dto/*.java` | Data transfer objects |
+| `src/main/resources/logback-spring.xml` | Logging config |plugins {
     id 'java'
     id 'org.springframework.boot' version '3.2.1'
     id 'io.spring.dependency-management' version '1.1.4'
@@ -435,6 +1236,10 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+bootRun {
+    systemProperty 'user.timezone', 'UTC'
 }
 distributionBase=GRADLE_USER_HOME
 distributionPath=wrapper/dists
@@ -1600,6 +2405,64 @@ public class OverviewController {
     }
 }
 package com.api.monitoring.backend.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+
+@RestController
+@RequestMapping("/api/predictions")
+public class PredictionController {
+
+    private static final AtomicReference<PredictionMetadata> latestPrediction = 
+        new AtomicReference<>(new PredictionMetadata());
+
+    @GetMapping("/latest")
+    public ResponseEntity<Map<String, Object>> getLatestPrediction() {
+        PredictionMetadata metadata = latestPrediction.get();
+        return ResponseEntity.ok(metadata.toMap());
+    }
+
+    public static void updatePrediction(String predictionId, String severity, int alertCount) {
+        latestPrediction.set(new PredictionMetadata(predictionId, severity, alertCount));
+    }
+
+    private static class PredictionMetadata {
+        private String predictionId;
+        private String predictionTime;
+        private String severity;
+        private int alertCount;
+
+        public PredictionMetadata() {
+            this.predictionId = null;
+            this.predictionTime = null;
+            this.severity = null;
+            this.alertCount = 0;
+        }
+
+        public PredictionMetadata(String predictionId, String severity, int alertCount) {
+            this.predictionId = predictionId;
+            this.predictionTime = Instant.now().toString();
+            this.severity = severity;
+            this.alertCount = alertCount;
+        }
+
+        public Map<String, Object> toMap() {
+            Map<String, Object> map = new HashMap<>();
+            map.put("prediction_id", predictionId);
+            map.put("prediction_time", predictionTime);
+            map.put("severity", severity);
+            map.put("alert_count", alertCount);
+            return map;
+        }
+    }
+}package com.api.monitoring.backend.controller;
 
 import com.api.monitoring.backend.model.AnomalyRecord;
 import com.api.monitoring.backend.model.MetricRecord;
@@ -4478,16 +5341,16 @@ public class MLServiceClient {
 
     private final RestTemplate restTemplate;
 
-    @Value("${ml.service.url:http://localhost:9000}")
+    @Value("${python.service.url:http://localhost:9000}")
     private String mlServiceUrl;
 
-    @Value("${ml.service.enabled:true}")
+    @Value("${python.service.enabled:true}")
     private boolean mlServiceEnabled;
 
-    @Value("${ml.service.timeout:10}")
+    @Value("${python.service.timeout:30}")
     private int timeoutSeconds;
 
-    @Value("${ml.service.version:1.0.0}")
+    @Value("${python.service.version:1.0.0}")
     private String mlServiceVersion;
 
     @Autowired
@@ -5600,7 +6463,7 @@ spring:
         version: 1.0.0
 
     datasource:
-        url: jdbc:postgresql://localhost:5432/api_monitoring
+        url: jdbc:postgresql://localhost:5433/api_monitoring?timezone=Asia/Kolkata
         username: api_monitor
         password: api_monitor_pwd
         driver-class-name: org.postgresql.Driver
@@ -5613,7 +6476,7 @@ spring:
 
     jpa:
         hibernate:
-            ddl-auto: none
+            ddl-auto: update
         properties:
             hibernate:
                 dialect: org.hibernate.dialect.PostgreSQLDialect
@@ -5687,7 +6550,7 @@ opensearch:
     scheme: http
     username: admin
     password: admin
-    enabled: false
+    enabled: true
 
 # Python ML Service
 python:
@@ -6591,32 +7454,20 @@ class ApiMonitoringBackendApplicationTests {
 	}
 
 }
-spring:
-  datasource:
-    url: jdbc:h2:mem:testdb
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: 
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-    database-platform: org.hibernate.dialect.H2Dialect
-    show-sql: true
 
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health
+============== backend-service/.settings/org.eclipse.buildship.core.prefs ==============
 
-logging:
-  level:
-    root: WARN
+
+============== backend-service/.settings/org.eclipse.jdt.apt.core.prefs ==============
+
 
 ============== backend-service/.settings/org.eclipse.jdt.core.prefs ==============
 
 
 ============== backend-service/Dockerfile ==============
+
+
+============== backend-service/SETUP_AND_API_REFERENCE.md ==============
 
 
 ============== backend-service/build.gradle ==============
@@ -6674,6 +7525,9 @@ logging:
 
 
 ============== backend-service/src/main/java/com/api/monitoring/backend/controller/OverviewController.java ==============
+
+
+============== backend-service/src/main/java/com/api/monitoring/backend/controller/PredictionController.java ==============
 
 
 ============== backend-service/src/main/java/com/api/monitoring/backend/controller/ServicesController.java ==============
@@ -6825,6 +7679,27 @@ logging:
 
 ============== backend-service/src/test/java/com/api/monitoring/backend/ApiMonitoringBackendApplicationTests.java ==============
 
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+logging:
+  level:
+    root: WARN
 
 ============== backend-service/src/test/resources/application-test.yml ==============
 
@@ -7128,7 +8003,760 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
-import js from '@eslint/js'
+# API Monitoring Frontend - Setup & UI Reference Guide
+
+## Overview
+
+The Frontend is a React + Vite web application that provides a dashboard for monitoring API services, viewing logs, managing alerts, and tracking AI model performance. It communicates with the Backend REST API to display real-time data.
+
+**Tech Stack:**
+- React 19 with Vite 7
+- Material UI (MUI) 7 for components
+- React Router 7 for navigation
+- Axios for HTTP requests
+
+**Access URL:** `http://localhost:5173` (default Vite dev server)
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Starting the Frontend](#starting-the-frontend)
+3. [Project Structure](#project-structure)
+4. [Pages & Routes](#pages--routes)
+5. [Components](#components)
+6. [API Integration](#api-integration)
+7. [Configuration](#configuration)
+8. [Building & Running](#building--running)
+9. [Key Features](#key-features)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Node.js | 18+ | LTS recommended |
+| npm | 9+ | Comes with Node.js |
+| Backend | Running | On port 8080 |
+
+### Verify Backend is Running
+
+Before starting the frontend, ensure the backend is running:
+
+```bash
+curl http://localhost:8080/health
+# Expected: {"status":"UP","service":"api-monitoring-backend"}
+```
+
+---
+
+## Starting the Frontend
+
+### Step 1: Install Dependencies
+
+```powershell
+cd frontend
+npm install
+```
+
+### Step 2: Start Development Server
+
+```powershell
+npm run dev
+```
+
+The frontend will start at **http://localhost:5173**
+
+### Step 3: Access in Browser
+
+Open your browser and navigate to:
+```
+http://localhost:5173
+```
+
+You should see the login page. The default login credentials are typically:
+- Username: `admin`
+- Password: `admin`
+
+---
+
+## Project Structure
+
+```
+frontend/
+├── public/                     # Static assets
+├── src/
+│   ├── api/
+│   │   └── http.js            # Axios configuration
+│   ├── components/            # Reusable UI components
+│   │   ├── AlertList.jsx      # Alert list display
+│   │   ├── AnomalyTable.jsx  # Anomaly data table
+│   │   ├── EnvironmentFilter.jsx
+│   │   ├── LogTimeline.jsx    # Log event timeline
+│   │   ├── MetricChart.jsx   # Charts for metrics
+│   │   ├── SideNav.jsx        # Side navigation
+│   │   ├── StatCard.jsx       # KPI stat cards
+│   │   ├── StatusChip.jsx     # Status badges
+│   │   ├── TopBar.jsx         # Top navigation bar
+│   │   └── ProtectedRoute.jsx # Auth protection
+│   ├── contexts/
+│   │   └── AuthContext.jsx    # Authentication context
+│   ├── layouts/
+│   │   └── MainLayout.jsx     # Main app layout
+│   ├── pages/                # Page components
+│   │   ├── Dashboard.jsx     # Main dashboard
+│   │   ├── Services.jsx       # Services list
+│   │   ├── Alerts.jsx         # Alerts management
+│   │   ├── Logs.jsx           # Logs viewer
+│   │   ├── Models.jsx         # AI models info
+│   │   ├── Settings.jsx       # Settings page
+│   │   ├── Login.jsx          # Login page
+│   │   └── NotFound.jsx       # 404 page
+│   ├── routes/
+│   │   └── AppRoutes.jsx      # Route definitions
+│   ├── App.jsx               # Root component
+│   ├── main.jsx              # Entry point
+│   └── index.css             # Global styles
+├── package.json              # Dependencies
+├── vite.config.js           # Vite configuration
+└── .env                      # Environment variables
+```
+
+---
+
+## Pages & Routes
+
+The application uses React Router with protected routes. All routes under `/` require authentication except `/login`.
+
+### Route Overview
+
+| Path | Page | Description |
+|------|------|-------------|
+| `/login` | Login | Authentication page (public) |
+| `/` | Dashboard | Main monitoring dashboard |
+| `/services` | Services | Services list with metrics |
+| `/alerts` | Alerts | Alert management |
+| `/logs` | Logs | Log stream viewer |
+| `/models` | Models | AI model information |
+| `/settings` | Settings | User settings |
+| `*` | NotFound | 404 page |
+
+### 1. Dashboard (`/`)
+
+The main landing page showing:
+
+- **KPI Cards** - Four stat cards displaying:
+  - Total Requests
+  - Error Rate
+  - Anomaly Rate
+  - Avg Latency
+
+- **Traffic Chart** - Line chart showing requests per second over time
+
+- **Environment Health** - List of environments with status and uptime
+
+- **Recent Anomalies** - Table of recent anomalies with filtering
+
+**Features:**
+- Auto-refresh every 30 seconds
+- Manual refresh button
+- Filter by environment and severity
+- Module-level caching for performance
+
+---
+
+### 2. Services (`/services`)
+
+Displays all monitored API services in a data grid:
+
+**Columns:**
+- Service Name
+- Owner Team
+- Environment
+- Status (healthy/degraded/down)
+- Avg Latency (ms)
+- Error Rate (%)
+- Anomaly Rate (%)
+- Last Deployment
+- Requests Per Minute (RPM)
+
+**Features:**
+- Search by service name
+- Filter by environment
+- Filter by status
+- Click row to view service details
+- Service detail drawer shows:
+  - Owner team
+  - Environment & status
+  - Tags
+  - Metrics
+  - Recent anomalies
+
+---
+
+### 3. Alerts (`/alerts`)
+
+Manages system alerts and anomalies:
+
+**Filters:**
+- Severity (All/Critical/High/Medium/Low)
+- Status (All/Open/Acknowledged/Resolved)
+- Environment
+
+**Actions:**
+- Acknowledge alert
+- Resolve alert
+
+**Related Logs:**
+- Shows related log events for selected alert
+
+---
+
+### 4. Logs (`/logs`)
+
+Log stream viewer with timeline:
+
+**Log Ingestion Status:**
+- Cards showing each log stream:
+  - Service name
+  - Status (active)
+  - Source (fluentd)
+  - Environment
+  - Ingestion lag (seconds)
+
+**Filters:**
+- Environment
+- Service
+- Log level (INFO/WARN/ERROR)
+- Search messages
+
+**Log Timeline:**
+- Visual timeline of log events
+- Color-coded by level
+
+---
+
+### 5. Models (`/models`)
+
+AI model information display:
+
+**Columns:**
+- Model Name
+- Version
+- Type (LSTM, GRU, Ensemble)
+- Status (online/warming/offline)
+- Latency (ms)
+- Throughput/sec
+- Last Retrain
+- Accuracy (%)
+
+**Filters:**
+- Model Type
+- Status
+- Search
+
+---
+
+### 6. Login (`/login`)
+
+Authentication page:
+
+- Username input
+- Password input
+- Login button
+
+After successful login, redirects to Dashboard.
+
+---
+
+## Components
+
+### Layout Components
+
+#### MainLayout.jsx
+The main application shell containing:
+- Side navigation (SideNav)
+- Top bar (TopBar)
+- Content area
+
+#### SideNav.jsx
+Left-side navigation menu with icons:
+- Dashboard
+- Services
+- Alerts
+- Logs
+- Models
+- Settings
+
+#### TopBar.jsx
+Top navigation bar with:
+- Application title
+- User info
+- Logout button
+
+---
+
+### Data Display Components
+
+#### StatCard.jsx
+Displays a single KPI metric:
+- Icon
+- Label
+- Value
+
+#### AnomalyTable.jsx
+DataGrid showing anomalies:
+- ID
+- Service Name
+- Endpoint
+- Severity (color-coded)
+- Score
+- Detected At
+- Status
+
+#### AlertList.jsx
+List of alerts with:
+- Alert details
+- Acknowledge button
+- Resolve button
+
+#### MetricChart.jsx
+Line chart using MUI Charts:
+- Configurable metric keys
+- Customizable height
+- Title display
+
+#### LogTimeline.jsx
+Timeline view of log events:
+- Timestamp
+- Level (color-coded)
+- Service name
+- Message
+
+#### StatusChip.jsx
+Badge component for status/severity:
+- healthy (green)
+- degraded (yellow)
+- down (red)
+- high/critical (red)
+- medium (yellow)
+- low (green)
+
+#### EnvironmentFilter.jsx
+Dropdown for environment selection:
+- All
+- production
+- staging
+- development
+
+---
+
+## API Integration
+
+### HTTP Client Configuration
+
+File: `src/api/http.js`
+
+```javascript
+import axios from 'axios';
+
+const api = axios.create({
+    baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
+    withCredentials: true,
+});
+
+// Request interceptor for CSRF token
+api.interceptors.request.use((config) => {
+    const method = config.method?.toUpperCase();
+    if (method === 'POST' || method === 'PUT' || method === 'DELETE' || method === 'PATCH') {
+        const cookies = document.cookie.split(';');
+        const csrfCookie = cookies.find(cookie => cookie.trim().startsWith('XSRF-TOKEN='));
+        if (csrfCookie) {
+            const csrfToken = decodeURIComponent(csrfCookie.split('=')[1]);
+            config.headers['X-XSRF-TOKEN'] = csrfToken;
+        }
+    }
+    return config;
+}, (error) => Promise.reject(error));
+
+export default api;
+```
+
+### API Endpoints Used
+
+| Frontend Call | Backend Endpoint |
+|---------------|-----------------|
+| `api.get('/overview')` | `/api/overview` |
+| `api.get('/metrics/traffic')` | `/api/metrics/traffic` |
+| `api.get('/anomalies/recent')` | `/api/anomalies/recent` |
+| `api.get('/services')` | `/api/services` |
+| `api.get('/alerts')` | `/api/alerts` |
+| `api.get('/logs/events')` | `/api/logs/events` |
+| `api.get('/logs/streams')` | `/api/logs/streams` |
+| `api.get('/models')` | `/api/models` |
+| `api.post('/alerts/{id}/acknowledge')` | `/api/alerts/{id}/acknowledge` |
+| `api.post('/alerts/{id}/resolve')` | `/api/alerts/{id}/resolve` |
+
+---
+
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file in the frontend root:
+
+```bash
+# Backend API URL (required)
+VITE_API_BASE_URL=http://localhost:8080/api
+
+# Alternatively, use VITE_API_URL for just the base
+VITE_API_URL=http://localhost:8080/api
+```
+
+### Vite Configuration
+
+File: `vite.config.js`
+
+```javascript
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+
+export default defineConfig({
+    plugins: [react()],
+    resolve: {
+        alias: {
+            "@": path.resolve(__dirname, "./src"),
+        },
+    },
+    build: {
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    react: ["react", "react-dom"],
+                    router: ["react-router-dom"],
+                    muiCore: ["@mui/material", "@mui/lab"],
+                    muiIcons: ["@mui/icons-material"],
+                    muiCharts: ["@mui/x-charts"],
+                    muiDataGrid: ["@mui/x-data-grid"],
+                },
+            },
+        },
+    },
+    proxy: {
+        '/api': {
+            target: 'http://localhost:8080',
+            changeOrigin: true,
+        },
+    },
+});
+```
+
+### Proxy Configuration
+
+The frontend proxies API requests to the backend during development:
+
+```javascript
+proxy: {
+    '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+    },
+}
+```
+
+This allows calling `/api/metrics` instead of `http://localhost:8080/api/metrics` during development.
+
+---
+
+## Building & Running
+
+### Development Mode
+
+```powershell
+npm run dev
+```
+
+Starts the Vite development server with hot module replacement (HMR).
+
+### Production Build
+
+```powershell
+npm run build
+```
+
+Creates optimized production build in `dist/` folder.
+
+### Preview Production Build
+
+```powershell
+npm run preview
+```
+
+Locally preview the production build.
+
+### Lint Code
+
+```powershell
+npm run lint
+```
+
+Run ESLint to check code quality.
+
+---
+
+## Key Features
+
+### 1. Performance Optimizations
+
+#### Module-Level Caching
+Each page stores fetched data at the module level, persisting across component unmounts/mounts:
+
+```javascript
+let cachedData = {
+  services: null,
+  anomalies: null,
+  timestamp: null,
+};
+```
+
+#### Pre-fetching on Module Load
+Data is fetched as soon as the module loads, before the component mounts:
+
+```javascript
+// Start prefetching immediately when module loads
+prefetchData();
+```
+
+#### Throttled Polling
+Background polling is throttled to prevent excessive API calls:
+
+```javascript
+const THROTTLE_MS = 5000;  // 5 seconds
+const POLL_INTERVAL_MS = 30000;  // 30 seconds
+```
+
+#### Smart Change Detection
+State is only updated if data length changes:
+
+```javascript
+const shouldUpdate = newData.length !== oldData.length;
+if (shouldUpdate) setData(newData);
+```
+
+---
+
+### 2. User Experience
+
+#### Loading States
+Components show loading states during data fetch.
+
+#### Error Handling
+API errors are caught and handled gracefully with fallback data.
+
+#### Filter Persistence
+Filters are applied via memoized functions for performance.
+
+#### Drawers & Modals
+Service details shown in slide-out drawers for quick access.
+
+#### Responsive Design
+Layout adapts to different screen sizes using MUI's grid system.
+
+---
+
+### 3. Data Visualization
+
+#### Line Charts
+Traffic data visualized with MUI Charts line charts.
+
+#### Data Grids
+Services and models displayed in sortable, paginated data grids.
+
+#### Status Badges
+Color-coded chips for quick status identification.
+
+#### Timeline Views
+Log events shown in chronological timeline.
+
+---
+
+## Troubleshooting
+
+### Issue: CORS Errors
+
+**Error:**
+```
+Access to fetch at 'http://localhost:8080/api/...' has been blocked by CORS policy
+```
+
+**Solution:**
+1. Ensure backend has CORS configured in `CorsConfig.java`
+2. Verify VITE_API_BASE_URL is set correctly in `.env`
+3. Check proxy configuration in `vite.config.js`
+
+---
+
+### Issue: Login Page Loops
+
+**Error:**
+Login keeps redirecting back to login page after entering credentials.
+
+**Solution:**
+1. Check AuthContext.jsx for correct authentication logic
+2. Verify backend `/api/services` or another protected endpoint is accessible
+3. Check cookie handling for CSRF token
+
+---
+
+### Issue: No Data Displayed
+
+**Error:**
+Pages show "No data available" or empty states.
+
+**Solution:**
+1. Verify backend is running: `curl http://localhost:8080/health`
+2. Check browser console for API errors
+3. Verify API endpoints return data: `curl http://localhost:8080/api/services`
+
+---
+
+### Issue: Port Already in Use
+
+**Error:**
+```
+Port 5173 was already in use
+```
+
+**Solution:**
+```powershell
+# Find process using port 5173
+netstat -ano | findstr 5173
+
+# Kill process or change port in vite.config.js
+```
+
+---
+
+### Issue: Proxy Not Working
+
+**Error:**
+API calls fail with "502 Bad Gateway" or "404 Not Found".
+
+**Solution:**
+1. Ensure backend is running on port 8080
+2. Check proxy target in `vite.config.js`:
+```javascript
+proxy: {
+    '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+    },
+}
+```
+
+---
+
+### Issue: Missing Environment Variables
+
+**Error:**
+Build fails or wrong API URL used.
+
+**Solution:**
+Create `.env` file in frontend root:
+
+```bash
+VITE_API_BASE_URL=http://localhost:8080/api
+```
+
+---
+
+## Related Files
+
+| File | Description |
+|------|-------------|
+| `package.json` | Dependencies and scripts |
+| `vite.config.js` | Vite and proxy config |
+| `.env` | Environment variables |
+| `src/api/http.js` | Axios configuration |
+| `src/routes/AppRoutes.jsx` | Route definitions |
+| `src/contexts/AuthContext.jsx` | Authentication logic |
+| `src/layouts/MainLayout.jsx` | App shell |
+
+---
+
+## Dependencies
+
+### Production Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| react | ^19.2.3 | UI framework |
+| react-dom | ^19.2.3 | React DOM |
+| react-router-dom | ^7.11.0 | Routing |
+| @mui/material | ^7.3.6 | UI components |
+| @mui/lab | ^7.0.1-beta.20 | Lab components |
+| @mui/icons-material | ^7.3.6 | Icons |
+| @mui/x-charts | ^8.23.0 | Charts |
+| @mui/x-data-grid | ^8.23.0 | Data grids |
+| axios | ^1.13.2 | HTTP client |
+| @emotion/react | ^11.14.0 | Styling |
+| @emotion/styled | ^11.14.1 | Styling |
+
+### Development Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| vite | ^7.2.4 | Build tool |
+| @vitejs/plugin-react | ^5.1.2 | React plugin |
+| eslint | ^9.39.1 | Linting |
+| @eslint/js | ^9.39.1 | ESLint config |
+
+---
+
+## Quick Reference
+
+### Start Frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+### Access URL
+
+```
+http://localhost:5173
+```
+
+### Login Credentials
+
+```
+Username: admin
+Password: admin
+```
+
+### API Base URL
+
+```
+http://localhost:8080/api
+```
+
+### Key Pages
+
+| Page | URL | Path |
+|------|-----|------|
+| Login | /login | Login.jsx |
+| Dashboard | / | Dashboard.jsx |
+| Services | /services | Services.jsx |
+| Alerts | /alerts | Alerts.jsx |
+| Logs | /logs | Logs.jsx |
+| Models | /models | Models.jsx |
+| Settings | /settings | Settings.jsx |import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
@@ -8826,6 +10454,8 @@ server {
     },
     "node_modules/@babel/code-frame": {
       "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.27.1.tgz",
+      "integrity": "sha512-cjQ7ZlQ0Mv3b47hABuTevyTuYN4i+loJKGeV9flcCgIK37cCXRh+L1bd3iBHlynerhQ7BhCkn2BPbQUL+rGqFg==",
       "license": "MIT",
       "dependencies": {
         "@babel/helper-validator-identifier": "^7.27.1",
@@ -8838,6 +10468,8 @@ server {
     },
     "node_modules/@babel/compat-data": {
       "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.28.5.tgz",
+      "integrity": "sha512-6uFXyCayocRbqhZOB+6XcuZbkMNimwfVGFji8CTZnCzOHVGvDqzvitu1re2AU5LROliz7eQPhB8CpAMvnx9EjA==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -8846,6 +10478,8 @@ server {
     },
     "node_modules/@babel/core": {
       "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/core/-/core-7.28.5.tgz",
+      "integrity": "sha512-e7jT4DxYvIDLk1ZHmU/m/mB19rex9sv0c2ftBtjSBv+kVM/902eh0fINUzD7UwLLNR+jU585GxUJ8/EBfAM5fw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -8875,6 +10509,8 @@ server {
     },
     "node_modules/@babel/generator": {
       "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/generator/-/generator-7.28.5.tgz",
+      "integrity": "sha512-3EwLFhZ38J4VyIP6WNtt2kUdW9dokXA9Cr4IVIFHuCpZ3H8/YFOl5JjZHisrn1fATPBmKKqXzDFvh9fUwHz6CQ==",
       "license": "MIT",
       "dependencies": {
         "@babel/parser": "^7.28.5",
@@ -8889,6 +10525,8 @@ server {
     },
     "node_modules/@babel/helper-compilation-targets": {
       "version": "7.27.2",
+      "resolved": "https://registry.npmjs.org/@babel/helper-compilation-targets/-/helper-compilation-targets-7.27.2.tgz",
+      "integrity": "sha512-2+1thGUUWWjLTYTHZWK1n8Yga0ijBz1XAhUXcKy81rd5g6yh7hGqMp45v7cadSbEHc9G3OTv45SyneRN3ps4DQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -8904,6 +10542,8 @@ server {
     },
     "node_modules/@babel/helper-globals": {
       "version": "7.28.0",
+      "resolved": "https://registry.npmjs.org/@babel/helper-globals/-/helper-globals-7.28.0.tgz",
+      "integrity": "sha512-+W6cISkXFa1jXsDEdYA8HeevQT/FULhxzR99pxphltZcVaugps53THCeiWA8SguxxpSp3gKPiuYfSWopkLQ4hw==",
       "license": "MIT",
       "engines": {
         "node": ">=6.9.0"
@@ -8911,6 +10551,8 @@ server {
     },
     "node_modules/@babel/helper-module-imports": {
       "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.27.1.tgz",
+      "integrity": "sha512-0gSFWUPNXNopqtIPQvlD5WgXYI5GY2kP2cCvoT8kczjbfcfuIljTbcWrulD1CIPIX2gt1wghbDy08yE1p+/r3w==",
       "license": "MIT",
       "dependencies": {
         "@babel/traverse": "^7.27.1",
@@ -8922,6 +10564,8 @@ server {
     },
     "node_modules/@babel/helper-module-transforms": {
       "version": "7.28.3",
+      "resolved": "https://registry.npmjs.org/@babel/helper-module-transforms/-/helper-module-transforms-7.28.3.tgz",
+      "integrity": "sha512-gytXUbs8k2sXS9PnQptz5o0QnpLL51SwASIORY6XaBKF88nsOT0Zw9szLqlSGQDP/4TljBAD5y98p2U1fqkdsw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -8938,6 +10582,8 @@ server {
     },
     "node_modules/@babel/helper-plugin-utils": {
       "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/helper-plugin-utils/-/helper-plugin-utils-7.27.1.tgz",
+      "integrity": "sha512-1gn1Up5YXka3YYAHGKpbideQ5Yjf1tDa9qYcgysz+cNCXukyLl6DjPXhD3VRwSb8c0J9tA4b2+rHEZtc6R0tlw==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -8946,6 +10592,8 @@ server {
     },
     "node_modules/@babel/helper-string-parser": {
       "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.27.1.tgz",
+      "integrity": "sha512-qMlSxKbpRlAridDExk92nSobyDdpPijUq2DW6oDnUqd0iOGxmQjyqhMIihI9+zv4LPyZdRje2cavWPbCbWm3eA==",
       "license": "MIT",
       "engines": {
         "node": ">=6.9.0"
@@ -8953,6 +10601,8 @@ server {
     },
     "node_modules/@babel/helper-validator-identifier": {
       "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.28.5.tgz",
+      "integrity": "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q==",
       "license": "MIT",
       "engines": {
         "node": ">=6.9.0"
@@ -8960,6 +10610,8 @@ server {
     },
     "node_modules/@babel/helper-validator-option": {
       "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/helper-validator-option/-/helper-validator-option-7.27.1.tgz",
+      "integrity": "sha512-YvjJow9FxbhFFKDSuFnVCe2WxXk1zWc22fFePVNEaWJEu8IrZVlda6N0uHwzZrUM1il7NC9Mlp4MaJYbYd9JSg==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -8968,6 +10620,8 @@ server {
     },
     "node_modules/@babel/helpers": {
       "version": "7.28.4",
+      "resolved": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.28.4.tgz",
+      "integrity": "sha512-HFN59MmQXGHVyYadKLVumYsA9dBFun/ldYxipEjzA4196jpLZd8UjEEBLkbEkvfYreDqJhZxYAWFPtrfhNpj4w==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -8980,6 +10634,8 @@ server {
     },
     "node_modules/@babel/parser": {
       "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/parser/-/parser-7.28.5.tgz",
+      "integrity": "sha512-KKBU1VGYR7ORr3At5HAtUQ+TV3SzRCXmA/8OdDZiLDBIZxVyzXuztPjfLd3BV1PRAQGCMWWSHYhL0F8d5uHBDQ==",
       "license": "MIT",
       "dependencies": {
         "@babel/types": "^7.28.5"
@@ -8993,6 +10649,8 @@ server {
     },
     "node_modules/@babel/plugin-transform-react-jsx-self": {
       "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/plugin-transform-react-jsx-self/-/plugin-transform-react-jsx-self-7.27.1.tgz",
+      "integrity": "sha512-6UzkCs+ejGdZ5mFFC/OCUrv028ab2fp1znZmCZjAOBKiBK2jXD1O+BPSfX8X2qjJ75fZBMSnQn3Rq2mrBJK2mw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -9007,6 +10665,8 @@ server {
     },
     "node_modules/@babel/plugin-transform-react-jsx-source": {
       "version": "7.27.1",
+      "resolved": "https://registry.npmjs.org/@babel/plugin-transform-react-jsx-source/-/plugin-transform-react-jsx-source-7.27.1.tgz",
+      "integrity": "sha512-zbwoTsBruTeKB9hSq73ha66iFeJHuaFkUbwvqElnygoNbj/jHRsSeokowZFN3CZ64IvEqcmmkVe89OPXc7ldAw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -9021,6 +10681,8 @@ server {
     },
     "node_modules/@babel/runtime": {
       "version": "7.28.4",
+      "resolved": "https://registry.npmjs.org/@babel/runtime/-/runtime-7.28.4.tgz",
+      "integrity": "sha512-Q/N6JNWvIvPnLDvjlE1OUBLPQHH6l3CltCEsHIujp45zQUSSh8K+gHnaEX45yAT1nyngnINhvWtzN+Nb9D8RAQ==",
       "license": "MIT",
       "engines": {
         "node": ">=6.9.0"
@@ -9028,6 +10690,8 @@ server {
     },
     "node_modules/@babel/template": {
       "version": "7.27.2",
+      "resolved": "https://registry.npmjs.org/@babel/template/-/template-7.27.2.tgz",
+      "integrity": "sha512-LPDZ85aEJyYSd18/DkjNh4/y1ntkE5KwUHWTiqgRxruuZL2F1yuHligVHLvcHY2vMHXttKFpJn6LwfI7cw7ODw==",
       "license": "MIT",
       "dependencies": {
         "@babel/code-frame": "^7.27.1",
@@ -9040,6 +10704,8 @@ server {
     },
     "node_modules/@babel/traverse": {
       "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/traverse/-/traverse-7.28.5.tgz",
+      "integrity": "sha512-TCCj4t55U90khlYkVV/0TfkJkAkUg3jZFA3Neb7unZT8CPok7iiRfaX0F+WnqWqt7OxhOn0uBKXCw4lbL8W0aQ==",
       "license": "MIT",
       "dependencies": {
         "@babel/code-frame": "^7.27.1",
@@ -9056,6 +10722,8 @@ server {
     },
     "node_modules/@babel/types": {
       "version": "7.28.5",
+      "resolved": "https://registry.npmjs.org/@babel/types/-/types-7.28.5.tgz",
+      "integrity": "sha512-qQ5m48eI/MFLQ5PxQj4PFaprjyCTLI37ElWMmNs0K8Lk3dVeOdNpB3ks8jc7yM5CDmVC73eMVk/trk3fgmrUpA==",
       "license": "MIT",
       "dependencies": {
         "@babel/helper-string-parser": "^7.27.1",
@@ -9092,6 +10760,8 @@ server {
     },
     "node_modules/@emotion/cache": {
       "version": "11.14.0",
+      "resolved": "https://registry.npmjs.org/@emotion/cache/-/cache-11.14.0.tgz",
+      "integrity": "sha512-L/B1lc/TViYk4DcpGxtAVbx0ZyiKM5ktoIyafGkH6zg/tj+mA+NE//aPYKG0k8kCHSHVJrpLpcAlOBEXQ3SavA==",
       "license": "MIT",
       "dependencies": {
         "@emotion/memoize": "^0.9.0",
@@ -9103,6 +10773,8 @@ server {
     },
     "node_modules/@emotion/hash": {
       "version": "0.9.2",
+      "resolved": "https://registry.npmjs.org/@emotion/hash/-/hash-0.9.2.tgz",
+      "integrity": "sha512-MyqliTZGuOm3+5ZRSaaBGP3USLw6+EGykkwZns2EPC5g8jJ4z9OrdZY9apkl3+UP9+sdz76YYkwCKP5gh8iY3g==",
       "license": "MIT"
     },
     "node_modules/@emotion/is-prop-valid": {
@@ -9116,6 +10788,8 @@ server {
     },
     "node_modules/@emotion/memoize": {
       "version": "0.9.0",
+      "resolved": "https://registry.npmjs.org/@emotion/memoize/-/memoize-0.9.0.tgz",
+      "integrity": "sha512-30FAj7/EoJ5mwVPOWhAyCX+FPfMDrVecJAM+Iw9NRoSl4BBAQeqj4cApHHUXOVvIPgLVDsCFoz/hGD+5QQD1GQ==",
       "license": "MIT"
     },
     "node_modules/@emotion/react": {
@@ -9144,6 +10818,8 @@ server {
     },
     "node_modules/@emotion/serialize": {
       "version": "1.3.3",
+      "resolved": "https://registry.npmjs.org/@emotion/serialize/-/serialize-1.3.3.tgz",
+      "integrity": "sha512-EISGqt7sSNWHGI76hC7x1CksiXPahbxEOrC5RjmFRJTqLyEK9/9hZvBbiYn70dw4wuwMKiEMCUlR6ZXTSWQqxA==",
       "license": "MIT",
       "dependencies": {
         "@emotion/hash": "^0.9.2",
@@ -9155,6 +10831,8 @@ server {
     },
     "node_modules/@emotion/sheet": {
       "version": "1.4.0",
+      "resolved": "https://registry.npmjs.org/@emotion/sheet/-/sheet-1.4.0.tgz",
+      "integrity": "sha512-fTBW9/8r2w3dXWYM4HCB1Rdp8NLibOw2+XELH5m5+AkWiL/KqYX6dc0kKYlaYyKjrQ6ds33MCdMPEwgs2z1rqg==",
       "license": "MIT"
     },
     "node_modules/@emotion/styled": {
@@ -9182,6 +10860,8 @@ server {
     },
     "node_modules/@emotion/unitless": {
       "version": "0.10.0",
+      "resolved": "https://registry.npmjs.org/@emotion/unitless/-/unitless-0.10.0.tgz",
+      "integrity": "sha512-dFoMUuQA20zvtVTuxZww6OHoJYgrzfKM1t52mVySDJnMSEa08ruEvdYQbhvyu6soU+NeLVd3yKfTfT0NeV6qGg==",
       "license": "MIT"
     },
     "node_modules/@emotion/use-insertion-effect-with-fallbacks": {
@@ -9195,10 +10875,14 @@ server {
     },
     "node_modules/@emotion/utils": {
       "version": "1.4.2",
+      "resolved": "https://registry.npmjs.org/@emotion/utils/-/utils-1.4.2.tgz",
+      "integrity": "sha512-3vLclRofFziIa3J2wDh9jjbkUz9qk5Vi3IZ/FSTKViB0k+ef0fPV7dYrUIugbgupYDx7v9ud/SjrtEP8Y4xLoA==",
       "license": "MIT"
     },
     "node_modules/@emotion/weak-memoize": {
       "version": "0.4.0",
+      "resolved": "https://registry.npmjs.org/@emotion/weak-memoize/-/weak-memoize-0.4.0.tgz",
+      "integrity": "sha512-snKqtPW01tN0ui7yu9rGv69aJXr/a/Ywvl11sUjNtEcRc+ng/mQriFL0wLXMef74iHa/EkftbDzU9F8iFbH+zg==",
       "license": "MIT"
     },
     "node_modules/@esbuild/aix-ppc64": {
@@ -9628,6 +11312,8 @@ server {
     },
     "node_modules/@esbuild/win32-x64": {
       "version": "0.27.2",
+      "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.27.2.tgz",
+      "integrity": "sha512-sRdU18mcKf7F+YgheI/zGf5alZatMUTKj/jNS6l744f9u3WFu4v7twcUI9vu4mknF4Y9aDlblIie0IM+5xxaqQ==",
       "cpu": [
         "x64"
       ],
@@ -9643,6 +11329,8 @@ server {
     },
     "node_modules/@eslint-community/eslint-utils": {
       "version": "4.9.1",
+      "resolved": "https://registry.npmjs.org/@eslint-community/eslint-utils/-/eslint-utils-4.9.1.tgz",
+      "integrity": "sha512-phrYmNiYppR7znFEdqgfWHXR6NCkZEK7hwWDHZUjit/2/U0r6XvkDl0SYnoM51Hq7FhCGdLDT6zxCCOY1hexsQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -9660,6 +11348,8 @@ server {
     },
     "node_modules/@eslint-community/eslint-utils/node_modules/eslint-visitor-keys": {
       "version": "3.4.3",
+      "resolved": "https://registry.npmjs.org/eslint-visitor-keys/-/eslint-visitor-keys-3.4.3.tgz",
+      "integrity": "sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag==",
       "dev": true,
       "license": "Apache-2.0",
       "engines": {
@@ -9671,6 +11361,8 @@ server {
     },
     "node_modules/@eslint-community/regexpp": {
       "version": "4.12.2",
+      "resolved": "https://registry.npmjs.org/@eslint-community/regexpp/-/regexpp-4.12.2.tgz",
+      "integrity": "sha512-EriSTlt5OC9/7SXkRSCAhfSxxoSUgBm33OH+IkwbdpgoqsSsUg7y3uh+IICI/Qg4BBWr3U2i39RpmycbxMq4ew==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -9679,6 +11371,8 @@ server {
     },
     "node_modules/@eslint/config-array": {
       "version": "0.21.1",
+      "resolved": "https://registry.npmjs.org/@eslint/config-array/-/config-array-0.21.1.tgz",
+      "integrity": "sha512-aw1gNayWpdI/jSYVgzN5pL0cfzU02GT3NBpeT/DXbx1/1x7ZKxFPd9bwrzygx/qiwIQiJ1sw/zD8qY/kRvlGHA==",
       "dev": true,
       "license": "Apache-2.0",
       "dependencies": {
@@ -9692,6 +11386,8 @@ server {
     },
     "node_modules/@eslint/config-helpers": {
       "version": "0.4.2",
+      "resolved": "https://registry.npmjs.org/@eslint/config-helpers/-/config-helpers-0.4.2.tgz",
+      "integrity": "sha512-gBrxN88gOIf3R7ja5K9slwNayVcZgK6SOUORm2uBzTeIEfeVaIhOpCtTox3P6R7o2jLFwLFTLnC7kU/RGcYEgw==",
       "dev": true,
       "license": "Apache-2.0",
       "dependencies": {
@@ -9703,6 +11399,8 @@ server {
     },
     "node_modules/@eslint/core": {
       "version": "0.17.0",
+      "resolved": "https://registry.npmjs.org/@eslint/core/-/core-0.17.0.tgz",
+      "integrity": "sha512-yL/sLrpmtDaFEiUj1osRP4TI2MDz1AddJL+jZ7KSqvBuliN4xqYY54IfdN8qD8Toa6g1iloph1fxQNkjOxrrpQ==",
       "dev": true,
       "license": "Apache-2.0",
       "dependencies": {
@@ -9714,6 +11412,8 @@ server {
     },
     "node_modules/@eslint/eslintrc": {
       "version": "3.3.3",
+      "resolved": "https://registry.npmjs.org/@eslint/eslintrc/-/eslintrc-3.3.3.tgz",
+      "integrity": "sha512-Kr+LPIUVKz2qkx1HAMH8q1q6azbqBAsXJUxBl/ODDuVPX45Z9DfwB8tPjTi6nNZ8BuM3nbJxC5zCAg5elnBUTQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -9736,6 +11436,8 @@ server {
     },
     "node_modules/@eslint/eslintrc/node_modules/globals": {
       "version": "14.0.0",
+      "resolved": "https://registry.npmjs.org/globals/-/globals-14.0.0.tgz",
+      "integrity": "sha512-oahGvuMGQlPw/ivIYBjVSrWAfWLBeku5tpPE2fOPLi+WHffIWbuh2tCjhyQhTBPMf5E9jDEH4FOmTYgYwbKwtQ==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -9747,6 +11449,8 @@ server {
     },
     "node_modules/@eslint/js": {
       "version": "9.39.2",
+      "resolved": "https://registry.npmjs.org/@eslint/js/-/js-9.39.2.tgz",
+      "integrity": "sha512-q1mjIoW1VX4IvSocvM/vbTiveKC4k9eLrajNEuSsmjymSDEbpGddtpfOoN7YGAqBK3NG+uqo8ia4PDTt8buCYA==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -9758,6 +11462,8 @@ server {
     },
     "node_modules/@eslint/object-schema": {
       "version": "2.1.7",
+      "resolved": "https://registry.npmjs.org/@eslint/object-schema/-/object-schema-2.1.7.tgz",
+      "integrity": "sha512-VtAOaymWVfZcmZbp6E2mympDIHvyjXs/12LqWYjVw6qjrfF+VK+fyG33kChz3nnK+SU5/NeHOqrTEHS8sXO3OA==",
       "dev": true,
       "license": "Apache-2.0",
       "engines": {
@@ -9766,6 +11472,8 @@ server {
     },
     "node_modules/@eslint/plugin-kit": {
       "version": "0.4.1",
+      "resolved": "https://registry.npmjs.org/@eslint/plugin-kit/-/plugin-kit-0.4.1.tgz",
+      "integrity": "sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==",
       "dev": true,
       "license": "Apache-2.0",
       "dependencies": {
@@ -9778,6 +11486,8 @@ server {
     },
     "node_modules/@humanfs/core": {
       "version": "0.19.1",
+      "resolved": "https://registry.npmjs.org/@humanfs/core/-/core-0.19.1.tgz",
+      "integrity": "sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==",
       "dev": true,
       "license": "Apache-2.0",
       "engines": {
@@ -9786,6 +11496,8 @@ server {
     },
     "node_modules/@humanfs/node": {
       "version": "0.16.7",
+      "resolved": "https://registry.npmjs.org/@humanfs/node/-/node-0.16.7.tgz",
+      "integrity": "sha512-/zUx+yOsIrG4Y43Eh2peDeKCxlRt/gET6aHfaKpuq267qXdYDFViVHfMaLyygZOnl0kGWxFIgsBy8QFuTLUXEQ==",
       "dev": true,
       "license": "Apache-2.0",
       "dependencies": {
@@ -9798,6 +11510,8 @@ server {
     },
     "node_modules/@humanwhocodes/module-importer": {
       "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/@humanwhocodes/module-importer/-/module-importer-1.0.1.tgz",
+      "integrity": "sha512-bxveV4V8v5Yb4ncFTT3rPSgZBOpCkjfK0y4oVVVJwIuDVBRMDXrPyXRL988i5ap9m9bnyEEjWfm5WkBmtffLfA==",
       "dev": true,
       "license": "Apache-2.0",
       "engines": {
@@ -9810,6 +11524,8 @@ server {
     },
     "node_modules/@humanwhocodes/retry": {
       "version": "0.4.3",
+      "resolved": "https://registry.npmjs.org/@humanwhocodes/retry/-/retry-0.4.3.tgz",
+      "integrity": "sha512-bV0Tgo9K4hfPCek+aMAn81RppFKv2ySDQeMoSZuvTASywNTnVJCArCZE2FWqpvIatKu7VMRLWlR1EazvVhDyhQ==",
       "dev": true,
       "license": "Apache-2.0",
       "engines": {
@@ -9822,6 +11538,8 @@ server {
     },
     "node_modules/@jridgewell/gen-mapping": {
       "version": "0.3.13",
+      "resolved": "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz",
+      "integrity": "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==",
       "license": "MIT",
       "dependencies": {
         "@jridgewell/sourcemap-codec": "^1.5.0",
@@ -9830,6 +11548,8 @@ server {
     },
     "node_modules/@jridgewell/remapping": {
       "version": "2.3.5",
+      "resolved": "https://registry.npmjs.org/@jridgewell/remapping/-/remapping-2.3.5.tgz",
+      "integrity": "sha512-LI9u/+laYG4Ds1TDKSJW2YPrIlcVYOwi2fUC6xB43lueCjgxV4lffOCZCtYFiH6TNOX+tQKXx97T4IKHbhyHEQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -9839,6 +11559,8 @@ server {
     },
     "node_modules/@jridgewell/resolve-uri": {
       "version": "3.1.2",
+      "resolved": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",
+      "integrity": "sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==",
       "license": "MIT",
       "engines": {
         "node": ">=6.0.0"
@@ -9846,10 +11568,14 @@ server {
     },
     "node_modules/@jridgewell/sourcemap-codec": {
       "version": "1.5.5",
+      "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz",
+      "integrity": "sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==",
       "license": "MIT"
     },
     "node_modules/@jridgewell/trace-mapping": {
       "version": "0.3.31",
+      "resolved": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz",
+      "integrity": "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==",
       "license": "MIT",
       "dependencies": {
         "@jridgewell/resolve-uri": "^3.1.0",
@@ -9858,6 +11584,8 @@ server {
     },
     "node_modules/@mui/core-downloads-tracker": {
       "version": "7.3.6",
+      "resolved": "https://registry.npmjs.org/@mui/core-downloads-tracker/-/core-downloads-tracker-7.3.6.tgz",
+      "integrity": "sha512-QaYtTHlr8kDFN5mE1wbvVARRKH7Fdw1ZuOjBJcFdVpfNfRYKF3QLT4rt+WaB6CKJvpqxRsmEo0kpYinhH5GeHg==",
       "license": "MIT",
       "funding": {
         "type": "opencollective",
@@ -9866,6 +11594,8 @@ server {
     },
     "node_modules/@mui/icons-material": {
       "version": "7.3.6",
+      "resolved": "https://registry.npmjs.org/@mui/icons-material/-/icons-material-7.3.6.tgz",
+      "integrity": "sha512-0FfkXEj22ysIq5pa41A2NbcAhJSvmcZQ/vcTIbjDsd6hlslG82k5BEBqqS0ZJprxwIL3B45qpJ+bPHwJPlF7uQ==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4"
@@ -9890,6 +11620,8 @@ server {
     },
     "node_modules/@mui/lab": {
       "version": "7.0.1-beta.20",
+      "resolved": "https://registry.npmjs.org/@mui/lab/-/lab-7.0.1-beta.20.tgz",
+      "integrity": "sha512-xZW+gLO0htUjL02lZRhrziyOuz/azdwqgyiyjKvn52W2wbbcXtFhDVp3ns7YYiQAF9I+Sgu1g1a2HZutOlqeWw==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -9932,6 +11664,8 @@ server {
     },
     "node_modules/@mui/material": {
       "version": "7.3.6",
+      "resolved": "https://registry.npmjs.org/@mui/material/-/material-7.3.6.tgz",
+      "integrity": "sha512-R4DaYF3dgCQCUAkr4wW1w26GHXcf5rCmBRHVBuuvJvaGLmZdD8EjatP80Nz5JCw0KxORAzwftnHzXVnjR8HnFw==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -9979,6 +11713,8 @@ server {
     },
     "node_modules/@mui/private-theming": {
       "version": "7.3.6",
+      "resolved": "https://registry.npmjs.org/@mui/private-theming/-/private-theming-7.3.6.tgz",
+      "integrity": "sha512-Ws9wZpqM+FlnbZXaY/7yvyvWQo1+02Tbx50mVdNmzWEi51C51y56KAbaDCYyulOOBL6BJxuaqG8rNNuj7ivVyw==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10004,6 +11740,8 @@ server {
     },
     "node_modules/@mui/styled-engine": {
       "version": "7.3.6",
+      "resolved": "https://registry.npmjs.org/@mui/styled-engine/-/styled-engine-7.3.6.tgz",
+      "integrity": "sha512-+wiYbtvj+zyUkmDB+ysH6zRjuQIJ+CM56w0fEXV+VDNdvOuSywG+/8kpjddvvlfMLsaWdQe5oTuYGBcodmqGzQ==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10036,6 +11774,8 @@ server {
     },
     "node_modules/@mui/system": {
       "version": "7.3.6",
+      "resolved": "https://registry.npmjs.org/@mui/system/-/system-7.3.6.tgz",
+      "integrity": "sha512-8fehAazkHNP1imMrdD2m2hbA9sl7Ur6jfuNweh5o4l9YPty4iaZzRXqYvBCWQNwFaSHmMEj2KPbyXGp7Bt73Rg==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10074,6 +11814,8 @@ server {
     },
     "node_modules/@mui/types": {
       "version": "7.4.9",
+      "resolved": "https://registry.npmjs.org/@mui/types/-/types-7.4.9.tgz",
+      "integrity": "sha512-dNO8Z9T2cujkSIaCnWwprfeKmTWh97cnjkgmpFJ2sbfXLx8SMZijCYHOtP/y5nnUb/Rm2omxbDMmtUoSaUtKaw==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4"
@@ -10089,6 +11831,8 @@ server {
     },
     "node_modules/@mui/utils": {
       "version": "7.3.6",
+      "resolved": "https://registry.npmjs.org/@mui/utils/-/utils-7.3.6.tgz",
+      "integrity": "sha512-jn+Ba02O6PiFs7nKva8R2aJJ9kJC+3kQ2R0BbKNY3KQQ36Qng98GnPRFTlbwYTdMD6hLEBKaMLUktyg/rTfd2w==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10117,6 +11861,8 @@ server {
     },
     "node_modules/@mui/x-charts": {
       "version": "8.23.0",
+      "resolved": "https://registry.npmjs.org/@mui/x-charts/-/x-charts-8.23.0.tgz",
+      "integrity": "sha512-eYUC3ja1+0Wk7STAbEqwbRXxH6a+KFD/P+KNgyqVK1C10faRxTm/TJ/3GOh6haDaZ0AlhVGXkt7Wex5jZWVIsw==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10152,6 +11898,8 @@ server {
     },
     "node_modules/@mui/x-charts-vendor": {
       "version": "8.23.0",
+      "resolved": "https://registry.npmjs.org/@mui/x-charts-vendor/-/x-charts-vendor-8.23.0.tgz",
+      "integrity": "sha512-AmGNPEFX8bTgmCuljxEcFaa2JQkUxRJKvHJYfCvy76Hexu4O1aQC15wznlKiL1nrFo3otQHw0bnozpz0PHIxWg==",
       "license": "MIT AND ISC",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10181,6 +11929,8 @@ server {
     },
     "node_modules/@mui/x-data-grid": {
       "version": "8.23.0",
+      "resolved": "https://registry.npmjs.org/@mui/x-data-grid/-/x-data-grid-8.23.0.tgz",
+      "integrity": "sha512-fv8AiibTgwPKJsXtYdc5bYDDW3EQp/ieQ0iUejvZ2JbYikMIPTYjI4pHy7zW3F3RDsi6DGQnw5AW6LeoDcT0fA==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10217,6 +11967,8 @@ server {
     },
     "node_modules/@mui/x-internal-gestures": {
       "version": "0.4.0",
+      "resolved": "https://registry.npmjs.org/@mui/x-internal-gestures/-/x-internal-gestures-0.4.0.tgz",
+      "integrity": "sha512-i0W6v9LoiNY8Yf1goOmaygtz/ncPJGBedhpDfvNg/i8BvzPwJcBaeW4rqPucJfVag9KQ8MSssBBrvYeEnrQmhw==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4"
@@ -10224,6 +11976,8 @@ server {
     },
     "node_modules/@mui/x-internals": {
       "version": "8.23.0",
+      "resolved": "https://registry.npmjs.org/@mui/x-internals/-/x-internals-8.23.0.tgz",
+      "integrity": "sha512-FN7wdqwTxqq1tJBYVz8TA/HMcViuaHS0Jphr4pEjT/8Iuf94Yt3P82WbsTbXyYrgOQDQl07UqE7qWcJetRcHcg==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10244,6 +11998,8 @@ server {
     },
     "node_modules/@mui/x-virtualizer": {
       "version": "0.3.0",
+      "resolved": "https://registry.npmjs.org/@mui/x-virtualizer/-/x-virtualizer-0.3.0.tgz",
+      "integrity": "sha512-ScQ3xullKQAtbIT9N7PVhgW9BDTo2Hu8fr/+N08TdRMJcq8bsVJB25mlcHk6zxjlgCuojqaeGfw71S1FOvyCXQ==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.28.4",
@@ -10264,6 +12020,8 @@ server {
     },
     "node_modules/@popperjs/core": {
       "version": "2.11.8",
+      "resolved": "https://registry.npmjs.org/@popperjs/core/-/core-2.11.8.tgz",
+      "integrity": "sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==",
       "license": "MIT",
       "funding": {
         "type": "opencollective",
@@ -10272,6 +12030,8 @@ server {
     },
     "node_modules/@rolldown/pluginutils": {
       "version": "1.0.0-beta.53",
+      "resolved": "https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-beta.53.tgz",
+      "integrity": "sha512-vENRlFU4YbrwVqNDZ7fLvy+JR1CRkyr01jhSiDpE1u6py3OMzQfztQU2jxykW3ALNxO4kSlqIDeYyD0Y9RcQeQ==",
       "dev": true,
       "license": "MIT"
     },
@@ -10367,9 +12127,6 @@ server {
         "arm"
       ],
       "dev": true,
-      "libc": [
-        "glibc"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10384,9 +12141,6 @@ server {
         "arm"
       ],
       "dev": true,
-      "libc": [
-        "musl"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10401,9 +12155,6 @@ server {
         "arm64"
       ],
       "dev": true,
-      "libc": [
-        "glibc"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10418,9 +12169,6 @@ server {
         "arm64"
       ],
       "dev": true,
-      "libc": [
-        "musl"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10435,9 +12183,6 @@ server {
         "loong64"
       ],
       "dev": true,
-      "libc": [
-        "glibc"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10452,9 +12197,6 @@ server {
         "ppc64"
       ],
       "dev": true,
-      "libc": [
-        "glibc"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10469,9 +12211,6 @@ server {
         "riscv64"
       ],
       "dev": true,
-      "libc": [
-        "glibc"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10486,9 +12225,6 @@ server {
         "riscv64"
       ],
       "dev": true,
-      "libc": [
-        "musl"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10503,9 +12239,6 @@ server {
         "s390x"
       ],
       "dev": true,
-      "libc": [
-        "glibc"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10520,9 +12253,6 @@ server {
         "x64"
       ],
       "dev": true,
-      "libc": [
-        "glibc"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10537,9 +12267,6 @@ server {
         "x64"
       ],
       "dev": true,
-      "libc": [
-        "musl"
-      ],
       "license": "MIT",
       "optional": true,
       "os": [
@@ -10590,6 +12317,8 @@ server {
     },
     "node_modules/@rollup/rollup-win32-x64-gnu": {
       "version": "4.54.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.54.0.tgz",
+      "integrity": "sha512-dzAc53LOuFvHwbCEOS0rPbXp6SIhAf2txMP5p6mGyOXXw5mWY8NGGbPMPrs4P1WItkfApDathBj/NzMLUZ9rtQ==",
       "cpu": [
         "x64"
       ],
@@ -10602,6 +12331,8 @@ server {
     },
     "node_modules/@rollup/rollup-win32-x64-msvc": {
       "version": "4.54.0",
+      "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.54.0.tgz",
+      "integrity": "sha512-hYT5d3YNdSh3mbCU1gwQyPgQd3T2ne0A3KG8KSBdav5TiBg6eInVmV+TeR5uHufiIgSFg0XsOWGW5/RhNcSvPg==",
       "cpu": [
         "x64"
       ],
@@ -10614,6 +12345,8 @@ server {
     },
     "node_modules/@types/babel__core": {
       "version": "7.20.5",
+      "resolved": "https://registry.npmjs.org/@types/babel__core/-/babel__core-7.20.5.tgz",
+      "integrity": "sha512-qoQprZvz5wQFJwMDqeseRXWv3rqMvhgpbXFfVyWhbx9X47POIA6i/+dXefEmZKoAgOaTdaIgNSMqMIU61yRyzA==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10626,6 +12359,8 @@ server {
     },
     "node_modules/@types/babel__generator": {
       "version": "7.27.0",
+      "resolved": "https://registry.npmjs.org/@types/babel__generator/-/babel__generator-7.27.0.tgz",
+      "integrity": "sha512-ufFd2Xi92OAVPYsy+P4n7/U7e68fex0+Ee8gSG9KX7eo084CWiQ4sdxktvdl0bOPupXtVJPY19zk6EwWqUQ8lg==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10634,6 +12369,8 @@ server {
     },
     "node_modules/@types/babel__template": {
       "version": "7.4.4",
+      "resolved": "https://registry.npmjs.org/@types/babel__template/-/babel__template-7.4.4.tgz",
+      "integrity": "sha512-h/NUaSyG5EyxBIp8YRxo4RMe2/qQgvyowRwVMzhYhBCONbW8PUsg4lkFMrhgZhUe5z3L3MiLDuvyJ/CaPa2A8A==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10643,6 +12380,8 @@ server {
     },
     "node_modules/@types/babel__traverse": {
       "version": "7.28.0",
+      "resolved": "https://registry.npmjs.org/@types/babel__traverse/-/babel__traverse-7.28.0.tgz",
+      "integrity": "sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10651,18 +12390,26 @@ server {
     },
     "node_modules/@types/d3-array": {
       "version": "3.2.2",
+      "resolved": "https://registry.npmjs.org/@types/d3-array/-/d3-array-3.2.2.tgz",
+      "integrity": "sha512-hOLWVbm7uRza0BYXpIIW5pxfrKe0W+D5lrFiAEYR+pb6w3N2SwSMaJbXdUfSEv+dT4MfHBLtn5js0LAWaO6otw==",
       "license": "MIT"
     },
     "node_modules/@types/d3-color": {
       "version": "3.1.3",
+      "resolved": "https://registry.npmjs.org/@types/d3-color/-/d3-color-3.1.3.tgz",
+      "integrity": "sha512-iO90scth9WAbmgv7ogoq57O9YpKmFBbmoEoCHDB2xMBY0+/KVrqAaCDyCE16dUspeOvIxFFRI+0sEtqDqy2b4A==",
       "license": "MIT"
     },
     "node_modules/@types/d3-format": {
       "version": "3.0.4",
+      "resolved": "https://registry.npmjs.org/@types/d3-format/-/d3-format-3.0.4.tgz",
+      "integrity": "sha512-fALi2aI6shfg7vM5KiR1wNJnZ7r6UuggVqtDA+xiEdPZQwy/trcQaHnwShLuLdta2rTymCNpxYTiMZX/e09F4g==",
       "license": "MIT"
     },
     "node_modules/@types/d3-interpolate": {
       "version": "3.0.4",
+      "resolved": "https://registry.npmjs.org/@types/d3-interpolate/-/d3-interpolate-3.0.4.tgz",
+      "integrity": "sha512-mgLPETlrpVV1YRJIglr4Ez47g7Yxjl1lj7YKsiMCb27VJH9W8NVM6Bb9d8kkpG/uAQS5AmbA48q2IAolKKo1MA==",
       "license": "MIT",
       "dependencies": {
         "@types/d3-color": "*"
@@ -10670,10 +12417,14 @@ server {
     },
     "node_modules/@types/d3-path": {
       "version": "3.1.1",
+      "resolved": "https://registry.npmjs.org/@types/d3-path/-/d3-path-3.1.1.tgz",
+      "integrity": "sha512-VMZBYyQvbGmWyWVea0EHs/BwLgxc+MKi1zLDCONksozI4YJMcTt8ZEuIR4Sb1MMTE8MMW49v0IwI5+b7RmfWlg==",
       "license": "MIT"
     },
     "node_modules/@types/d3-scale": {
       "version": "4.0.9",
+      "resolved": "https://registry.npmjs.org/@types/d3-scale/-/d3-scale-4.0.9.tgz",
+      "integrity": "sha512-dLmtwB8zkAeO/juAMfnV+sItKjlsw2lKdZVVy6LRr0cBmegxSABiLEpGVmSJJ8O08i4+sGR6qQtb6WtuwJdvVw==",
       "license": "MIT",
       "dependencies": {
         "@types/d3-time": "*"
@@ -10681,6 +12432,8 @@ server {
     },
     "node_modules/@types/d3-shape": {
       "version": "3.1.7",
+      "resolved": "https://registry.npmjs.org/@types/d3-shape/-/d3-shape-3.1.7.tgz",
+      "integrity": "sha512-VLvUQ33C+3J+8p+Daf+nYSOsjB4GXp19/S/aGo60m9h1v6XaxjiT82lKVWJCfzhtuZ3yD7i/TPeC/fuKLLOSmg==",
       "license": "MIT",
       "dependencies": {
         "@types/d3-path": "*"
@@ -10688,23 +12441,33 @@ server {
     },
     "node_modules/@types/d3-time": {
       "version": "3.0.4",
+      "resolved": "https://registry.npmjs.org/@types/d3-time/-/d3-time-3.0.4.tgz",
+      "integrity": "sha512-yuzZug1nkAAaBlBBikKZTgzCeA+k1uy4ZFwWANOfKw5z5LRhV0gNA7gNkKm7HoK+HRN0wX3EkxGk0fpbWhmB7g==",
       "license": "MIT"
     },
     "node_modules/@types/d3-time-format": {
       "version": "4.0.3",
+      "resolved": "https://registry.npmjs.org/@types/d3-time-format/-/d3-time-format-4.0.3.tgz",
+      "integrity": "sha512-5xg9rC+wWL8kdDj153qZcsJ0FWiFt0J5RB6LYUNZjwSnesfblqrI/bJ1wBdJ8OQfncgbJG5+2F+qfqnqyzYxyg==",
       "license": "MIT"
     },
     "node_modules/@types/d3-timer": {
       "version": "3.0.2",
+      "resolved": "https://registry.npmjs.org/@types/d3-timer/-/d3-timer-3.0.2.tgz",
+      "integrity": "sha512-Ps3T8E8dZDam6fUyNiMkekK3XUsaUEik+idO9/YjPtfj2qruF8tFBXS7XhtE4iIXBLxhmLjP3SXpLhVf21I9Lw==",
       "license": "MIT"
     },
     "node_modules/@types/estree": {
       "version": "1.0.8",
+      "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz",
+      "integrity": "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/@types/json-schema": {
       "version": "7.0.15",
+      "resolved": "https://registry.npmjs.org/@types/json-schema/-/json-schema-7.0.15.tgz",
+      "integrity": "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==",
       "dev": true,
       "license": "MIT"
     },
@@ -10716,10 +12479,14 @@ server {
     },
     "node_modules/@types/prop-types": {
       "version": "15.7.15",
+      "resolved": "https://registry.npmjs.org/@types/prop-types/-/prop-types-15.7.15.tgz",
+      "integrity": "sha512-F6bEyamV9jKGAFBEmlQnesRPGOQqS2+Uwi0Em15xenOxHaf2hv6L8YCVn3rPdPJOiJfPiCnLIRyvwVaqMY3MIw==",
       "license": "MIT"
     },
     "node_modules/@types/react": {
       "version": "19.2.7",
+      "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.7.tgz",
+      "integrity": "sha512-MWtvHrGZLFttgeEj28VXHxpmwYbor/ATPYbBfSFZEIRK0ecCFLl2Qo55z52Hss+UV9CRN7trSeq1zbgx7YDWWg==",
       "license": "MIT",
       "peer": true,
       "dependencies": {
@@ -10728,6 +12495,8 @@ server {
     },
     "node_modules/@types/react-transition-group": {
       "version": "4.4.12",
+      "resolved": "https://registry.npmjs.org/@types/react-transition-group/-/react-transition-group-4.4.12.tgz",
+      "integrity": "sha512-8TV6R3h2j7a91c+1DXdJi3Syo69zzIZbz7Lg5tORM5LEJG7X/E6a1V3drRyBRZq7/utz7A+c4OgYLiLcYGHG6w==",
       "license": "MIT",
       "peerDependencies": {
         "@types/react": "*"
@@ -10735,6 +12504,8 @@ server {
     },
     "node_modules/@vitejs/plugin-react": {
       "version": "5.1.2",
+      "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-5.1.2.tgz",
+      "integrity": "sha512-EcA07pHJouywpzsoTUqNh5NwGayl2PPVEJKUSinGGSxFGYn+shYbqMGBg6FXDqgXum9Ou/ecb+411ssw8HImJQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10754,6 +12525,8 @@ server {
     },
     "node_modules/acorn": {
       "version": "8.15.0",
+      "resolved": "https://registry.npmjs.org/acorn/-/acorn-8.15.0.tgz",
+      "integrity": "sha512-NZyJarBfL7nWwIq+FDL6Zp/yHEhePMNnnJ0y3qfieCrmNvYct8uvtiV41UvlSe6apAfk0fY1FbWx+NwfmpvtTg==",
       "dev": true,
       "license": "MIT",
       "bin": {
@@ -10765,6 +12538,8 @@ server {
     },
     "node_modules/acorn-jsx": {
       "version": "5.3.2",
+      "resolved": "https://registry.npmjs.org/acorn-jsx/-/acorn-jsx-5.3.2.tgz",
+      "integrity": "sha512-rq9s+JNhf0IChjtDXxllJ7g41oZk5SlXtp0LHwyA5cejwn7vKmKp4pPri6YEePv2PU65sAsegbXtIinmDFDXgQ==",
       "dev": true,
       "license": "MIT",
       "peerDependencies": {
@@ -10773,6 +12548,8 @@ server {
     },
     "node_modules/ajv": {
       "version": "6.12.6",
+      "resolved": "https://registry.npmjs.org/ajv/-/ajv-6.12.6.tgz",
+      "integrity": "sha512-j3fVLgvTo527anyYyJOGTYJbG+vnnQYvE0m5mmkc1TK+nxAppkCLMIL0aZ4dblVCNoGShhm+kzE4ZUykBoMg4g==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10788,6 +12565,8 @@ server {
     },
     "node_modules/ansi-styles": {
       "version": "4.3.0",
+      "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz",
+      "integrity": "sha512-zbB9rCJAT1rbjiVDb2hqKFHNYLxgtk8NURxZ3IZwD3F6NtxbXZQCnnSi1Lkx+IDohdPlFp222wVALIheZJQSEg==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10802,15 +12581,21 @@ server {
     },
     "node_modules/argparse": {
       "version": "2.0.1",
+      "resolved": "https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz",
+      "integrity": "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q==",
       "dev": true,
       "license": "Python-2.0"
     },
     "node_modules/asynckit": {
       "version": "0.4.0",
+      "resolved": "https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz",
+      "integrity": "sha512-Oei9OH4tRh0YqU3GxhX79dM/mwVgvbZJaSNaRk+bshkj0S5cfHcgYakreBjrHwatXKbz+IoIdYLxrKim2MjW0Q==",
       "license": "MIT"
     },
     "node_modules/axios": {
       "version": "1.13.2",
+      "resolved": "https://registry.npmjs.org/axios/-/axios-1.13.2.tgz",
+      "integrity": "sha512-VPk9ebNqPcy5lRGuSlKx752IlDatOjT9paPlm8A7yOuW2Fbvp4X3JznJtT4f0GzGLLiWE9W8onz51SqLYwzGaA==",
       "license": "MIT",
       "dependencies": {
         "follow-redirects": "^1.15.6",
@@ -10835,11 +12620,15 @@ server {
     },
     "node_modules/balanced-match": {
       "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz",
+      "integrity": "sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/baseline-browser-mapping": {
       "version": "2.9.11",
+      "resolved": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.9.11.tgz",
+      "integrity": "sha512-Sg0xJUNDU1sJNGdfGWhVHX0kkZ+HWcvmVymJbj6NSgZZmW/8S9Y2HQ5euytnIgakgxN6papOAWiwDo1ctFDcoQ==",
       "dev": true,
       "license": "Apache-2.0",
       "bin": {
@@ -10848,10 +12637,14 @@ server {
     },
     "node_modules/bezier-easing": {
       "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/bezier-easing/-/bezier-easing-2.1.0.tgz",
+      "integrity": "sha512-gbIqZ/eslnUFC1tjEvtz0sgx+xTK20wDnYMIA27VA04R7w6xxXQPZDbibjA9DTWZRA2CXtwHykkVzlCaAJAZig==",
       "license": "MIT"
     },
     "node_modules/brace-expansion": {
       "version": "1.1.12",
+      "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.12.tgz",
+      "integrity": "sha512-9T9UjW3r0UW5c1Q7GTwllptXwhvYmEzFhzMfZ9H7FQWt+uZePjZPjBP/W1ZEyZ1twGWom5/56TF4lPcqjnDHcg==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10861,6 +12654,8 @@ server {
     },
     "node_modules/browserslist": {
       "version": "4.28.1",
+      "resolved": "https://registry.npmjs.org/browserslist/-/browserslist-4.28.1.tgz",
+      "integrity": "sha512-ZC5Bd0LgJXgwGqUknZY/vkUQ04r8NXnJZ3yYi4vDmSiZmC/pdSN0NbNRPxZpbtO4uAfDUAFffO8IZoM3Gj8IkA==",
       "dev": true,
       "funding": [
         {
@@ -10893,6 +12688,8 @@ server {
     },
     "node_modules/call-bind-apply-helpers": {
       "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+      "integrity": "sha512-Sp1ablJ0ivDkSzjcaJdxEunN5/XvksFJ2sMBFfq6x0ryhQV/2b/KwFe21cMpmHtPOSij8K99/wSfoEuTObmuMQ==",
       "license": "MIT",
       "dependencies": {
         "es-errors": "^1.3.0",
@@ -10904,6 +12701,8 @@ server {
     },
     "node_modules/callsites": {
       "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/callsites/-/callsites-3.1.0.tgz",
+      "integrity": "sha512-P8BjAsXvZS+VIDUI11hHCQEv74YT67YUi5JJFNWIqL235sBmjX4+qx9Muvls5ivyNENctx46xQLQ3aTuE7ssaQ==",
       "license": "MIT",
       "engines": {
         "node": ">=6"
@@ -10911,6 +12710,8 @@ server {
     },
     "node_modules/caniuse-lite": {
       "version": "1.0.30001762",
+      "resolved": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001762.tgz",
+      "integrity": "sha512-PxZwGNvH7Ak8WX5iXzoK1KPZttBXNPuaOvI2ZYU7NrlM+d9Ov+TUvlLOBNGzVXAntMSMMlJPd+jY6ovrVjSmUw==",
       "dev": true,
       "funding": [
         {
@@ -10930,6 +12731,8 @@ server {
     },
     "node_modules/chalk": {
       "version": "4.1.2",
+      "resolved": "https://registry.npmjs.org/chalk/-/chalk-4.1.2.tgz",
+      "integrity": "sha512-oKnbhFyRIXpUuez8iBMmyEa4nbj4IOQyuhc/wy9kY7/WVPcwIO9VA668Pu8RkO7+0G76SLROeyw9CpQ061i4mA==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10945,6 +12748,8 @@ server {
     },
     "node_modules/clsx": {
       "version": "2.1.1",
+      "resolved": "https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz",
+      "integrity": "sha512-eYm0QWBtUrBWZWG0d386OGAw16Z995PiOVo2B7bjWSbHedGl5e0ZWaq65kOGgUSNesEIDkB9ISbTg/JK9dhCZA==",
       "license": "MIT",
       "engines": {
         "node": ">=6"
@@ -10952,6 +12757,8 @@ server {
     },
     "node_modules/color-convert": {
       "version": "2.0.1",
+      "resolved": "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz",
+      "integrity": "sha512-RRECPsj7iu/xb5oKYcsFHSppFNnsj/52OVTRKb4zP5onXwVF3zVmmToNcOfGC+CRDpfK/U584fMg38ZHCaElKQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -10963,11 +12770,15 @@ server {
     },
     "node_modules/color-name": {
       "version": "1.1.4",
+      "resolved": "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz",
+      "integrity": "sha512-dOy+3AuW3a2wNbZHIuMZpTcgjGuLU/uBL/ubcZF9OXbDo8ff4O8yVp5Bf0efS8uEoYo5q4Fx7dY9OgQGXgAsQA==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/combined-stream": {
       "version": "1.0.8",
+      "resolved": "https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz",
+      "integrity": "sha512-FQN4MRfuJeHf7cBbBMJFXhKSDq+2kAArBlmRBvcvFE5BB1HZKXtSFASDhdlz9zOYwxh8lDdnvmMOe/+5cdoEdg==",
       "license": "MIT",
       "dependencies": {
         "delayed-stream": "~1.0.0"
@@ -10978,16 +12789,22 @@ server {
     },
     "node_modules/concat-map": {
       "version": "0.0.1",
+      "resolved": "https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz",
+      "integrity": "sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/convert-source-map": {
       "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz",
+      "integrity": "sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/cookie": {
       "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/cookie/-/cookie-1.1.1.tgz",
+      "integrity": "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==",
       "license": "MIT",
       "engines": {
         "node": ">=18"
@@ -11024,6 +12841,8 @@ server {
     },
     "node_modules/cross-spawn": {
       "version": "7.0.6",
+      "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz",
+      "integrity": "sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11037,10 +12856,14 @@ server {
     },
     "node_modules/csstype": {
       "version": "3.2.3",
+      "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+      "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==",
       "license": "MIT"
     },
     "node_modules/d3-array": {
       "version": "3.2.4",
+      "resolved": "https://registry.npmjs.org/d3-array/-/d3-array-3.2.4.tgz",
+      "integrity": "sha512-tdQAmyA18i4J7wprpYq8ClcxZy3SC31QMeByyCFyRt7BVHdREQZ5lpzoe5mFEYZUWe+oq8HBvk9JjpibyEV4Jg==",
       "license": "ISC",
       "dependencies": {
         "internmap": "1 - 2"
@@ -11051,6 +12874,8 @@ server {
     },
     "node_modules/d3-color": {
       "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/d3-color/-/d3-color-3.1.0.tgz",
+      "integrity": "sha512-zg/chbXyeBtMQ1LbD/WSoW2DpC3I0mpmPdW+ynRTj/x2DAWYrIY7qeZIHidozwV24m4iavr15lNwIwLxRmOxhA==",
       "license": "ISC",
       "engines": {
         "node": ">=12"
@@ -11058,6 +12883,8 @@ server {
     },
     "node_modules/d3-format": {
       "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/d3-format/-/d3-format-3.1.0.tgz",
+      "integrity": "sha512-YyUI6AEuY/Wpt8KWLgZHsIU86atmikuoOmCfommt0LYHiQSPjvX2AcFc38PX0CBpr2RCyZhjex+NS/LPOv6YqA==",
       "license": "ISC",
       "engines": {
         "node": ">=12"
@@ -11065,6 +12892,8 @@ server {
     },
     "node_modules/d3-interpolate": {
       "version": "3.0.1",
+      "resolved": "https://registry.npmjs.org/d3-interpolate/-/d3-interpolate-3.0.1.tgz",
+      "integrity": "sha512-3bYs1rOD33uo8aqJfKP3JWPAibgw8Zm2+L9vBKEHJ2Rg+viTR7o5Mmv5mZcieN+FRYaAOWX5SJATX6k1PWz72g==",
       "license": "ISC",
       "dependencies": {
         "d3-color": "1 - 3"
@@ -11075,6 +12904,8 @@ server {
     },
     "node_modules/d3-path": {
       "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/d3-path/-/d3-path-3.1.0.tgz",
+      "integrity": "sha512-p3KP5HCf/bvjBSSKuXid6Zqijx7wIfNW+J/maPs+iwR35at5JCbLUT0LzF1cnjbCHWhqzQTIN2Jpe8pRebIEFQ==",
       "license": "ISC",
       "engines": {
         "node": ">=12"
@@ -11082,6 +12913,8 @@ server {
     },
     "node_modules/d3-scale": {
       "version": "4.0.2",
+      "resolved": "https://registry.npmjs.org/d3-scale/-/d3-scale-4.0.2.tgz",
+      "integrity": "sha512-GZW464g1SH7ag3Y7hXjf8RoUuAFIqklOAq3MRl4OaWabTFJY9PN/E1YklhXLh+OQ3fM9yS2nOkCoS+WLZ6kvxQ==",
       "license": "ISC",
       "dependencies": {
         "d3-array": "2.10.0 - 3",
@@ -11096,6 +12929,8 @@ server {
     },
     "node_modules/d3-shape": {
       "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/d3-shape/-/d3-shape-3.2.0.tgz",
+      "integrity": "sha512-SaLBuwGm3MOViRq2ABk3eLoxwZELpH6zhl3FbAoJ7Vm1gofKx6El1Ib5z23NUEhF9AsGl7y+dzLe5Cw2AArGTA==",
       "license": "ISC",
       "dependencies": {
         "d3-path": "^3.1.0"
@@ -11106,6 +12941,8 @@ server {
     },
     "node_modules/d3-time": {
       "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/d3-time/-/d3-time-3.1.0.tgz",
+      "integrity": "sha512-VqKjzBLejbSMT4IgbmVgDjpkYrNWUYJnbCGo874u7MMKIWsILRX+OpX/gTk8MqjpT1A/c6HY2dCA77ZN0lkQ2Q==",
       "license": "ISC",
       "dependencies": {
         "d3-array": "2 - 3"
@@ -11116,6 +12953,8 @@ server {
     },
     "node_modules/d3-time-format": {
       "version": "4.1.0",
+      "resolved": "https://registry.npmjs.org/d3-time-format/-/d3-time-format-4.1.0.tgz",
+      "integrity": "sha512-dJxPBlzC7NugB2PDLwo9Q8JiTR3M3e4/XANkreKSUxF8vvXKqm1Yfq4Q5dl8budlunRVlUUaDUgFt7eA8D6NLg==",
       "license": "ISC",
       "dependencies": {
         "d3-time": "1 - 3"
@@ -11126,6 +12965,8 @@ server {
     },
     "node_modules/d3-timer": {
       "version": "3.0.1",
+      "resolved": "https://registry.npmjs.org/d3-timer/-/d3-timer-3.0.1.tgz",
+      "integrity": "sha512-ndfJ/JxxMd3nw31uyKoY2naivF+r29V+Lc0svZxe1JvvIRmi8hUsrMvdOwgS1o6uBHmiz91geQ0ylPP0aj1VUA==",
       "license": "ISC",
       "engines": {
         "node": ">=12"
@@ -11133,6 +12974,8 @@ server {
     },
     "node_modules/debug": {
       "version": "4.4.3",
+      "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+      "integrity": "sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==",
       "license": "MIT",
       "dependencies": {
         "ms": "^2.1.3"
@@ -11148,11 +12991,15 @@ server {
     },
     "node_modules/deep-is": {
       "version": "0.1.4",
+      "resolved": "https://registry.npmjs.org/deep-is/-/deep-is-0.1.4.tgz",
+      "integrity": "sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/delayed-stream": {
       "version": "1.0.0",
+      "resolved": "https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz",
+      "integrity": "sha512-ZySD7Nf91aLB0RxL4KGrKHBXl7Eds1DAmEdcoVawXnLD7SDhpNgtuII2aAkg7a7QS41jxPSZ17p4VdGnMHk3MQ==",
       "license": "MIT",
       "engines": {
         "node": ">=0.4.0"
@@ -11160,6 +13007,8 @@ server {
     },
     "node_modules/dom-helpers": {
       "version": "5.2.1",
+      "resolved": "https://registry.npmjs.org/dom-helpers/-/dom-helpers-5.2.1.tgz",
+      "integrity": "sha512-nRCa7CK3VTrM2NmGkIy4cbK7IZlgBE/PYMn55rrXefr5xXDP0LdtfPnblFDoVdcAfslJ7or6iqAUnx0CCGIWQA==",
       "license": "MIT",
       "dependencies": {
         "@babel/runtime": "^7.8.7",
@@ -11168,6 +13017,8 @@ server {
     },
     "node_modules/dunder-proto": {
       "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+      "integrity": "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==",
       "license": "MIT",
       "dependencies": {
         "call-bind-apply-helpers": "^1.0.1",
@@ -11180,6 +13031,8 @@ server {
     },
     "node_modules/electron-to-chromium": {
       "version": "1.5.267",
+      "resolved": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.267.tgz",
+      "integrity": "sha512-0Drusm6MVRXSOJpGbaSVgcQsuB4hEkMpHXaVstcPmhu5LIedxs1xNK/nIxmQIU/RPC0+1/o0AVZfBTkTNJOdUw==",
       "dev": true,
       "license": "ISC"
     },
@@ -11194,6 +13047,8 @@ server {
     },
     "node_modules/es-define-property": {
       "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+      "integrity": "sha512-e3nRfgfUZ4rNGL232gUgX06QNyyez04KdjFrF+LTRoOXmrOgFKDg4BCdsjW8EnT69eqdYGmRpJwiPVYNrCaW3g==",
       "license": "MIT",
       "engines": {
         "node": ">= 0.4"
@@ -11201,6 +13056,8 @@ server {
     },
     "node_modules/es-errors": {
       "version": "1.3.0",
+      "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+      "integrity": "sha512-Zf5H2Kxt2xjTvbJvP2ZWLEICxA6j+hAmMzIlypy4xcBg1vKVnx89Wy0GbS+kf5cwCVFFzdCFh2XSCFNULS6csw==",
       "license": "MIT",
       "engines": {
         "node": ">= 0.4"
@@ -11208,6 +13065,8 @@ server {
     },
     "node_modules/es-object-atoms": {
       "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+      "integrity": "sha512-FGgH2h8zKNim9ljj7dankFPcICIK9Cp5bm+c2gQSYePhpaG5+esrLODihIorn+Pe6FGJzWhXQotPv73jTaldXA==",
       "license": "MIT",
       "dependencies": {
         "es-errors": "^1.3.0"
@@ -11218,6 +13077,8 @@ server {
     },
     "node_modules/es-set-tostringtag": {
       "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz",
+      "integrity": "sha512-j6vWzfrGVfyXxge+O0x5sh6cvxAog0a/4Rdd2K36zCMV5eJ+/+tOAngRO8cODMNWbVRdVlmGZQL2YS3yR8bIUA==",
       "license": "MIT",
       "dependencies": {
         "es-errors": "^1.3.0",
@@ -11231,6 +13092,8 @@ server {
     },
     "node_modules/esbuild": {
       "version": "0.27.2",
+      "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.27.2.tgz",
+      "integrity": "sha512-HyNQImnsOC7X9PMNaCIeAm4ISCQXs5a5YasTXVliKv4uuBo1dKrG0A+uQS8M5eXjVMnLg3WgXaKvprHlFJQffw==",
       "dev": true,
       "hasInstallScript": true,
       "license": "MIT",
@@ -11271,6 +13134,8 @@ server {
     },
     "node_modules/escalade": {
       "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz",
+      "integrity": "sha512-WUj2qlxaQtO4g6Pq5c29GTcWGDyd8itL8zTlipgECz3JesAiiOKotd8JU6otB3PACgG6xkJUyVhboMS+bje/jA==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11279,6 +13144,8 @@ server {
     },
     "node_modules/escape-string-regexp": {
       "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz",
+      "integrity": "sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==",
       "license": "MIT",
       "engines": {
         "node": ">=10"
@@ -11289,6 +13156,8 @@ server {
     },
     "node_modules/eslint": {
       "version": "9.39.2",
+      "resolved": "https://registry.npmjs.org/eslint/-/eslint-9.39.2.tgz",
+      "integrity": "sha512-LEyamqS7W5HB3ujJyvi0HQK/dtVINZvd5mAAp9eT5S/ujByGjiZLCzPcHVzuXbpJDJF/cxwHlfceVUDZ2lnSTw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11347,6 +13216,8 @@ server {
     },
     "node_modules/eslint-plugin-react-hooks": {
       "version": "7.0.1",
+      "resolved": "https://registry.npmjs.org/eslint-plugin-react-hooks/-/eslint-plugin-react-hooks-7.0.1.tgz",
+      "integrity": "sha512-O0d0m04evaNzEPoSW+59Mezf8Qt0InfgGIBJnpC0h3NH/WjUAR7BIKUfysC6todmtiZ/A0oUVS8Gce0WhBrHsA==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11365,6 +13236,8 @@ server {
     },
     "node_modules/eslint-plugin-react-refresh": {
       "version": "0.4.26",
+      "resolved": "https://registry.npmjs.org/eslint-plugin-react-refresh/-/eslint-plugin-react-refresh-0.4.26.tgz",
+      "integrity": "sha512-1RETEylht2O6FM/MvgnyvT+8K21wLqDNg4qD51Zj3guhjt433XbnnkVttHMyaVyAFD03QSV4LPS5iE3VQmO7XQ==",
       "dev": true,
       "license": "MIT",
       "peerDependencies": {
@@ -11373,6 +13246,8 @@ server {
     },
     "node_modules/eslint-scope": {
       "version": "8.4.0",
+      "resolved": "https://registry.npmjs.org/eslint-scope/-/eslint-scope-8.4.0.tgz",
+      "integrity": "sha512-sNXOfKCn74rt8RICKMvJS7XKV/Xk9kA7DyJr8mJik3S7Cwgy3qlkkmyS2uQB3jiJg6VNdZd/pDBJu0nvG2NlTg==",
       "dev": true,
       "license": "BSD-2-Clause",
       "dependencies": {
@@ -11388,6 +13263,8 @@ server {
     },
     "node_modules/eslint-visitor-keys": {
       "version": "4.2.1",
+      "resolved": "https://registry.npmjs.org/eslint-visitor-keys/-/eslint-visitor-keys-4.2.1.tgz",
+      "integrity": "sha512-Uhdk5sfqcee/9H/rCOJikYz67o0a2Tw2hGRPOG2Y1R2dg7brRe1uG0yaNQDHu+TO/uQPF/5eCapvYSmHUjt7JQ==",
       "dev": true,
       "license": "Apache-2.0",
       "engines": {
@@ -11399,6 +13276,8 @@ server {
     },
     "node_modules/espree": {
       "version": "10.4.0",
+      "resolved": "https://registry.npmjs.org/espree/-/espree-10.4.0.tgz",
+      "integrity": "sha512-j6PAQ2uUr79PZhBjP5C5fhl8e39FmRnOjsD5lGnWrFU8i2G776tBK7+nP8KuQUTTyAZUwfQqXAgrVH5MbH9CYQ==",
       "dev": true,
       "license": "BSD-2-Clause",
       "dependencies": {
@@ -11415,6 +13294,8 @@ server {
     },
     "node_modules/esquery": {
       "version": "1.7.0",
+      "resolved": "https://registry.npmjs.org/esquery/-/esquery-1.7.0.tgz",
+      "integrity": "sha512-Ap6G0WQwcU/LHsvLwON1fAQX9Zp0A2Y6Y/cJBl9r/JbW90Zyg4/zbG6zzKa2OTALELarYHmKu0GhpM5EO+7T0g==",
       "dev": true,
       "license": "BSD-3-Clause",
       "dependencies": {
@@ -11426,6 +13307,8 @@ server {
     },
     "node_modules/esrecurse": {
       "version": "4.3.0",
+      "resolved": "https://registry.npmjs.org/esrecurse/-/esrecurse-4.3.0.tgz",
+      "integrity": "sha512-KmfKL3b6G+RXvP8N1vr3Tq1kL/oCFgn2NYXEtqP8/L3pKapUA4G8cFVaoF3SU323CD4XypR/ffioHmkti6/Tag==",
       "dev": true,
       "license": "BSD-2-Clause",
       "dependencies": {
@@ -11437,6 +13320,8 @@ server {
     },
     "node_modules/estraverse": {
       "version": "5.3.0",
+      "resolved": "https://registry.npmjs.org/estraverse/-/estraverse-5.3.0.tgz",
+      "integrity": "sha512-MMdARuVEQziNTeJD8DgMqmhwR11BRQ/cBP+pLtYdSTnf3MIO8fFeiINEbX36ZdNlfU/7A9f3gUw49B3oQsvwBA==",
       "dev": true,
       "license": "BSD-2-Clause",
       "engines": {
@@ -11445,6 +13330,8 @@ server {
     },
     "node_modules/esutils": {
       "version": "2.0.3",
+      "resolved": "https://registry.npmjs.org/esutils/-/esutils-2.0.3.tgz",
+      "integrity": "sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==",
       "dev": true,
       "license": "BSD-2-Clause",
       "engines": {
@@ -11453,21 +13340,29 @@ server {
     },
     "node_modules/fast-deep-equal": {
       "version": "3.1.3",
+      "resolved": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
+      "integrity": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/fast-json-stable-stringify": {
       "version": "2.1.0",
+      "resolved": "https://registry.npmjs.org/fast-json-stable-stringify/-/fast-json-stable-stringify-2.1.0.tgz",
+      "integrity": "sha512-lhd/wF+Lk98HZoTCtlVraHtfh5XYijIjalXck7saUtuanSDyLMxnHhSXEDJqHxD7msR8D0uCmqlkwjCV8xvwHw==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/fast-levenshtein": {
       "version": "2.0.6",
+      "resolved": "https://registry.npmjs.org/fast-levenshtein/-/fast-levenshtein-2.0.6.tgz",
+      "integrity": "sha512-DCXu6Ifhqcks7TZKY3Hxp3y6qphY5SJZmrWMDrKcERSOXWQdMhU9Ig/PYrzyw/ul9jOIyh0N4M0tbC5hodg8dw==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/fdir": {
       "version": "6.5.0",
+      "resolved": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz",
+      "integrity": "sha512-tIbYtZbucOs0BRGqPJkshJUYdL+SDH7dVM8gjy+ERp3WAUjLEFJE+02kanyHtwjWOnwrKYBiwAmM0p4kLJAnXg==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11484,6 +13379,8 @@ server {
     },
     "node_modules/file-entry-cache": {
       "version": "8.0.0",
+      "resolved": "https://registry.npmjs.org/file-entry-cache/-/file-entry-cache-8.0.0.tgz",
+      "integrity": "sha512-XXTUwCvisa5oacNGRP9SfNtYBNAMi+RPwBFmblZEF7N7swHYQS6/Zfk7SRwx4D5j3CH211YNRco1DEMNVfZCnQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11501,6 +13398,8 @@ server {
     },
     "node_modules/find-up": {
       "version": "5.0.0",
+      "resolved": "https://registry.npmjs.org/find-up/-/find-up-5.0.0.tgz",
+      "integrity": "sha512-78/PXT1wlLLDgTzDs7sjq9hzz0vXD+zn+7wypEe4fXQxCmdmqfGsEPQxmiCSQI3ajFV91bVSsvNtrJRiW6nGng==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11516,6 +13415,8 @@ server {
     },
     "node_modules/flat-cache": {
       "version": "4.0.1",
+      "resolved": "https://registry.npmjs.org/flat-cache/-/flat-cache-4.0.1.tgz",
+      "integrity": "sha512-f7ccFPK3SXFHpx15UIGyRJ/FJQctuKZ0zVuN3frBo4HnK3cay9VEW0R6yPYFHC0AgqhukPzKjq22t5DmAyqGyw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11528,15 +13429,21 @@ server {
     },
     "node_modules/flatqueue": {
       "version": "3.0.0",
+      "resolved": "https://registry.npmjs.org/flatqueue/-/flatqueue-3.0.0.tgz",
+      "integrity": "sha512-y1deYaVt+lIc/d2uIcWDNd0CrdQTO5xoCjeFdhX0kSXvm2Acm0o+3bAOiYklTEoRyzwio3sv3/IiBZdusbAe2Q==",
       "license": "ISC"
     },
     "node_modules/flatted": {
       "version": "3.3.3",
+      "resolved": "https://registry.npmjs.org/flatted/-/flatted-3.3.3.tgz",
+      "integrity": "sha512-GX+ysw4PBCz0PzosHDepZGANEuFCMLrnRTiEy9McGjmkCQYwRq4A/X786G/fjM/+OjsWSU1ZrY5qyARZmO/uwg==",
       "dev": true,
       "license": "ISC"
     },
     "node_modules/follow-redirects": {
       "version": "1.15.11",
+      "resolved": "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.15.11.tgz",
+      "integrity": "sha512-deG2P0JfjrTxl50XGCDyfI97ZGVCxIpfKYmfyrQ54n5FO/0gfIES8C/Psl6kWVDolizcaaxZJnTS0QSMxvnsBQ==",
       "funding": [
         {
           "type": "individual",
@@ -11555,6 +13462,8 @@ server {
     },
     "node_modules/form-data": {
       "version": "4.0.5",
+      "resolved": "https://registry.npmjs.org/form-data/-/form-data-4.0.5.tgz",
+      "integrity": "sha512-8RipRLol37bNs2bhoV67fiTEvdTrbMUYcFTiy3+wuuOnUog2QBHCZWXDRijWQfAkhBj2Uf5UnVaiWwA5vdd82w==",
       "license": "MIT",
       "dependencies": {
         "asynckit": "^0.4.0",
@@ -11584,6 +13493,8 @@ server {
     },
     "node_modules/function-bind": {
       "version": "1.1.2",
+      "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+      "integrity": "sha512-7XHNxH7qX9xG5mIwxkhumTox/MIRNcOgDrxWsMt2pAr23WHp6MrRlN7FBSFpCpr+oVO0F744iUgR82nJMfG2SA==",
       "license": "MIT",
       "funding": {
         "url": "https://github.com/sponsors/ljharb"
@@ -11591,6 +13502,8 @@ server {
     },
     "node_modules/gensync": {
       "version": "1.0.0-beta.2",
+      "resolved": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
+      "integrity": "sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11599,6 +13512,8 @@ server {
     },
     "node_modules/get-intrinsic": {
       "version": "1.3.0",
+      "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+      "integrity": "sha512-9fSjSaos/fRIVIp+xSJlE6lfwhES7LNtKaCBIamHsjr2na1BiABJPo0mOjjz8GJDURarmCPGqaiVg5mfjb98CQ==",
       "license": "MIT",
       "dependencies": {
         "call-bind-apply-helpers": "^1.0.2",
@@ -11621,6 +13536,8 @@ server {
     },
     "node_modules/get-proto": {
       "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+      "integrity": "sha512-sTSfBjoXBp89JvIKIefqw7U2CCebsc74kiY6awiGogKtoSGbgjYE/G/+l9sF3MWFPNc9IcoOC4ODfKHfxFmp0g==",
       "license": "MIT",
       "dependencies": {
         "dunder-proto": "^1.0.1",
@@ -11632,6 +13549,8 @@ server {
     },
     "node_modules/glob-parent": {
       "version": "6.0.2",
+      "resolved": "https://registry.npmjs.org/glob-parent/-/glob-parent-6.0.2.tgz",
+      "integrity": "sha512-XxwI8EOhVQgWp6iDL+3b0r86f4d6AX6zSU55HfB4ydCEuXLXc5FcYeOu+nnGftS4TEju/11rt4KJPTMgbfmv4A==",
       "dev": true,
       "license": "ISC",
       "dependencies": {
@@ -11643,6 +13562,8 @@ server {
     },
     "node_modules/globals": {
       "version": "16.5.0",
+      "resolved": "https://registry.npmjs.org/globals/-/globals-16.5.0.tgz",
+      "integrity": "sha512-c/c15i26VrJ4IRt5Z89DnIzCGDn9EcebibhAOjw5ibqEHsE1wLUgkPn9RDmNcUKyU87GeaL633nyJ+pplFR2ZQ==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11654,6 +13575,8 @@ server {
     },
     "node_modules/gopd": {
       "version": "1.2.0",
+      "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+      "integrity": "sha512-ZUKRh6/kUFoAiTAtTYPZJ3hw9wNxx+BIBOijnlG9PnrJsCcSjs1wyyD6vJpaYtgnzDrKYRSqf3OO6Rfa93xsRg==",
       "license": "MIT",
       "engines": {
         "node": ">= 0.4"
@@ -11664,6 +13587,8 @@ server {
     },
     "node_modules/has-flag": {
       "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/has-flag/-/has-flag-4.0.0.tgz",
+      "integrity": "sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11672,6 +13597,8 @@ server {
     },
     "node_modules/has-symbols": {
       "version": "1.1.0",
+      "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+      "integrity": "sha512-1cDNdwJ2Jaohmb3sg4OmKaMBwuC48sYni5HUw2DvsC8LjGTLK9h+eb1X6RyuOHe4hT0ULCW68iomhjUoKUqlPQ==",
       "license": "MIT",
       "engines": {
         "node": ">= 0.4"
@@ -11682,6 +13609,8 @@ server {
     },
     "node_modules/has-tostringtag": {
       "version": "1.0.2",
+      "resolved": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+      "integrity": "sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==",
       "license": "MIT",
       "dependencies": {
         "has-symbols": "^1.0.3"
@@ -11695,6 +13624,8 @@ server {
     },
     "node_modules/hasown": {
       "version": "2.0.2",
+      "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz",
+      "integrity": "sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==",
       "license": "MIT",
       "dependencies": {
         "function-bind": "^1.1.2"
@@ -11705,11 +13636,15 @@ server {
     },
     "node_modules/hermes-estree": {
       "version": "0.25.1",
+      "resolved": "https://registry.npmjs.org/hermes-estree/-/hermes-estree-0.25.1.tgz",
+      "integrity": "sha512-0wUoCcLp+5Ev5pDW2OriHC2MJCbwLwuRx+gAqMTOkGKJJiBCLjtrvy4PWUGn6MIVefecRpzoOZ/UV6iGdOr+Cw==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/hermes-parser": {
       "version": "0.25.1",
+      "resolved": "https://registry.npmjs.org/hermes-parser/-/hermes-parser-0.25.1.tgz",
+      "integrity": "sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11733,6 +13668,8 @@ server {
     },
     "node_modules/ignore": {
       "version": "5.3.2",
+      "resolved": "https://registry.npmjs.org/ignore/-/ignore-5.3.2.tgz",
+      "integrity": "sha512-hsBTNUqQTDwkWtcdYI2i06Y/nUBEsNEDJKjWdigLvegy8kDuJAS8uRlpkkcQpyEXL0Z/pjDy5HBmMjRCJ2gq+g==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11741,6 +13678,8 @@ server {
     },
     "node_modules/import-fresh": {
       "version": "3.3.1",
+      "resolved": "https://registry.npmjs.org/import-fresh/-/import-fresh-3.3.1.tgz",
+      "integrity": "sha512-TR3KfrTZTYLPB6jUjfx6MF9WcWrHL9su5TObK4ZkYgBdWKPOFoSoQIdEuTuR82pmtxH2spWG9h6etwfr1pLBqQ==",
       "license": "MIT",
       "dependencies": {
         "parent-module": "^1.0.0",
@@ -11755,6 +13694,8 @@ server {
     },
     "node_modules/imurmurhash": {
       "version": "0.1.4",
+      "resolved": "https://registry.npmjs.org/imurmurhash/-/imurmurhash-0.1.4.tgz",
+      "integrity": "sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11763,6 +13704,8 @@ server {
     },
     "node_modules/internmap": {
       "version": "2.0.3",
+      "resolved": "https://registry.npmjs.org/internmap/-/internmap-2.0.3.tgz",
+      "integrity": "sha512-5Hh7Y1wQbvY5ooGgPbDaL5iYLAPzMTUrjMulskHLH6wnv/A+1q5rgEaiuqEjB+oxGXIVZs1FF+R/KPN3ZSQYYg==",
       "license": "ISC",
       "engines": {
         "node": ">=12"
@@ -11791,6 +13734,8 @@ server {
     },
     "node_modules/is-extglob": {
       "version": "2.1.1",
+      "resolved": "https://registry.npmjs.org/is-extglob/-/is-extglob-2.1.1.tgz",
+      "integrity": "sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -11799,6 +13744,8 @@ server {
     },
     "node_modules/is-glob": {
       "version": "4.0.3",
+      "resolved": "https://registry.npmjs.org/is-glob/-/is-glob-4.0.3.tgz",
+      "integrity": "sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11810,15 +13757,21 @@ server {
     },
     "node_modules/isexe": {
       "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz",
+      "integrity": "sha512-RHxMLp9lnKHGHRng9QFhRCMbYAcVpn69smSGcq3f36xjgVVWThj4qqLbTLlq7Ssj8B+fIQ1EuCEGI2lKsyQeIw==",
       "dev": true,
       "license": "ISC"
     },
     "node_modules/js-tokens": {
       "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
+      "integrity": "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==",
       "license": "MIT"
     },
     "node_modules/js-yaml": {
       "version": "4.1.1",
+      "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.1.tgz",
+      "integrity": "sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11830,6 +13783,8 @@ server {
     },
     "node_modules/jsesc": {
       "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz",
+      "integrity": "sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==",
       "license": "MIT",
       "bin": {
         "jsesc": "bin/jsesc"
@@ -11840,6 +13795,8 @@ server {
     },
     "node_modules/json-buffer": {
       "version": "3.0.1",
+      "resolved": "https://registry.npmjs.org/json-buffer/-/json-buffer-3.0.1.tgz",
+      "integrity": "sha512-4bV5BfR2mqfQTJm+V5tPPdf+ZpuhiIvTuAB5g8kcrXOZpTT/QwwVRWBywX1ozr6lEuPdbHxwaJlm9G6mI2sfSQ==",
       "dev": true,
       "license": "MIT"
     },
@@ -11851,16 +13808,22 @@ server {
     },
     "node_modules/json-schema-traverse": {
       "version": "0.4.1",
+      "resolved": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-0.4.1.tgz",
+      "integrity": "sha512-xbbCH5dCYU5T8LcEhhuh7HJ88HXuW3qsI3Y0zOZFKfZEHcpWiHU/Jxzk629Brsab/mMiHQti9wMP+845RPe3Vg==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/json-stable-stringify-without-jsonify": {
       "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/json-stable-stringify-without-jsonify/-/json-stable-stringify-without-jsonify-1.0.1.tgz",
+      "integrity": "sha512-Bdboy+l7tA3OGW6FjyFHWkP5LuByj1Tk33Ljyq0axyzdk9//JSi2u3fP1QSmd1KNwq6VOKYGlAu87CisVir6Pw==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/json5": {
       "version": "2.2.3",
+      "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
+      "integrity": "sha512-XmOWe7eyHYH14cLdVPoyg+GOH3rYX++KpzrylJwSW98t3Nk+U8XOl8FWKOgwtzdb8lXGf6zYwDUzeHMWfxasyg==",
       "dev": true,
       "license": "MIT",
       "bin": {
@@ -11872,6 +13835,8 @@ server {
     },
     "node_modules/keyv": {
       "version": "4.5.4",
+      "resolved": "https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz",
+      "integrity": "sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11880,6 +13845,8 @@ server {
     },
     "node_modules/levn": {
       "version": "0.4.1",
+      "resolved": "https://registry.npmjs.org/levn/-/levn-0.4.1.tgz",
+      "integrity": "sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11898,6 +13865,8 @@ server {
     },
     "node_modules/locate-path": {
       "version": "6.0.0",
+      "resolved": "https://registry.npmjs.org/locate-path/-/locate-path-6.0.0.tgz",
+      "integrity": "sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -11912,11 +13881,15 @@ server {
     },
     "node_modules/lodash.merge": {
       "version": "4.6.2",
+      "resolved": "https://registry.npmjs.org/lodash.merge/-/lodash.merge-4.6.2.tgz",
+      "integrity": "sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/loose-envify": {
       "version": "1.4.0",
+      "resolved": "https://registry.npmjs.org/loose-envify/-/loose-envify-1.4.0.tgz",
+      "integrity": "sha512-lyuxPGr/Wfhrlem2CL/UcnUc1zcqKAImBDzukY7Y5F/yQiNdko6+fRLevlw1HgMySw7f611UIY408EtxRSoK3Q==",
       "license": "MIT",
       "dependencies": {
         "js-tokens": "^3.0.0 || ^4.0.0"
@@ -11927,6 +13900,8 @@ server {
     },
     "node_modules/lru-cache": {
       "version": "5.1.1",
+      "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
+      "integrity": "sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==",
       "dev": true,
       "license": "ISC",
       "dependencies": {
@@ -11935,6 +13910,8 @@ server {
     },
     "node_modules/math-intrinsics": {
       "version": "1.1.0",
+      "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+      "integrity": "sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==",
       "license": "MIT",
       "engines": {
         "node": ">= 0.4"
@@ -11942,6 +13919,8 @@ server {
     },
     "node_modules/mime-db": {
       "version": "1.52.0",
+      "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz",
+      "integrity": "sha512-sPU4uV7dYlvtWJxwwxHD0PuihVNiE7TyAbQ5SWxDCB9mUYvOgroQOwYQQOKPJ8CIbE+1ETVlOoK1UC2nU3gYvg==",
       "license": "MIT",
       "engines": {
         "node": ">= 0.6"
@@ -11949,6 +13928,8 @@ server {
     },
     "node_modules/mime-types": {
       "version": "2.1.35",
+      "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz",
+      "integrity": "sha512-ZDY+bPm5zTTF+YpCrAU9nK0UgICYPT0QtT1NZWFv4s++TNkcgVaT0g6+4R2uI4MjQjzysHB1zxuWL50hzaeXiw==",
       "license": "MIT",
       "dependencies": {
         "mime-db": "1.52.0"
@@ -11959,6 +13940,8 @@ server {
     },
     "node_modules/minimatch": {
       "version": "3.1.2",
+      "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.2.tgz",
+      "integrity": "sha512-J7p63hRiAjw1NDEww1W7i37+ByIrOWO5XQQAzZ3VOcL0PNybwpfmV/N05zFAzwQ9USyEcX6t3UO+K5aqBQOIHw==",
       "dev": true,
       "license": "ISC",
       "dependencies": {
@@ -11970,10 +13953,14 @@ server {
     },
     "node_modules/ms": {
       "version": "2.1.3",
+      "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+      "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
       "license": "MIT"
     },
     "node_modules/nanoid": {
       "version": "3.3.11",
+      "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.11.tgz",
+      "integrity": "sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w==",
       "dev": true,
       "funding": [
         {
@@ -11991,16 +13978,22 @@ server {
     },
     "node_modules/natural-compare": {
       "version": "1.4.0",
+      "resolved": "https://registry.npmjs.org/natural-compare/-/natural-compare-1.4.0.tgz",
+      "integrity": "sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/node-releases": {
       "version": "2.0.27",
+      "resolved": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.27.tgz",
+      "integrity": "sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==",
       "dev": true,
       "license": "MIT"
     },
     "node_modules/object-assign": {
       "version": "4.1.1",
+      "resolved": "https://registry.npmjs.org/object-assign/-/object-assign-4.1.1.tgz",
+      "integrity": "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==",
       "license": "MIT",
       "engines": {
         "node": ">=0.10.0"
@@ -12008,6 +14001,8 @@ server {
     },
     "node_modules/optionator": {
       "version": "0.9.4",
+      "resolved": "https://registry.npmjs.org/optionator/-/optionator-0.9.4.tgz",
+      "integrity": "sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12024,6 +14019,8 @@ server {
     },
     "node_modules/p-limit": {
       "version": "3.1.0",
+      "resolved": "https://registry.npmjs.org/p-limit/-/p-limit-3.1.0.tgz",
+      "integrity": "sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12038,6 +14035,8 @@ server {
     },
     "node_modules/p-locate": {
       "version": "5.0.0",
+      "resolved": "https://registry.npmjs.org/p-locate/-/p-locate-5.0.0.tgz",
+      "integrity": "sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12052,6 +14051,8 @@ server {
     },
     "node_modules/parent-module": {
       "version": "1.0.1",
+      "resolved": "https://registry.npmjs.org/parent-module/-/parent-module-1.0.1.tgz",
+      "integrity": "sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==",
       "license": "MIT",
       "dependencies": {
         "callsites": "^3.0.0"
@@ -12080,6 +14081,8 @@ server {
     },
     "node_modules/path-exists": {
       "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/path-exists/-/path-exists-4.0.0.tgz",
+      "integrity": "sha512-ak9Qy5Q7jYb2Wwcey5Fpvg2KoAc/ZIhLSLOSBmRmygPsGwkVVt0fZa0qrtMz+m6tJTAHfZQ8FnmB4MG4LWy7/w==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12088,6 +14091,8 @@ server {
     },
     "node_modules/path-key": {
       "version": "3.1.1",
+      "resolved": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz",
+      "integrity": "sha512-ojmeN0qd+y0jszEtoY48r0Peq5dwMEkIlCOu6Q5f41lfkswXuKtYrhgoTpLnyIcHm24Uhqx+5Tqm2InSwLhE6Q==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12111,10 +14116,14 @@ server {
     },
     "node_modules/picocolors": {
       "version": "1.1.1",
+      "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+      "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
       "license": "ISC"
     },
     "node_modules/picomatch": {
       "version": "4.0.3",
+      "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.3.tgz",
+      "integrity": "sha512-5gTmgEY/sqK6gFXLIsQNH19lWb4ebPDLA4SdLP7dsWkIXHWlG66oPuVvXSGFPppYZz8ZDZq0dYYrbHfBCVUb1Q==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12126,6 +14135,8 @@ server {
     },
     "node_modules/postcss": {
       "version": "8.5.6",
+      "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.6.tgz",
+      "integrity": "sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==",
       "dev": true,
       "funding": [
         {
@@ -12153,6 +14164,8 @@ server {
     },
     "node_modules/prelude-ls": {
       "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/prelude-ls/-/prelude-ls-1.2.1.tgz",
+      "integrity": "sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12161,6 +14174,8 @@ server {
     },
     "node_modules/prop-types": {
       "version": "15.8.1",
+      "resolved": "https://registry.npmjs.org/prop-types/-/prop-types-15.8.1.tgz",
+      "integrity": "sha512-oj87CgZICdulUohogVAR7AjlC0327U4el4L6eAvOqCeudMDVU0NThNaV+b9Df4dXgSP1gXMTnPdhfe/2qDH5cg==",
       "license": "MIT",
       "dependencies": {
         "loose-envify": "^1.4.0",
@@ -12170,14 +14185,20 @@ server {
     },
     "node_modules/prop-types/node_modules/react-is": {
       "version": "16.13.1",
+      "resolved": "https://registry.npmjs.org/react-is/-/react-is-16.13.1.tgz",
+      "integrity": "sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==",
       "license": "MIT"
     },
     "node_modules/proxy-from-env": {
       "version": "1.1.0",
+      "resolved": "https://registry.npmjs.org/proxy-from-env/-/proxy-from-env-1.1.0.tgz",
+      "integrity": "sha512-D+zkORCbA9f1tdWRK0RaCR3GPv50cMxcrz4X8k5LTSUD1Dkw47mKJEZQNunItRTkWwgtaUSo1RVFRIG9ZXiFYg==",
       "license": "MIT"
     },
     "node_modules/punycode": {
       "version": "2.3.1",
+      "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+      "integrity": "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12186,6 +14207,8 @@ server {
     },
     "node_modules/react": {
       "version": "19.2.3",
+      "resolved": "https://registry.npmjs.org/react/-/react-19.2.3.tgz",
+      "integrity": "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA==",
       "license": "MIT",
       "engines": {
         "node": ">=0.10.0"
@@ -12193,6 +14216,8 @@ server {
     },
     "node_modules/react-dom": {
       "version": "19.2.3",
+      "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.3.tgz",
+      "integrity": "sha512-yELu4WmLPw5Mr/lmeEpox5rw3RETacE++JgHqQzd2dg+YbJuat3jH4ingc+WPZhxaoFzdv9y33G+F7Nl5O0GBg==",
       "license": "MIT",
       "dependencies": {
         "scheduler": "^0.27.0"
@@ -12203,10 +14228,14 @@ server {
     },
     "node_modules/react-is": {
       "version": "19.2.3",
+      "resolved": "https://registry.npmjs.org/react-is/-/react-is-19.2.3.tgz",
+      "integrity": "sha512-qJNJfu81ByyabuG7hPFEbXqNcWSU3+eVus+KJs+0ncpGfMyYdvSmxiJxbWR65lYi1I+/0HBcliO029gc4F+PnA==",
       "license": "MIT"
     },
     "node_modules/react-refresh": {
       "version": "0.18.0",
+      "resolved": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.18.0.tgz",
+      "integrity": "sha512-QgT5//D3jfjJb6Gsjxv0Slpj23ip+HtOpnNgnb2S5zU3CB26G/IDPGoy4RJB42wzFE46DRsstbW6tKHoKbhAxw==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12215,6 +14244,8 @@ server {
     },
     "node_modules/react-router": {
       "version": "7.11.0",
+      "resolved": "https://registry.npmjs.org/react-router/-/react-router-7.11.0.tgz",
+      "integrity": "sha512-uI4JkMmjbWCZc01WVP2cH7ZfSzH91JAZUDd7/nIprDgWxBV1TkkmLToFh7EbMTcMak8URFRa2YoBL/W8GWnCTQ==",
       "license": "MIT",
       "dependencies": {
         "cookie": "^1.0.1",
@@ -12235,6 +14266,8 @@ server {
     },
     "node_modules/react-router-dom": {
       "version": "7.11.0",
+      "resolved": "https://registry.npmjs.org/react-router-dom/-/react-router-dom-7.11.0.tgz",
+      "integrity": "sha512-e49Ir/kMGRzFOOrYQBdoitq3ULigw4lKbAyKusnvtDu2t4dBX4AGYPrzNvorXmVuOyeakai6FUPW5MmibvVG8g==",
       "license": "MIT",
       "dependencies": {
         "react-router": "7.11.0"
@@ -12249,6 +14282,8 @@ server {
     },
     "node_modules/react-transition-group": {
       "version": "4.4.5",
+      "resolved": "https://registry.npmjs.org/react-transition-group/-/react-transition-group-4.4.5.tgz",
+      "integrity": "sha512-pZcd1MCJoiKiBR2NRxeCRg13uCXbydPnmB4EOeRrY7480qNWO8IIgQG6zlDkm6uRMsURXPuKq0GWtiM59a5Q6g==",
       "license": "BSD-3-Clause",
       "dependencies": {
         "@babel/runtime": "^7.5.5",
@@ -12263,6 +14298,8 @@ server {
     },
     "node_modules/reselect": {
       "version": "5.1.1",
+      "resolved": "https://registry.npmjs.org/reselect/-/reselect-5.1.1.tgz",
+      "integrity": "sha512-K/BG6eIky/SBpzfHZv/dd+9JBFiS4SWV7FIujVyJRux6e45+73RaUHXLmIR1f7WOMaQ0U1km6qwklRQxpJJY0w==",
       "license": "MIT"
     },
     "node_modules/resolve": {
@@ -12287,6 +14324,8 @@ server {
     },
     "node_modules/resolve-from": {
       "version": "4.0.0",
+      "resolved": "https://registry.npmjs.org/resolve-from/-/resolve-from-4.0.0.tgz",
+      "integrity": "sha512-pb/MYmXstAkysRFx8piNI1tGFNQIFA3vkE3Gq4EuA1dF6gHp/+vgZqsCGJapvy8N3Q+4o7FwvquPJcnZ7RYy4g==",
       "license": "MIT",
       "engines": {
         "node": ">=4"
@@ -12294,6 +14333,8 @@ server {
     },
     "node_modules/rollup": {
       "version": "4.54.0",
+      "resolved": "https://registry.npmjs.org/rollup/-/rollup-4.54.0.tgz",
+      "integrity": "sha512-3nk8Y3a9Ea8szgKhinMlGMhGMw89mqule3KWczxhIzqudyHdCIOHw8WJlj/r329fACjKLEh13ZSk7oE22kyeIw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12334,10 +14375,14 @@ server {
     },
     "node_modules/scheduler": {
       "version": "0.27.0",
+      "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz",
+      "integrity": "sha512-eNv+WrVbKu1f3vbYJT/xtiF5syA5HPIMtf9IgY/nKg0sWqzAUEvqY/xm7OcZc/qafLx/iO9FgOmeSAp4v5ti/Q==",
       "license": "MIT"
     },
     "node_modules/semver": {
       "version": "6.3.1",
+      "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
+      "integrity": "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==",
       "dev": true,
       "license": "ISC",
       "bin": {
@@ -12346,10 +14391,14 @@ server {
     },
     "node_modules/set-cookie-parser": {
       "version": "2.7.2",
+      "resolved": "https://registry.npmjs.org/set-cookie-parser/-/set-cookie-parser-2.7.2.tgz",
+      "integrity": "sha512-oeM1lpU/UvhTxw+g3cIfxXHyJRc/uidd3yK1P242gzHds0udQBYzs3y8j4gCCW+ZJ7ad0yctld8RYO+bdurlvw==",
       "license": "MIT"
     },
     "node_modules/shebang-command": {
       "version": "2.0.0",
+      "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz",
+      "integrity": "sha512-kHxr2zZpYtdmrN1qDjrrX/Z1rR1kG8Dx+gkpK1G4eXmvXswmcE1hTWBWYUzlraYw1/yZp6YuDY77YtvbN0dmDA==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12361,6 +14410,8 @@ server {
     },
     "node_modules/shebang-regex": {
       "version": "3.0.0",
+      "resolved": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz",
+      "integrity": "sha512-7++dFhtcx3353uBaq8DDR4NuxBetBzC7ZQOhmTQInHEd6bSrXdiEyzCvG07Z44UYdLShWUyXt5M/yhz8ekcb1A==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12378,6 +14429,8 @@ server {
     },
     "node_modules/source-map-js": {
       "version": "1.2.1",
+      "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz",
+      "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==",
       "dev": true,
       "license": "BSD-3-Clause",
       "engines": {
@@ -12386,6 +14439,8 @@ server {
     },
     "node_modules/strip-json-comments": {
       "version": "3.1.1",
+      "resolved": "https://registry.npmjs.org/strip-json-comments/-/strip-json-comments-3.1.1.tgz",
+      "integrity": "sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12397,10 +14452,14 @@ server {
     },
     "node_modules/stylis": {
       "version": "4.2.0",
+      "resolved": "https://registry.npmjs.org/stylis/-/stylis-4.2.0.tgz",
+      "integrity": "sha512-Orov6g6BB1sDfYgzWfTHDOxamtX1bE/zo104Dh9e6fqJ3PooipYyfJ0pUmrZO2wAvO8YbEyeFrkV91XTsGMSrw==",
       "license": "MIT"
     },
     "node_modules/supports-color": {
       "version": "7.2.0",
+      "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-7.2.0.tgz",
+      "integrity": "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12424,6 +14483,8 @@ server {
     },
     "node_modules/tinyglobby": {
       "version": "0.2.15",
+      "resolved": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.15.tgz",
+      "integrity": "sha512-j2Zq4NyQYG5XMST4cbs02Ak8iJUdxRM0XI5QyxXuZOzKOINmWurp3smXu3y5wDcJrptwpSjgXHzIQxR0omXljQ==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12439,6 +14500,8 @@ server {
     },
     "node_modules/type-check": {
       "version": "0.4.0",
+      "resolved": "https://registry.npmjs.org/type-check/-/type-check-0.4.0.tgz",
+      "integrity": "sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12450,6 +14513,8 @@ server {
     },
     "node_modules/update-browserslist-db": {
       "version": "1.2.3",
+      "resolved": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.2.3.tgz",
+      "integrity": "sha512-Js0m9cx+qOgDxo0eMiFGEueWztz+d4+M3rGlmKPT+T4IS/jP4ylw3Nwpu6cpTTP8R1MAC1kF4VbdLt3ARf209w==",
       "dev": true,
       "funding": [
         {
@@ -12479,6 +14544,8 @@ server {
     },
     "node_modules/uri-js": {
       "version": "4.4.1",
+      "resolved": "https://registry.npmjs.org/uri-js/-/uri-js-4.4.1.tgz",
+      "integrity": "sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==",
       "dev": true,
       "license": "BSD-2-Clause",
       "dependencies": {
@@ -12487,6 +14554,8 @@ server {
     },
     "node_modules/use-sync-external-store": {
       "version": "1.6.0",
+      "resolved": "https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz",
+      "integrity": "sha512-Pp6GSwGP/NrPIrxVFAIkOQeyw8lFenOHijQWkUTrDvrF4ALqylP2C/KCkeS9dpUM3KvYRQhna5vt7IL95+ZQ9w==",
       "license": "MIT",
       "peerDependencies": {
         "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
@@ -12494,6 +14563,8 @@ server {
     },
     "node_modules/vite": {
       "version": "7.3.0",
+      "resolved": "https://registry.npmjs.org/vite/-/vite-7.3.0.tgz",
+      "integrity": "sha512-dZwN5L1VlUBewiP6H9s2+B3e3Jg96D0vzN+Ry73sOefebhYr9f94wwkMNN/9ouoU8pV1BqA1d1zGk8928cx0rg==",
       "dev": true,
       "license": "MIT",
       "dependencies": {
@@ -12567,6 +14638,8 @@ server {
     },
     "node_modules/which": {
       "version": "2.0.2",
+      "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz",
+      "integrity": "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA==",
       "dev": true,
       "license": "ISC",
       "dependencies": {
@@ -12581,6 +14654,8 @@ server {
     },
     "node_modules/word-wrap": {
       "version": "1.2.5",
+      "resolved": "https://registry.npmjs.org/word-wrap/-/word-wrap-1.2.5.tgz",
+      "integrity": "sha512-BN22B5eaMMI9UMtjrGd5g5eCYPpCPDUy0FJXbYsaT5zYxjFOckS53SQDE3pWkVoWpHXVb3BrYcEN4Twa55B5cA==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12589,11 +14664,15 @@ server {
     },
     "node_modules/yallist": {
       "version": "3.1.1",
+      "resolved": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
+      "integrity": "sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==",
       "dev": true,
       "license": "ISC"
     },
     "node_modules/yocto-queue": {
       "version": "0.1.0",
+      "resolved": "https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz",
+      "integrity": "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -12605,6 +14684,8 @@ server {
     },
     "node_modules/zod": {
       "version": "4.3.4",
+      "resolved": "https://registry.npmjs.org/zod/-/zod-4.3.4.tgz",
+      "integrity": "sha512-Zw/uYiiyF6pUT1qmKbZziChgNPRu+ZRneAsMUDU6IwmXdWt5JwcUfy2bvLOCUtz5UniaN/Zx5aFttZYbYc7O/A==",
       "dev": true,
       "license": "MIT",
       "funding": {
@@ -12613,6 +14694,8 @@ server {
     },
     "node_modules/zod-validation-error": {
       "version": "4.0.2",
+      "resolved": "https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz",
+      "integrity": "sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==",
       "dev": true,
       "license": "MIT",
       "engines": {
@@ -17653,6 +19736,7 @@ export default defineConfig({
     ├── .gitignore
     ├── AUTHENTICATION_README.md
     ├── Dockerfile
+    ├── SETUP_AND_UI_REFERENCE.md
     ├── eslint.config.js
     ├── index.html
     ├── nginx.conf
@@ -17673,6 +19757,9 @@ export default defineConfig({
 
 
 ============== frontend/Dockerfile ==============
+
+
+============== frontend/SETUP_AND_UI_REFERENCE.md ==============
 
 
 ============== frontend/eslint.config.js ==============
@@ -17809,7 +19896,671 @@ export default defineConfig({
 
 ============== frontend/vite.config.js ==============
 
-FROM eclipse-temurin:21-jre
+# Infrastructure & Docker - Setup & Services Reference Guide
+
+## Overview
+
+This folder contains Docker Compose configuration and infrastructure services for the API Monitoring Platform. It includes PostgreSQL for data storage, OpenSearch for log aggregation, and Fluentd for log forwarding.
+
+**Default Ports:**
+- PostgreSQL: 5433 → 5432
+- OpenSearch: 9200, 9600
+- Fluentd: 24224 (TCP/UDP), 9880 (HTTP), 24231 (Prometheus), 8888 (Health)
+
+---
+
+## Table of Contents
+
+1. [Quick Start](#quick-start)
+2. [Services](#services)
+3. [Configuration](#configuration)
+4. [Starting Services](#starting-services)
+5. [Stopping Services](#stopping-services)
+6. [Data Persistence](#data-persistence)
+7. [Health Checks](#health-checks)
+8. [Network Configuration](#network-configuration)
+9. [Log Forwarding](#log-forwarding)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Quick Start
+
+### Start All Services
+
+```powershell
+cd infrastructure/docker
+docker-compose up -d
+```
+
+### Check Status
+
+```powershell
+docker-compose ps
+```
+
+### View Logs
+
+```powershell
+docker-compose logs -f
+```
+
+---
+
+## Services
+
+### 1. PostgreSQL
+
+**Container:** `postgres`
+**Image:** `postgres:16`
+**Port:** `5433:5432` (mapped to localhost:5433)
+
+**Environment Variables:**
+| Variable | Value |
+|----------|-------|
+| POSTGRES_DB | api_monitoring |
+| POSTGRES_USER | api_monitor |
+| POSTGRES_PASSWORD | api_monitor_pwd |
+
+**Purpose:** Primary database for storing:
+- Metrics
+- Traces
+- Anomalies
+- Alerts
+
+**Storage:** Docker volume `postgres_data`
+
+**Health Check:**
+```bash
+pg_isready -U api_monitor -d api_monitoring
+```
+
+---
+
+### 2. OpenSearch
+
+**Container:** `opensearch`
+**Image:** `opensearchproject/opensearch:2.17.0`
+**Ports:**
+- 9200:9200 (REST API)
+- 9600:9600 (Performance Analyzer)
+
+**Environment Variables:**
+| Variable | Value |
+|----------|-------|
+| cluster.name | docker-cluster |
+| node.name | opensearch-node1 |
+| OPENSEARCH_JAVA_OPTS | -Xms512m -Xmx512m |
+| OPENSEARCH_INITIAL_ADMIN_PASSWORD | Admin123! |
+| DISABLE_SECURITY_PLUGIN | true |
+
+**Purpose:** Log storage and search engine
+
+**Storage:** Docker volume `opensearch_data`
+
+**Health Check:**
+```bash
+curl -s http://localhost:9200 >/dev/null
+```
+
+**Usage:**
+- Access OpenSearch Dashboards: http://localhost:9200
+- Username: admin
+- Password: Admin123!
+
+---
+
+### 3. Fluentd
+
+**Container:** `fluentd`
+**Build:** `./fluentd/Dockerfile`
+**Ports:**
+- 24224:24224 (TCP Forward)
+- 24224:24224/udp (UDP Forward)
+- 9880:9880 (HTTP Input)
+- 24231:24231 (Prometheus)
+- 8888:8888 (Health)
+
+**Purpose:** Log collection and forwarding to OpenSearch
+
+**Config File:** `fluent.conf`
+
+**Storage:** Docker volume `fluentd_buffer`
+
+**Health Check:**
+```bash
+wget --spider -q http://127.0.0.1:8888/api/plugins.json
+```
+
+---
+
+## Configuration Files
+
+### docker-compose.yml
+
+The main orchestration file defining all services.
+
+**Key Sections:**
+
+```yaml
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: api_monitoring
+      POSTGRES_USER: api_monitor
+      POSTGRES_PASSWORD: api_monitor_pwd
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U api_monitor -d api_monitoring"]
+    restart: unless-stopped
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.0
+    environment:
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+
+  fluentd:
+    build:
+      context: ./fluentd
+      dockerfile: Dockerfile
+    volumes:
+      - ./fluent.conf:/fluentd/etc/fluent.conf:ro
+
+networks:
+  monitoring-net:
+
+volumes:
+  postgres_data:
+  opensearch_data:
+  fluentd_buffer:
+```
+
+---
+
+### fluent.conf
+
+Fluentd configuration for log collection and forwarding.
+
+**Input Sources:**
+
+| Source | Port | Protocol | Purpose |
+|--------|------|----------|---------|
+| forward | 24224 | TCP | Fluentd forward protocol |
+| http | 9880 | HTTP | Direct POST from apps |
+| monitor_agent | 8888 | HTTP | Health check |
+| prometheus | 24231 | HTTP | Fluentd metrics |
+
+**Output:**
+
+- **Primary:** OpenSearch (opensearch:9200)
+- **Secondary:** stdout (fallback)
+
+**Index Configuration:**
+- Index prefix: `logs`
+- Daily indices: `logs-2026.04.11`
+- Logstash format: enabled
+
+**Buffer Settings:**
+- Flush interval: 10 seconds
+- Buffer size: 512MB max
+- Retry: exponential backoff
+
+---
+
+## Starting Services
+
+### Start All Services
+
+```powershell
+cd infrastructure/docker
+docker-compose up -d
+```
+
+### Start Specific Service
+
+```powershell
+docker-compose up -d postgres
+docker-compose up -d opensearch
+docker-compose up -d fluentd
+```
+
+### Start with Logs
+
+```powershell
+docker-compose up
+```
+
+### Rebuild and Start
+
+```powershell
+docker-compose up --build -d
+```
+
+---
+
+## Stopping Services
+
+### Stop All Services
+
+```powershell
+docker-compose down
+```
+
+### Stop and Remove Volumes
+
+```powershell
+docker-compose down -v
+```
+
+### Stop and Remove Images
+
+```powershell
+docker-compose down --rmi all
+```
+
+### Stop and Remove Everything
+
+```powershell
+docker-compose down -v --rmi all
+```
+
+---
+
+## Data Persistence
+
+### Docker Volumes
+
+| Volume | Service | Purpose |
+|--------|---------|---------|
+| postgres_data | postgres | Database data |
+| opensearch_data | opensearch | Log indices |
+| fluentd_buffer | fluentd | Buffer files |
+
+### View Volumes
+
+```powershell
+docker volume ls
+```
+
+### Inspect Volume
+
+```powershell
+docker volume inspect infrastructure-docker_postgres_data
+```
+
+### Remove Unused Volumes
+
+```powershell
+docker volume prune
+```
+
+---
+
+## Health Checks
+
+### Check All Services
+
+```powershell
+docker-compose ps
+```
+
+All services have health checks configured:
+- PostgreSQL: `pg_isready`
+- OpenSearch: `curl localhost:9200`
+- Fluentd: `wget localhost:8888`
+
+### Check Specific Service Health
+
+```powershell
+docker inspect --format='{{.State.Health.Status}}' postgres
+docker inspect --format='{{.State.Health.Status}}' opensearch
+docker inspect --format='{{.State.Health.Status}}' fluentd
+```
+
+### Wait for Healthy Services
+
+```powershell
+docker-compose up -d
+docker-compose ps --format json | jq '.'
+docker-compose wait postgres opensearch
+```
+
+---
+
+## Network Configuration
+
+### Network Name
+
+`monitoring-net`
+
+All services are on the same Docker network for inter-service communication.
+
+### Service Communication
+
+| From | To | Address |
+|------|------|---------|
+| Backend | PostgreSQL | `postgres:5432` |
+| Fluentd | OpenSearch | `opensearch:9200` |
+| Frontend | Backend | `backend:8080` |
+
+### Access from Host
+
+| Service | Host Port | URL |
+|---------|----------|-----|
+| PostgreSQL | 5433 | localhost:5433 |
+| OpenSearch | 9200 | http://localhost:9200 |
+| Fluentd (HTTP) | 9880 | http://localhost:9880 |
+| Fluentd (Forward) | 24224 | fluentd://24224 |
+
+---
+
+## Log Forwarding
+
+### Send Logs via HTTP
+
+```bash
+# Send a log to Fluentd
+curl -X POST http://localhost:9880/app.logs \
+  -H "Content-Type: application/json" \
+  -d '{
+    "timestamp": "2026-04-11T10:30:00Z",
+    "level": "INFO",
+    "serviceName": "user-service",
+    "message": "User login successful"
+  }'
+```
+
+### Send Logs via Fluentd Forward
+
+```bash
+# Using fluent-logger (example)
+<source>
+  @type forward
+  port 24224
+</source>
+```
+
+### View Fluentd Logs
+
+```powershell
+docker-compose logs fluentd
+```
+
+### Check Fluentd Buffer
+
+```bash
+docker exec fluentd ls -la /fluentd/log/
+```
+
+---
+
+## Troubleshooting
+
+### Issue: PostgreSQL Connection Refused
+
+**Error:**
+```
+psql: could not connect to server
+```
+
+**Solution:**
+```powershell
+# Check container status
+docker ps | findstr postgres
+
+# Check logs
+docker-compose logs postgres
+
+# Restart PostgreSQL
+docker-compose restart postgres
+
+# Recreate container
+docker-compose up -d postgres
+```
+
+---
+
+### Issue: OpenSearch Not Responding
+
+**Error:**
+```
+curl: (7) Failed to connect
+```
+
+**Solution:**
+```powershell
+# Check OpenSearch logs
+docker-compose logs opensearch
+
+# Check memory limits (may need to increase)
+# OpenSearch requires at least 512MB and locked memory
+
+# Restart with more memory
+docker-compose up -d opensearch
+```
+
+---
+
+### Issue: Fluentd Not Forwarding Logs
+
+**Error:**
+Logs not appearing in OpenSearch
+
+**Solution:**
+```powershell
+# Check Fluentd logs
+docker-compose logs fluentd
+
+# Check buffer
+docker exec fluentd ls /fluentd/log/
+
+# Check OpenSearch connection
+docker exec fluentd wget -qO- http://opensearch:9200
+
+# Restart Fluentd
+docker-compose restart fluentd
+```
+
+---
+
+### Issue: Port Already in Use
+
+**Error:**
+```
+Bind for 0.0.0.0:5433 failed: port is already allocated
+```
+
+**Solution:**
+```powershell
+# Find process using port
+netstat -ano | findstr 5433
+
+# Stop conflicting service or change port in docker-compose.yml
+```
+
+---
+
+### Issue: Out of Disk Space
+
+**Error:**
+```
+No space left on device
+```
+
+**Solution:**
+```powershell
+# Clean up Docker
+docker system prune -a
+
+# Prune volumes
+docker volume prune
+
+# Prune build cache
+docker builder prune
+```
+
+---
+
+### Issue: Services Won't Start
+
+**Error:**
+```
+level=error msg="failed to start"
+```
+
+**Solution:**
+```powershell
+# Check for port conflicts
+docker-compose ps
+
+# Check for volume conflicts
+docker volume ls
+
+# Clean start
+docker-compose down
+docker-compose up -d
+```
+
+---
+
+## Common Commands
+
+### View All Containers
+
+```powershell
+docker ps -a
+```
+
+### View Logs
+
+```powershell
+docker-compose logs -f postgres
+docker-compose logs -f opensearch
+docker-compose logs -f fluentd
+```
+
+### Execute Command in Container
+
+```powershell
+# PostgreSQL
+docker exec -it postgres psql -U api_monitor -d api_monitoring
+
+# OpenSearch
+docker exec -it opensearch ls /usr/share/opensearch/data
+
+# Fluentd
+docker exec -it fluentd ls /fluentd/log/
+```
+
+### Backup PostgreSQL
+
+```powershell
+docker exec postgres pg_dump -U api_monitor api_monitoring > backup.sql
+```
+
+### Restore PostgreSQL
+
+```powershell
+docker exec -i postgres psql -U api_monitor api_monitoring < backup.sql
+```
+
+---
+
+## Environment Variables Reference
+
+### PostgreSQL
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| POSTGRES_DB | Database name | api_monitoring |
+| POSTGRES_USER | Database user | api_monitor |
+| POSTGRES_PASSWORD | Database password | api_monitor_pwd |
+
+### OpenSearch
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| cluster.name | Cluster name | docker-cluster |
+| node.name | Node name | opensearch-node1 |
+| OPENSEARCH_JAVA_OPTS | JVM options | -Xms512m -Xmx512m |
+| OPENSEARCH_INITIAL_ADMIN_PASSWORD | Admin password | Admin123! |
+| DISABLE_SECURITY_PLUGIN | Disable security | true |
+
+### Fluentd
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| FLUENTD_CONF | Config file | fluent.conf |
+| OPENSEARCH_HOST | OpenSearch host | opensearch |
+| OPENSEARCH_PORT | OpenSearch port | 9200 |
+
+---
+
+## Related Files
+
+| File | Description |
+|------|-------------|
+| docker-compose.yml | Main orchestration |
+| fluent.conf | Fluentd configuration |
+| fluentd/Dockerfile | Fluentd image |
+| init-scripts/*.sql | Database initialization |
+| backup.sql | Database backup template |
+
+---
+
+## Quick Reference
+
+### Start All
+
+```powershell
+docker-compose up -d
+```
+
+### Stop All
+
+```powershell
+docker-compose down
+```
+
+### Check Status
+
+```powershell
+docker-compose ps
+```
+
+### View Logs
+
+```powershell
+docker-compose logs -f
+```
+
+### Connect to PostgreSQL
+
+```powershell
+docker exec -it postgres psql -U api_monitor -d api_monitoring
+```
+
+### Test OpenSearch
+
+```powershell
+curl http://localhost:9200
+```
+
+### Test Fluentd
+
+```powershell
+curl http://localhost:9880
+```FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
@@ -18553,6 +21304,31 @@ services:
     #         retries: 3
     #     restart: unless-stopped
 
+    vault:
+        image: hashicorp/vault:1.15
+        container_name: vault
+        environment:
+            - VAULT_ADDR=http://0.0.0.0:8200
+            - VAULT_API_ADDR=http://vault:8200
+            - VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200
+            - VAULT_DEV_ROOT_TOKEN_ID=root_token
+            - VAULT_SEAL_TYPE=shamir
+        ports:
+            - "8200:8200"
+        volumes:
+            - vault_data:/vault/data
+            - ./vault/config.hcl:/vault/config.hcl:ro
+        networks:
+            - monitoring-net
+        healthcheck:
+            test: ["CMD", "wget", "--spider", "-q", "http://localhost:8200/v1/sys/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+        cap_add:
+            - IPC_LOCK
+
 networks:
     monitoring-net:
 
@@ -18560,7 +21336,104 @@ volumes:
     postgres_data:
     opensearch_data:
     fluentd_buffer:
-######################################################################
+    vault_data:
+# Fluent Bit Configuration for Legacy Application Support
+# This config collects logs from files written by legacy applications
+
+[SERVICE]
+    Flush        5
+    Daemon       Off
+    Log_Level    info
+    Parsers_File parsers.conf
+
+# ===========================================
+# INPUT: Tail log files
+# ===========================================
+
+[INPUT]
+    Name              tail
+    Path              /var/log/legacy/*.log
+    Parser            json
+    Tag               legacy.app
+    DB                /var/log/flb/legacy_app.db
+    Refresh_Interval   5
+
+# ===========================================
+# INPUT: Parse JSON logs from Log4j2
+# ===========================================
+
+[INPUT]
+    Name              tail
+    Path              /var/log/app.log
+    Parser            log4j2
+    Tag               log4j.app
+    DB                /var/log/flb/log4j_app.db
+    Refresh_Interval   5
+
+# ===========================================
+# FILTER: Add metadata
+# ===========================================
+
+[FILTER]
+    Name                record_modifier
+    Match              legacy.*
+    Record             hostname ${HOSTNAME}
+    Record             collector fluent-bit
+
+[FILTER]
+    Name                record_modifier
+    Match              log4j.*
+    Record             hostname ${HOSTNAME}
+    Record             collector fluent-bit
+    Record             log_format log4j2
+
+# ===========================================
+# OUTPUT: Forward to Fluentd
+# ===========================================
+
+[OUTPUT]
+    Name                forward
+    Match               *
+    Host                fluentd
+    Port                24224
+    Retry_Limit         False
+
+# ===========================================
+# OUTPUT: Also send to stdout for debugging
+# ===========================================
+
+[OUTPUT]
+    Name                stdout
+    Match               *
+    Format             json
+    JSON_Format        json# Fluent Bit Parsers Configuration
+# Parsers for different log formats
+
+[PARSER]
+    Name        json
+    Format      json
+    Time_Key    timestamp
+    Time_Format %Y-%m-%dT%H:%M:%S.%L
+
+[PARSER]
+    Name        log4j2
+    Format      regex
+    Regex       ^(?<timestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z)\s+(?<level>\w+)\s+(?<message>.*)$
+    Time_Key    timestamp
+    Time_Format %Y-%m-%dT%H:%M:%S.%LZ
+
+[PARSER]
+    Name        syslog
+    Format      syslog
+    Time_Key    timestamp
+    Time_Format %b %d %H:%M:%S
+
+[PARSER]
+    Name        nginx
+    Format      regex
+    Regex       ^(?<remote_addr>[^ ]+)\s+-\s+(?<remote_user>[^ ]+)\s+\[(?<timestamp>[^\]]+)\]\s+"(?<request>[^"]+)"\s+(?<status>\d+)\s+(?<body_bytes_sent>\d+)\s+"(?<http_referer>[^"]+)"\s+"(?<http_user_agent>[^"]+)"
+    Time_Key    timestamp
+    Time_Format %d/%b/%Y:%H:%M:%S %z######################################################################
 # Fluentd Configuration for API Monitoring Platform
 # Architecture: Option B - Logs Only Path
 #
@@ -19227,11 +22100,131 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO api_monitor;
 GRANT ALL PRIVILEGES ON DATABASE api_monitoring TO api_monitor;
 \connect api_monitoring;
 GRANT ALL ON SCHEMA public TO api_monitor;
-/mnt/c/stack/project/AI-Powered-API-Monitoring-And-Multi-Source-Anomaly-Identification-Model-For-Distributed-Platforms
+# OpenTelemetry Collector Configuration
+# For collecting telemetry from cloud services and SaaS applications
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+receivers:
+  # OTLP receiver for gRPC
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus metrics receiver
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    config:
+      scrape_configs:
+        - job_name: 'otel-collector'
+          static_configs:
+            - targets: [localhost:8889]
+
+processors:
+  # Batchprocessor for efficient data transfer
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+    send_batch_max_size: 2000
+
+  # Memory limiter to prevent OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+  # Add resource attributes
+  resource:
+    attributes:
+      - key: service.name
+        value: otel-collector
+        action: upsert
+      - key: deployment.environment
+        value: production
+        action: upsert
+
+exporters:
+  # Forward to Fluentd
+  fluentdforward:
+    endpoint: fluentd:24224
+    tls:
+      insecure: true
+
+  # Debug exporter for testing
+  logging:
+    loglevel: debug
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch, memory_limiter, resource]
+      exporters: [fluentdforward, logging]
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [batch, memory_limiter, resource]
+      exporters: [fluentdforward, logging]
+    logs:
+      receivers: [otlp]
+      processors: [batch, memory_limiter, resource]
+      exporters: [fluentdforward, logging]# Vault Configuration for Production Mode
+# For development, we use dev mode. For production, use this config.
+
+# listener "tcp" {
+#   tls_disable = 1
+#   address = "[::]:8200"
+#   cluster_address = "[::]:8201"
+# }
+
+# storage "raft" {
+#   path = "/vault/data"
+#   retry_join {
+#     leader_api_addr = "http://vault:8200"
+#   }
+# }
+
+# disable_mlock = true
+# ui = true
+# service_registration "kubernetes" {}
+
+# For demonstration, we'll use the file backend
+storage "file" {
+  path = "/vault/data"
+}
+
+# This is for development/demo only
+# In production, use backend storage like Consul or PostgreSQL
+
+listener "tcp" {
+  tls_disable = "true"
+  address = "0.0.0.0:8200"
+}
+
+elemetry {
+  prometheus_retention_time = "30s"
+  disable_hostname = "true"
+}
+
+ui = true
+
+# Log level
+log_level = "INFO"
+
+# Default lease duration
+default_lease_ttl = "3600"
+max_lease_ttl = "86400"/mnt/c/stack/project/AI-Powered-API-Monitoring-And-Multi-Source-Anomaly-Identification-Model-For-Distributed-Platforms
 └── infrastructure
     └── docker
         ├── backend
         │   └── Dockerfile
+        ├── fluent-bit
+        │   ├── fluent-bit.conf
+        │   └── parsers.conf
         ├── fluentd
         │   ├── Dockerfile
         │   ├── FLUENTD_QUICK_TEST.md
@@ -19244,9 +22237,17 @@ GRANT ALL ON SCHEMA public TO api_monitor;
         ├── init-scripts
         │   ├── 01-init-schema.sql
         │   └── 02-create-app-user.sql
+        ├── otel-collector
+        │   └── otel-collector-config.yaml
+        ├── vault
+        │   └── config.hcl
+        ├── SETUP_AND_SERVICES_REFERENCE.md
         ├── backup.sql
         ├── docker-compose.yml
         └── fluent.conf
+
+============== infrastructure/docker/SETUP_AND_SERVICES_REFERENCE.md ==============
+
 
 ============== infrastructure/docker/backend/Dockerfile ==============
 
@@ -19255,6 +22256,12 @@ GRANT ALL ON SCHEMA public TO api_monitor;
 
 
 ============== infrastructure/docker/docker-compose.yml ==============
+
+
+============== infrastructure/docker/fluent-bit/fluent-bit.conf ==============
+
+
+============== infrastructure/docker/fluent-bit/parsers.conf ==============
 
 
 ============== infrastructure/docker/fluent.conf ==============
@@ -19279,6 +22286,12 @@ GRANT ALL ON SCHEMA public TO api_monitor;
 
 
 ============== infrastructure/docker/init-scripts/02-create-app-user.sql ==============
+
+
+============== infrastructure/docker/otel-collector/otel-collector-config.yaml ==============
+
+
+============== infrastructure/docker/vault/config.hcl ==============
 
 # Flask Configuration
 FLASK_ENV=development
@@ -19348,7 +22361,822 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Start FastAPI server
 CMD ["python", "api_server.py"]
-from .app import create_app
+# ML Service - Setup & ML Reference Guide
+
+## Overview
+
+The ML Service is a Flask-based Python microservice that provides anomaly detection for the API Monitoring Platform. It uses multiple ML models to detect anomalies in API metrics, logs, and traces.
+
+**Tech Stack:**
+- Flask 2.3+ for REST API
+- PyTorch for deep learning models
+- TensorFlow for additional models
+- NumPy, Pandas, Scikit-learn for data processing
+
+**Access URL:** `http://localhost:9000`
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#prerequisites)
+2. [Starting the ML Service](#starting-the-ml-service)
+3. [Project Structure](#project-structure)
+4. [API Endpoints](#api-endpoints)
+5. [ML Models](#ml-models)
+6. [Request/Response Examples](#requestresponse-examples)
+7. [Configuration](#configuration)
+8. [Training](#training)
+9. [Building & Running](#building--running)
+10. [Integration with Backend](#integration-with-backend)
+11. [Troubleshooting](#troubleshooting)
+
+---
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|-------------|---------|-------|
+| Python | 3.8+ | Required for PyTorch/TensorFlow |
+| pip | 20+ | Package manager |
+| CUDA | 11.8+ | Optional for GPU acceleration |
+
+### Install Dependencies
+
+```powershell
+cd ml-service
+pip install -r requirements.txt
+```
+
+---
+
+## Starting the ML Service
+
+### Option 1: Run Directly
+
+```powershell
+cd ml-service/api
+python app_multimodal.py
+```
+
+### Option 2: Run with Flask
+
+```powershell
+cd ml-service/api
+flask run --host=0.0.0.0 --port=9000
+```
+
+### Option 3: Run with Gunicorn
+
+```powershell
+cd ml-service/api
+gunicorn -w 2 -b 0.0.0.0:9000 app_multimodal:app
+```
+
+### Option 4: Run with Docker
+
+```powershell
+cd ml-service
+docker build -t ml-service .
+docker run -d -p 9000:9000 ml-service
+```
+
+The ML service will start on **http://localhost:9000**
+
+---
+
+## Project Structure
+
+```
+ml-service/
+├── api/                    # Flask API
+│   ├── app_multimodal.py   # Main Flask app
+│   ├── routes.py         # API routes
+│   └── __init__.py
+├── src/                   # ML models
+│   ├── models/
+│   │   ├── hybrid_fusion.py      # Ensemble model
+│   │   ├── msif_lstm_model.py  # MSIF-LSTM model
+│   │   ├── ple_gru_model.py   # PLE-GRU model
+│   │   ├── metric_encoder.py
+│   │   ├── log_encoder.py
+│   │   └── trace_encoder.py
+│   └── __init__.py
+├── models/                 # Trained model weights
+│   ├── enhanced/
+│   │   ├── msif_lstm.pth
+│   │   └── ple_gru.pth
+│   ├── microservices/
+│   │   ├── microservices_lstm.h5
+│   │   └── microservices_plegru.h5
+│   └── encoders/
+│       ├── metric/
+│       ├── log/
+│       └── trace/
+├── config/
+│   └── settings.py
+├── training/               # Training scripts
+│   ├── pretrain/
+│   └── fusion/
+├── utils/
+├── requirements.txt
+└── Dockerfile
+```
+
+---
+
+## API Endpoints
+
+### Health Check
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Service health status |
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "device": "cpu",
+  "models_loaded": ["msif", "ple", "fusion"]
+}
+```
+
+---
+
+### Predict (Main Endpoint)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/predict` | Main prediction endpoint |
+
+**Request:**
+```json
+{
+  "response_time": 2500,
+  "status_code": 500,
+  "cpu_usage": 85.0,
+  "memory_usage": 70.0,
+  "error_rate": 0.15,
+  "request_count": 1500
+}
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "hybrid_score": 0.72,
+  "msif_score": 0.68,
+  "ple_score": 0.72,
+  "severity": "HIGH",
+  "fusion_method": "rule-based-fallback",
+  "confidence": 0.6
+}
+```
+
+---
+
+### Multimodal Predict
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/predict/multimodal` | Multi-source prediction |
+
+**Request:**
+```json
+{
+  "metrics": 0.5,
+  "logs": 0.3,
+  "traces": 0.8
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ANOMALY",
+  "final_score": 0.85,
+  "details": {
+    "msif_score": 0.82,
+    "ple_score": 0.78,
+    "fusion_method": "weighted_ensemble",
+    "model_agreement": 0.04
+  }
+}
+```
+
+---
+
+### Test Predict
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/predict/test` | Test with controllable scores |
+
+**Request:**
+```json
+{
+  "msif_score": 0.9,
+  "ple_score": 0.85
+}
+```
+
+**Response:**
+```json
+{
+  "status": "ANOMALY",
+  "final_score": 0.88,
+  "details": {
+    "msif_score": 0.9,
+    "ple_score": 0.85,
+    "fusion_method": "weighted_ensemble",
+    "model_agreement": 0.05
+  }
+}
+```
+
+---
+
+### Model Info
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/model-info` | Get model information |
+
+**Response:**
+```json
+{
+  "service": "ml-anomaly-detection",
+  "version": "1.0.0",
+  "models": {
+    "msif_lstm": {
+      "name": "Multi-Scale Isolation Forest + LSTM",
+      "window_size": 60,
+      "features": ["response_time", "cpu", "memory", "error_rate", "request_count"]
+    },
+    "ple_gru": {
+      "name": "Probabilistic Label Enhancement + GRU",
+      "window_size": 1440,
+      "features": 7
+    }
+  },
+  "fusion": {
+    "method": "Hybrid weighted combination",
+    "msif_weight": 0.6,
+    "ple_weight": 0.4,
+    "threshold": 0.7
+  }
+}
+```
+
+---
+
+## ML Models
+
+### 1. MSIF-LSTM (Multi-Scale Isolation Forest + LSTM)
+
+**Purpose:** 60-minute window anomaly detection
+
+**Architecture:**
+- Embedding dimension: 3
+- LSTM hidden dimension: 64
+- Hybrid of Isolation Forest + LSTM
+
+**Features:**
+- response_time
+- cpu_usage
+- memory_usage
+- error_rate
+- request_count
+
+**Window:** 60 timesteps
+
+**File:** `models/enhanced/msif_lstm.pth`
+
+---
+
+### 2. PLE-GRU (Probabilistic Label Enhancement + GRU)
+
+**Purpose:** 24-hour window anomaly detection
+
+**Architecture:**
+- Embedding dimension: 3
+- GRU hidden dimension: 64
+- Number of experts: 3
+- Probabilistic Label Enhancement
+
+**Features:** 7 features
+
+**Window:** 1440 timesteps (24 hours at 1 min intervals)
+
+**File:** `models/enhanced/ple_gru.pth`
+
+---
+
+### 3. Hybrid Fusion
+
+**Purpose:** Combine MSIF-LSTM and PLE-GRU scores
+
+**Methods:**
+- `weighted_ensemble` - Weighted average
+- `max_ensemble` - Maximum of both
+- `rule_based_fallback` - Rule-based scoring (default)
+
+**Weights:**
+```python
+RULE_BASED_WEIGHTS = {
+    'status_5xx': 0.40,
+    'high_error': 0.30,
+    'slow_response': 0.20,
+    'high_cpu': 0.10,
+    'high_memory': 0.10,
+}
+```
+
+---
+
+### Severity Levels
+
+| Score Range | Severity |
+|-------------|----------|
+| 0.80 - 1.00 | CRITICAL |
+| 0.60 - 0.79 | HIGH |
+| 0.40 - 0.59 | MEDIUM |
+| 0.20 - 0.39 | LOW |
+| 0.00 - 0.19 | NORMAL |
+
+---
+
+## Request/Response Examples
+
+### Example 1: High Error Rate
+
+**Request:**
+```bash
+curl -X POST http://localhost:9000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "response_time": 250,
+    "status_code": 200,
+    "cpu_usage": 45.0,
+    "memory_usage": 60.0,
+    "error_rate": 0.45,
+    "request_count": 1000
+  }'
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "hybrid_score": 0.72,
+  "msif_score": 0.648,
+  "ple_score": 0.72,
+  "severity": "HIGH",
+  "fusion_method": "rule-based-fallback",
+  "confidence": 0.6
+}
+```
+
+---
+
+### Example 2: Server Error
+
+**Request:**
+```bash
+curl -X POST http://localhost:9000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "response_time": 5200,
+    "status_code": 500,
+    "cpu_usage": 95.0,
+    "memory_usage": 90.0,
+    "error_rate": 0.35,
+    "request_count": 500
+  }'
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "hybrid_score": 0.9,
+  "msif_score": 0.81,
+  "ple_score": 0.9,
+  "severity": "CRITICAL",
+  "fusion_method": "rule-based-fallback",
+  "confidence": 0.6
+}
+```
+
+---
+
+### Example 3: Normal Request
+
+**Request:**
+```bash
+curl -X POST http://localhost:9000/predict \
+  -H "Content-Type: application/json" \
+  -d '{
+    "response_time": 125,
+    "status_code": 200,
+    "cpu_usage": 35.0,
+    "memory_usage": 45.0,
+    "error_rate": 0.01,
+    "request_count": 1500
+  }'
+```
+
+**Response:**
+```json
+{
+  "status": "success",
+  "hybrid_score": 0.04,
+  "msif_score": 0.036,
+  "ple_score": 0.04,
+  "severity": "NORMAL",
+  "fusion_method": "rule-based-fallback",
+  "confidence": 0.6
+}
+```
+
+---
+
+### Example 4: Multimodal Prediction
+
+**Request:**
+```bash
+curl -X POST http://localhost:9000/predict/multimodal \
+  -H "Content-Type: application/json" \
+  -d '{
+    "metrics": 0.8,
+    "logs": 0.6,
+    "traces": 0.9
+  }'
+```
+
+**Response:**
+```json
+{
+  "status": "ANOMALY",
+  "final_score": 0.88,
+  "details": {
+    "msif_score": 0.85,
+    "ple_score": 0.82,
+    "fusion_method": "weighted_ensemble",
+    "model_agreement": 0.03
+  }
+}
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file in `ml-service/`:
+
+```bash
+# Service
+SERVICE_NAME=ml-anomaly-detection
+VERSION=1.0.0
+PORT=9000
+
+# Model paths
+MODELS_PATH=./models
+MSIF_MODEL_PATH=./models/enhanced/msif_lstm.pth
+PLE_MODEL_PATH=./models/enhanced/ple_gru.pth
+
+# Fusion settings
+MSIF_WEIGHT=0.6
+PLE_WEIGHT=0.4
+FUSION_THRESHOLD=0.7
+
+# Device
+DEVICE=cpu  # or cuda
+```
+
+### config/settings.py
+
+```python
+SERVICE_NAME = "ml-anomaly-detection"
+VERSION = "1.0.0"
+
+# MSIF-LSTM settings
+MSIF_WINDOW_SIZE = 60
+MSIF_FEATURES = 5
+MSIF_WEIGHT = 0.6
+
+# PLE-GRU settings
+PLE_WINDOW_SIZE = 1440
+PLE_FEATURES = 7
+PLE_WEIGHT = 0.4
+
+# Fusion
+FUSION_THRESHOLD = 0.7
+
+# Device
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+```
+
+---
+
+## Training
+
+### Train MSIF-LSTM
+
+```powershell
+cd ml-service/training/fusion
+python train_msif_enhanced.py
+```
+
+### Train PLE-GRU
+
+```powershell
+cd ml-service/training/fusion
+python train_ple_enhanced.py
+```
+
+### Train Encoders
+
+```powershell
+cd ml-service/training/pretrain
+python train_metric_encoder.py
+python train_log_encoder.py
+python train_trace_encoder.py
+```
+
+---
+
+## Building & Running
+
+### Install Requirements
+
+```powershell
+pip install -r requirements.txt
+```
+
+### Run in Development
+
+```powershell
+python api/app_multimodal.py
+```
+
+### Run with Gunicorn
+
+```powershell
+gunicorn -w 2 -b 0.0.0.0:9000 api.app:app
+```
+
+### Build Docker Image
+
+```powershell
+docker build -t ml-service .
+```
+
+### Run Docker Container
+
+```powershell
+docker run -d -p 9000:9000 ml-service
+```
+
+---
+
+## Integration with Backend
+
+### Backend Configuration
+
+In `backend-service/src/main/resources/application.yml`:
+
+```yaml
+python:
+  service:
+    url: http://localhost:9000
+    enabled: true
+    timeout: 30
+```
+
+### Backend API Call
+
+The backend calls the ML service at `/predict`:
+
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:9000/predict",
+    json={
+        "response_time": 2500,
+        "status_code": 500,
+        "cpu_usage": 85.0,
+        "memory_usage": 70.0,
+        "error_rate": 0.15,
+        "request_count": 1500
+    }
+)
+
+result = response.json()
+print(result["hybrid_score"])  # 0.72
+print(result["severity"])       # HIGH
+```
+
+---
+
+## Troubleshooting
+
+### Issue: Port 9000 Already in Use
+
+**Error:**
+```
+OSError: [Errno 48] Address already in use
+```
+
+**Solution:**
+```powershell
+# Find process using port
+netstat -ano | findstr 9000
+
+# Kill process or change port in app_multimodal.py
+# app.run(host="0.0.0.0", port=9001, debug=False)
+```
+
+---
+
+### Issue: Model Weights Not Found
+
+**Error:**
+```
+⚠️ MSIF-LSTM weights not found at models/enhanced/msif_lstm.pth
+```
+
+**Solution:**
+1. Train the models first:
+```powershell
+cd ml-service/training/fusion
+python train_msif_enhanced.py
+python train_ple_enhanced.py
+```
+
+2. Or use rule-based fallback (default behavior)
+
+---
+
+### Issue: CUDA Not Available
+
+**Error:**
+```
+RuntimeError: CUDA out of memory
+```
+
+**Solution:**
+- Use CPU instead:
+```python
+DEVICE = torch.device("cpu")
+```
+
+- Or set in environment:
+```bash
+export CUDA_VISIBLE_DEVICES=""
+```
+
+---
+
+### Issue: Import Errors
+
+**Error:**
+```
+ModuleNotFoundError: No module named 'torch'
+```
+
+**Solution:**
+```powershell
+pip install torch numpy pandas scikit-learn flask
+```
+
+---
+
+### Issue: TensorFlow/Keras Model Loading Error
+
+**Error:**
+```
+ValueError: Unknown layer: KerasTensor
+```
+
+**Solution:**
+- Use PyTorch models (`.pth` files) instead of TensorFlow (`.h5` files)
+- Or retrain models with compatible TensorFlow version
+
+---
+
+### Issue: High Latency
+
+**Solution:**
+- Use GPU acceleration if available
+- Reduce model complexity
+- Use batch prediction
+
+---
+
+## Common Commands
+
+### Test Health
+
+```bash
+curl http://localhost:9000/health
+```
+
+### Test Prediction
+
+```bash
+curl -X POST http://localhost:9000/predict \
+  -H "Content-Type: application/json" \
+  -d '{"response_time": 250, "status_code": 500, "cpu_usage": 85}'
+```
+
+### Get Model Info
+
+```bash
+curl http://localhost:9000/api/model-info
+```
+
+### View Logs
+
+```powershell
+docker logs ml-container
+```
+
+---
+
+## Dependencies
+
+### Core Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| flask | >=2.3.0 | Web framework |
+| flask-cors | >=4.0.0 | CORS support |
+| gunicorn | >=21.0.0 | Production server |
+| torch | latest | Deep learning |
+| tensorflow | >=2.16.0 | Additional ML |
+| numpy | >=1.24.0 | Numerical computing |
+| pandas | >=2.0.0 | Data processing |
+| scikit-learn | >=1.3.0 | ML utilities |
+
+### Monitoring
+
+| Package | Purpose |
+|---------|---------|
+| prometheus-client | Metrics |
+| python-json-logger | Logging |
+
+---
+
+## Quick Reference
+
+### Start Service
+
+```powershell
+cd ml-service/api
+python app_multimodal.py
+```
+
+### Access URL
+
+```
+http://localhost:9000
+```
+
+### Key Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/health` | Health check |
+| POST | `/predict` | Main prediction |
+| POST | `/predict/multimodal` | Multi-source |
+| POST | `/predict/test` | Test endpoint |
+| GET | `/api/model-info` | Model info |
+
+### Severity Levels
+
+| Score | Severity |
+|-------|----------|
+| 0.80+ | CRITICAL |
+| 0.60+ | HIGH |
+| 0.40+ | MEDIUM |
+| 0.20+ | LOW |
+| <0.20 | NORMAL |
+
+### Rule-Based Weights
+
+| Condition | Weight |
+|-----------|--------|
+| status >= 500 | 0.40 |
+| error_rate > 30% | 0.30 |
+| response_time > 1s | 0.20 |
+| cpu > 80% | 0.10 |
+| memory > 85% | 0.10 |from .app import create_app
 __all__ = ['create_app']
 import os
 import pickle
@@ -20053,7 +23881,47 @@ def register_routes(app):
             'message': 'An unexpected error occurred'
         }), 500
 
-"""
+# ML Service Configuration
+# Batch processing and model settings
+
+# Batch Processing Settings
+BATCH_SIZE_LOGS = 5000
+BATCH_SIZE_TRACES = 5000
+BATCH_SIZE_METRICS = 5000
+BATCH_INTERVAL_SECONDS = 120  # 2 minutes
+
+# Model Settings
+MSIF_WEIGHT = 0.6
+PLE_WEIGHT = 0.4
+FUSION_THRESHOLD = 0.7
+
+# Severity Thresholds
+CRITICAL_THRESHOLD = 0.8
+HIGH_THRESHOLD = 0.6
+MEDIUM_THRESHOLD = 0.4
+LOW_THRESHOLD = 0.0
+
+# OpenSearch Configuration
+OPENSEARCH_HOST = localhost
+OPENSEARCH_PORT = 9200
+OPENSEARCH_SCHEME = http
+
+# Index Names
+INDEX_LOGS = logs
+INDEX_METRICS = metrics
+INDEX_TRACES = traces
+INDEX_ANOMALIES = anomalies
+
+# Model Configuration
+MODEL_EMBEDDING_DIM = 128
+MSIF_LSTM_HIDDEN_DIM = 64
+PLE_GRU_HIDDEN_DIM = 64
+NUM_EXPERTS = 3
+
+# Hardware Recommendations (for batch size optimization)
+# CPU Only: 2500-5000 per modality
+# GPU 4GB: 5000-10000 per modality
+# GPU 16GB+: 10000-50000 per modality"""
 Configuration module
 Exports: config, Config classes
 """
@@ -20745,7 +24613,316 @@ if __name__ == '__main__':
     args = ap.parse_args()
     main(args.cfg)
 
+"""
+Alert Service for Multi-Channel Notifications
 
+Supports:
+- Microsoft Teams
+- Slack
+- Email (SMTP)
+- PagerDuty
+"""
+
+import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from typing import Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+class AlertService:
+    """Service for sending alerts to multiple channels"""
+    
+    def __init__(self):
+        self.teams_webhook = None
+        self.slack_webhook = None
+        self.smtp_config = None
+        self.pagerduty_key = None
+        
+    def configure_teams(self, webhook_url: str):
+        """Configure Microsoft Teams webhook"""
+        self.teams_webhook = webhook_url
+        
+    def configure_slack(self, webhook_url: str):
+        """Configure Slack webhook"""
+        self.slack_webhook = webhook_url
+        
+    def configure_email(self, smtp_server: str, smtp_port: int,
+                      username: str, password: str, from_email: str):
+        """Configure email SMTP settings"""
+        self.smtp_config = {
+            'server': smtp_server,
+            'port': smtp_port,
+            'username': username,
+            'password': password,
+            'from_email': from_email
+        }
+        
+    def configure_pagerduty(self, integration_key: str):
+        """Configure PagerDuty integration key"""
+        self.pagerduty_key = integration_key
+        
+    def send_teams_alert(self, title: str, severity: str, 
+                      score: float, service: str, details: Dict[str, Any]):
+        """Send alert to Microsoft Teams"""
+        if not self.teams_webhook:
+            logger.warning("Teams webhook not configured")
+            return False
+            
+        payload = {
+            "@type": "MessageCard",
+            "@context": "http://schema.org/extensions",
+            "themeColor": "FF0000" if severity == "CRITICAL" else "FFA500",
+            "summary": f"{severity}: {title}",
+            "sections": [{
+                "activityTitle": f"🚨 {severity} Alert: {title}",
+                "facts": [
+                    {"name": "Severity", "value": severity},
+                    {"name": "Score", "value": f"{score:.2f}"},
+                    {"name": "Service", "value": service},
+                    {"name": "Details", "value": str(details)}
+                ]
+            }]
+        }
+        
+        try:
+            response = requests.post(self.teams_webhook, json=payload)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to send Teams alert: {e}")
+            return False
+            
+    def send_slack_alert(self, title: str, severity: str,
+                        score: float, service: str):
+        """Send alert to Slack"""
+        if not self.slack_webhook:
+            logger.warning("Slack webhook not configured")
+            return False
+            
+        emoji = "🔴" if severity == "CRITICAL" else "🟠"
+        
+        payload = {
+            "text": f"{emoji} *{severity}*: {title}",
+            "blocks": [
+                {
+                    "type": "header",
+                    "text": {"type": "plain_text", "text": f"{emoji} {severity} Alert"}
+                },
+                {
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*Service:*\n{service}"},
+                        {"type": "mrkdwn", "text": f"*Score:*\n{score:.2f}"}
+                    ]
+                }
+            ]
+        }
+        
+        try:
+            response = requests.post(self.slack_webhook, json=payload)
+            return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Failed to send Slack alert: {e}")
+            return False
+            
+    def send_email_alert(self, title: str, severity: str,
+                      score: float, service: str, to_emails: list):
+        """Send alert via email"""
+        if not self.smtp_config:
+            logger.warning("Email not configured")
+            return False
+            
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f"[{severity}] {title}"
+        msg['From'] = self.smtp_config['from_email']
+        msg['To'] = ', '.join(to_emails)
+        
+        html = f"""
+        <html>
+        <body>
+            <h2>{severity} Alert: {title}</h2>
+            <p><strong>Service:</strong> {service}</p>
+            <p><strong>Score:</strong> {score:.2f}</p>
+            <p><strong>Time:</strong> {details.get('timestamp', 'N/A')}</p>
+        </body>
+        </html>
+        """
+        
+        part = MIMEText(html, 'html')
+        msg.attach(part)
+        
+        try:
+            server = smtplib.SMTP(
+                self.smtp_config['server'],
+                self.smtp_config['port']
+            )
+            server.starttls()
+            server.login(
+                self.smtp_config['username'],
+                self.smtp_config['password']
+            )
+            server.sendmail(
+                self.smtp_config['from_email'],
+                to_emails,
+                msg.as_string()
+            )
+            server.quit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send email alert: {e}")
+            return False
+            
+    def send_pagerduty_alert(self, title: str, severity: str,
+                          score: float, service: str):
+        """Send alert to PagerDuty"""
+        if not self.pagerduty_key:
+            logger.warning("PagerDuty not configured")
+            return False
+            
+        payload = {
+            "routing_key": self.pagerduty_key,
+            "event_action": "trigger",
+            "payload": {
+                "summary": f"{severity}: {title}",
+                "severity": "critical" if severity == "CRITICAL" else "error",
+                "source": service
+            }
+        }
+        
+        try:
+            response = requests.post(
+                "https://events.pagerduty.com/v2/enqueue",
+                json=payload
+            )
+            return response.status_code == 202
+        except Exception as e:
+            logger.error(f"Failed to send PagerDuty alert: {e}")
+            return False
+            
+    def send_alert(self, title: str, severity: str, score: float,
+                  service: str, details: Dict[str, Any]):
+        """Send alert to all configured channels"""
+        if severity in ["CRITICAL", "HIGH"]:
+            # Send to all channels
+            self.send_teams_alert(title, severity, score, service, details)
+            self.send_slack_alert(title, severity, score, service)
+            
+        # These are slower, send async or skip in emergencies
+        # self.send_email_alert(...)
+        # self.send_pagerduty_alert(...)
+
+
+# Severity classification helper
+def classify_severity(score: float) -> str:
+    """Classify anomaly score into severity level"""
+    if score >= 0.8:
+        return "CRITICAL"
+    elif score >= 0.6:
+        return "HIGH"
+    elif score >= 0.4:
+        return "MEDIUM"
+    else:
+        return "LOW""""
+Metric Encoder for Multi-Modal Anomaly Detection
+
+Transforms numerical metrics into fixed-size embedding vectors
+for processing through ML models.
+
+Input: CPU, Memory, Response Time, Error Rate, Request Count, etc.
+Output: Normalized embedding vector
+"""
+
+import numpy as np
+from typing import Dict, List, Any
+
+
+class MetricEncoder:
+    """Encoder for system metrics"""
+    
+    def __init__(self, embedding_dim: int = 128):
+        self.embedding_dim = embedding_dim
+        self.feature_names = [
+            'cpu_usage', 'memory_usage', 'disk_io', 
+            'network_io', 'response_time', 'request_count', 'error_rate'
+        ]
+        
+    def normalize(self, value: float, min_val: float, max_val: float) -> float:
+        """Min-max normalization"""
+        if max_val == min_val:
+            return 0.0
+        return (value - min_val) / (max_val - min_val)
+    
+    def log_normalize(self, value: float) -> float:
+        """Log transform for positive values"""
+        return np.log1p(value) / 10.0  # Normalize to 0-1 range
+    
+    def encode(self, metrics: Dict[str, Any]) -> np.ndarray:
+        """
+        Encode metrics to embedding vector
+        
+        Args:
+            metrics: Dict with keys like 'cpu_usage', 'memory_usage', etc.
+            
+        Returns:
+            Embedding vector of shape (embedding_dim,)
+        """
+        embedding = np.zeros(self.embedding_dim)
+        
+        # Encode CPU usage (0-100 -> 0-1)
+        cpu = metrics.get('cpu_usage', 0.0)
+        embedding[0] = self.normalize(cpu, 0, 100)
+        
+        # Encode memory usage (0-100 -> 0-1)
+        memory = metrics.get('memory_usage', 0.0)
+        embedding[1] = self.normalize(memory, 0, 100)
+        
+        # Encode disk I/O (log scale)
+        disk = metrics.get('disk_io_bytes', 0)
+        embedding[2] = min(self.log_normalize(disk), 1.0)
+        
+        # Encode network I/O (log scale)
+        network = metrics.get('network_io_bytes', 0)
+        embedding[3] = min(self.log_normalize(network), 1.0)
+        
+        # Encode response time (log scale)
+        response_time = metrics.get('response_time_ms', 0)
+        embedding[4] = min(self.log_normalize(response_time), 1.0)
+        
+        # Encode request count (log scale)
+        requests = metrics.get('request_count', 0)
+        embedding[5] = min(self.log_normalize(requests), 1.0)
+        
+        # Encode error rate (already 0-1)
+        error = metrics.get('error_rate', 0.0)
+        embedding[6] = min(max(error, 0.0), 1.0)
+        
+        # Add derived features
+        # Throughput = requests / response_time
+        if response_time > 0:
+            throughput = requests / (response_time / 1000.0)
+            embedding[7] = min(self.log_normalize(throughput), 1.0)
+        
+        # Efficiency score
+        efficiency = (100 - cpu) * (100 - memory) / 10000.0
+        embedding[8] = efficiency
+        
+        return embedding
+
+
+def encode_metrics_batch(metrics_list: List[Dict[str, Any]], 
+                       embedding_dim: int = 128) -> np.ndarray:
+    """Encode a batch of metrics"""
+    encoder = MetricEncoder(embedding_dim)
+    embeddings = []
+    
+    for metrics in metrics_list:
+        emb = encoder.encode(metrics)
+        embeddings.append(emb)
+    
+    return np.array(embeddings)
 """
 Production-grade data preprocessing pipeline
 
@@ -23351,6 +27528,8 @@ def validate_sequence_distribution(X_seq: np.ndarray,
     │       ├── build_labels_entity_aware.py
     │       └── build_samples_60s.py
     ├── src
+    │   ├── encoders
+    │   │   └── __init__.py
     │   ├── models
     │   │   ├── __pycache__ (pruned)
     │   │   ├── __init__.py
@@ -23362,7 +27541,8 @@ def validate_sequence_distribution(X_seq: np.ndarray,
     │   │   ├── ple_gru_model.py
     │   │   ├── schemas.py
     │   │   └── trace_encoder.py
-    │   └── __init__.py
+    │   ├── __init__.py
+    │   └── alert_service.py
     ├── training
     │   ├── fusion
     │   │   ├── train_msif_enhanced.py
@@ -23378,12 +27558,17 @@ def validate_sequence_distribution(X_seq: np.ndarray,
     ├── venv (pruned)
     ├── .env.example
     ├── Dockerfile
+    ├── SETUP_AND_ML_REFERENCE.md
+    ├── config.py
     └── requirements.txt
 
 ============== ml-service/.env.example ==============
 
 
 ============== ml-service/Dockerfile ==============
+
+
+============== ml-service/SETUP_AND_ML_REFERENCE.md ==============
 
 
 ============== ml-service/api/__init__.py ==============
@@ -23396,6 +27581,9 @@ def validate_sequence_distribution(X_seq: np.ndarray,
 
 
 ============== ml-service/api/routes.py ==============
+
+
+============== ml-service/config.py ==============
 
 
 ============== ml-service/config/__init__.py ==============
@@ -23420,6 +27608,12 @@ def validate_sequence_distribution(X_seq: np.ndarray,
 
 
 ============== ml-service/src/__init__.py ==============
+
+
+============== ml-service/src/alert_service.py ==============
+
+
+============== ml-service/src/encoders/__init__.py ==============
 
 
 ============== ml-service/src/models/__init__.py ==============

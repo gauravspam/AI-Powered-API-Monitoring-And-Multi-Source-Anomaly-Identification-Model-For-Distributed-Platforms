@@ -1,6 +1,8 @@
 package com.api.monitoring.backend.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
 
 public class LogEntryRequest {
     private String apiName;
@@ -18,6 +20,11 @@ public class LogEntryRequest {
     private String timestamp;
     private String environment = "production";
     private String serviceName = "api-monitoring";
+    
+    // Multimodal fields
+    private List<Map<String, String>> logs;
+    private List<Map<String, Object>> traces;
+    private Map<String, Object> metrics;
 
     // Constructors
     public LogEntryRequest() {
@@ -142,5 +149,29 @@ public class LogEntryRequest {
 
     public void setServiceName(String serviceName) {
         this.serviceName = serviceName;
+    }
+    
+    public List<Map<String, String>> getLogs() {
+        return logs;
+    }
+    
+    public void setLogs(List<Map<String, String>> logs) {
+        this.logs = logs;
+    }
+    
+    public List<Map<String, Object>> getTraces() {
+        return traces;
+    }
+    
+    public void setTraces(List<Map<String, Object>> traces) {
+        this.traces = traces;
+    }
+    
+    public Map<String, Object> getMetrics() {
+        return metrics;
+    }
+    
+    public void setMetrics(Map<String, Object> metrics) {
+        this.metrics = metrics;
     }
 }

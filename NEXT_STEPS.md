@@ -4,7 +4,7 @@
 
 **Project Name:** AI-Powered API Monitoring and Multi-Source Anomaly Identification Model for Distributed Platforms
 
-**Current State:** Core components implemented and functional
+**Current State:** Core ML models trained and functional
 **Target State:** Production-ready enterprise monitoring platform
 
 ---
@@ -58,7 +58,7 @@
 │                           ML SERVICE                                         │
 │                                                                              │
 │  Encoders: Metric → Log → Trace → Embeddings                                │
-│  Models: MSIF-LSTM + PLE-GRU → Hybrid Ensemble                             │
+│  Models: MSIF-LSTM + PLE-GRU → Hybrid Ensemble                              │
 │                                                                              │
 │  Severity: CRITICAL(≥0.8) | HIGH(≥0.6) | MEDIUM(≥0.4) | LOW(<0.4)         │
 └──────────────────────────────┬──────────────────────────────────────────────┘
@@ -77,6 +77,53 @@
 │                                                                              │
 │  Smart Polling: Check prediction_time, show badge, manual refresh            │
 └─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Completed ML Training
+
+### Model Performance (AIOps 2020 Dataset)
+
+| Model | Best F1 Score | Training Hardware |
+|-------|----------------|-------------------|
+| MSIF-LSTM | **90%** | GTX 1660 Super (6GB) |
+| PLE-GRU | **92.6%** | GTX 1660 Super (6GB) |
+
+### Training Details
+
+- **Dataset**: AIOps 2020 Challenge (train-ticket microservice system)
+- **Training Samples**: ~2500 sequences
+- **Anomaly Rate**: ~5.8% (144 anomalies out of 2500)
+- **Key Fix**: UTC+8 timezone alignment for timestamp matching
+- **Training Epochs**: 60 epochs with early stopping
+- **Hyperparameters**: 
+  - Hidden dim: 256
+  - Learning rate: 0.0005
+  - Batch size: 16
+
+### Model Files
+
+```
+ml-service/models/enhanced/
+├── metric_encoder_aiops.pth    # TCN metric encoder (616KB)
+├── msif_lstm_strict.pth       # MSIF-LSTM model (12.3MB)
+└── ple_gru_strict.pth          # PLE-GRU model (28.8MB)
+```
+
+### Training Commands
+
+```bash
+cd ml-service
+
+# Install PyTorch with CUDA (for GPU training)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+
+# Train MSIF-LSTM
+python train_aiops_fixed.py --model msif --epochs 60 --batch 16 --hidden 256 --lr 0.0005
+
+# Train PLE-GRU
+python train_aiops_fixed.py --model ple --epochs 60 --batch 16 --hidden 256 --lr 0.0005
 ```
 
 ---
@@ -109,18 +156,6 @@
 - [ ] Implement certificate rotation via Vault PKI
 - [ ] Add lease renewal handling
 
-**Vault Configuration Example:**
-```bash
-# Start Vault dev server (for testing)
-vault server -dev
-
-# Or production-ready with Docker:
-docker run -d --name=vault \
-  -p 8200:8200 \
-  -e VAULT_ADDR=http://localhost:8200 \
-  vault server -config=/vault/config.hcl
-```
-
 ---
 
 ### Phase 2: gRPC Receiver Service (Priority: HIGH)
@@ -144,12 +179,6 @@ docker run -d --name=vault \
   - [ ] Server certificate validation
   - [ ] Client certificate validation
   - [ ] Encrypted communication
-
-#### 2.3 Source Service Updates
-- [ ] Add gRPC clients to existing services:
-  - [ ] Generate proto clients
-  - [ ] Update logging to use gRPC instead of REST
-  - [ ] Get TLS certificates from Vault
 
 ---
 
@@ -217,9 +246,6 @@ BATCH_INTERVAL_SECONDS = 120  # 2 minutes
   - [ ] Maintain batch state
   - [ ] Handle partial batches
   - [ ] Track processed record IDs (avoid duplicates)
-- [ ] Implement batch size optimization:
-  - [ ] Adaptive batching based on hardware
-  - [ ] Memory-efficient processing
 
 #### 5.3 Scheduler
 - [ ] Add APScheduler or similar:
@@ -227,220 +253,72 @@ BATCH_INTERVAL_SECONDS = 120  # 2 minutes
   - [ ] Handle missed runs
   - [ ] Add jitter to prevent thundering herd
 
-#### 5.4 Hardware Considerations
-- [ ] Document batch size recommendations:
-```
-CPU Only (no GPU):
-- Batch size: 2,500 - 5,000 per modality
-- Memory: 8GB+ recommended
-
-Small GPU (4GB VRAM):
-- Batch size: 5,000 - 10,000 per modality
-- Memory: 8GB system + 4GB GPU
-
-Large GPU (16GB+ VRAM):
-- Batch size: 10,000 - 50,000 per modality
-- Memory: 16GB system + 16GB GPU
-```
-
 ---
 
-### Phase 6: Encoders Implementation (Priority: HIGH)
-*Goal: Transform raw data to embeddings for ML models*
-
-#### 6.1 Metric Encoder
-- [ ] Normalize metrics:
-  - [ ] CPU/Memory: 0-100 → 0-1 (min-max)
-  - [ ] Response time: log scale + normalize
-  - [ ] Error rate: already 0-1
-  - [ ] Request count: log scale + normalize
-- [ ] Create fixed-size embedding vector
-- [ ] Handle missing values
-
-#### 6.2 Log Encoder
-- [ ] Text preprocessing:
-  - [ ] Tokenization
-  - [ ] Lowercase
-  - [ ] Remove special characters
-  - [ ] Handle error keywords
-- [ ] Embedding approaches:
-  - [ ] TF-IDF vectorization
-  - [ ] Pre-trained word embeddings (Word2Vec/FastText)
-  - [ ] Custom learned embeddings
-- [ ] Create fixed-size embedding vector
-
-#### 6.3 Trace Encoder
-- [ ] Extract features:
-  - [ ] Duration (log normalized)
-  - [ ] Span count
-  - [ ] Error count
-  - [ ] Service graph features
-- [ ] Create fixed-size embedding vector
-- [ ] Handle trace structure (parent-child relationships)
-
-#### 6.4 Fusion Layer
-- [ ] Concatenate embeddings:
-```python
-combined_embedding = concat(
-    metric_embedding,    # [dim_m]
-    log_embedding,       # [dim_l]
-    trace_embedding      # [dim_t]
-)  # Total: [dim_m + dim_l + dim_t]
-```
-
----
-
-### Phase 7: Hybrid Model Enhancement (Priority: HIGH)
-*Goal: Improve MSIF-LSTM + PLE-GRU hybrid ensemble*
-
-#### 7.1 Model Configuration
-- [ ] Update models to accept batch embeddings
-- [ ] Configure ensemble weights:
-```python
-# Configurable weights
-MSIF_WEIGHT = 0.6
-PLE_WEIGHT = 0.4
-FUSION_THRESHOLD = 0.7
-```
-
-#### 7.2 Severity Classification
-- [ ] Implement severity levels:
-```python
-def score_to_severity(score):
-    if score >= 0.8: return "CRITICAL"  # Immediate alert
-    elif score >= 0.6: return "HIGH"    # Alert in 1 min
-    elif score >= 0.4: return "MEDIUM"  # Log only
-    else: return "LOW"                   # Ignore
-```
-
-#### 7.3 Model Output
-- [ ] Write predictions back to OpenSearch:
-```json
-{
-  "prediction_id": "uuid",
-  "batch_id": "uuid",
-  "timestamp": "2026-04-11T10:30:00Z",
-  "final_score": 0.85,
-  "severity": "HIGH",
-  "msif_score": 0.82,
-  "ple_score": 0.78,
-  "fusion_method": "weighted_ensemble",
-  "confidence": 0.85,
-  "affected_services": ["api-gateway", "user-service"],
-  "affected_metrics": ["response_time", "error_rate"]
-}
-```
-
----
-
-### Phase 8: Alert System (Priority: HIGH)
+### Phase 6: Alert System (Priority: HIGH)
 *Goal: Send notifications via Teams, Slack, Email, PagerDuty*
 
-#### 8.1 Alert Service
+#### 6.1 Alert Service
 - [ ] Create AlertService:
   - [ ] Queue alerts for processing
   - [ ] Rate limiting (prevent alert storms)
   - [ ] Retry logic for failed sends
   - [ ] Deduplication (same alert within X minutes)
 
-#### 8.2 Microsoft Teams Integration
+#### 6.2 Microsoft Teams Integration
 - [ ] Create Teams notification channel:
   - [ ] Incoming webhook configuration
-  - [ ] Adaptive cards format:
-```json
-{
-  "type": "message",
-  "attachments": [{
-    "contentType": "application/vnd.microsoft.card.adaptive",
-    "content": {
-      "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-      "type": "AdaptiveCard",
-      "body": [
-        {"type": "TextBlock", "text": "ANOMALY DETECTED", "weight": "bolder"},
-        {"type": "TextBlock", "text": "Severity: HIGH"},
-        {"type": "TextBlock", "text": "Score: 0.85"},
-        {"type": "TextBlock", "text": "Affected: api-gateway"}
-      ]
-    }
-  }]
-}
-```
+  - [ ] Adaptive cards format
 
-#### 8.3 Slack Integration
+#### 6.3 Slack Integration
 - [ ] Create Slack notification channel:
   - [ ] Incoming webhook configuration
   - [ ] Block kit message format
   - [ ] Channel routing by severity
 
-#### 8.4 Email Integration
+#### 6.4 Email Integration
 - [ ] Configure SMTP settings (from Vault):
   - [ ] Gmail/SendGrid/SMTP relay
   - [ ] HTML email templates
-  - [ ] Email grouping (digest vs immediate)
 
-#### 8.5 PagerDuty Integration
+#### 6.5 PagerDuty Integration
 - [ ] Create PagerDuty channel:
   - [ ] Events API v2 integration
   - [ ] Severity mapping to PagerDuty urgency
-  - [ ] Auto-create incidents
 
 ---
 
-### Phase 9: Frontend Smart Polling (Priority: HIGH)
+### Phase 7: Frontend Smart Polling (Priority: HIGH)
 *Goal: Efficient frontend updates with minimal polling*
 
-#### 9.1 Backend API Enhancement
-- [ ] Add prediction metadata endpoint:
-```json
-GET /api/predictions/latest
-{
-  "prediction_id": "uuid",
-  "prediction_time": "2026-04-11T10:30:00Z",
-  "severity": "HIGH",
-  "alert_count": 5
-}
-```
+#### 7.1 Backend API Enhancement
+- [ ] Add prediction metadata endpoint
 
-#### 9.2 Smart Polling Implementation
+#### 7.2 Smart Polling Implementation
 - [ ] Implement in frontend:
 ```javascript
-// Smart polling logic
 const pollForUpdates = async () => {
   const latest = await api.get('/api/predictions/latest');
-  
   if (latest.prediction_time !== lastPredictionTime) {
-    // New prediction available
     setNewAlertCount(latest.alert_count);
     showBadge(true);
-    lastPredictionTime = latest.prediction_time;
   }
 };
-
-// Poll every 30 seconds
-setInterval(pollForUpdates, 30000);
 ```
 
-#### 9.3 User Interface Updates
-- [ ] Add alert badge (shows "N new alerts")
-- [ ] Click badge → refresh dashboard with new data
+#### 7.3 User Interface Updates
+- [ ] Add alert badge
+- [ ] Click badge → refresh dashboard
 - [ ] Keep manual refresh button
-- [ ] Add settings for polling interval
-
-#### 9.4 Optional: WebSocket (Future Enhancement)
-- [ ] Add WebSocket endpoint for real-time updates
-- [ ] Frontend connects on load
-- [ ] Push new alerts immediately
-- [ ] Fallback to polling if WebSocket fails
 
 ---
 
 ## Quick Wins (Can Be Done Anytime)
 
 ### Documentation
-- [ ] Create architecture diagrams (using this file)
+- [ ] Create architecture diagrams
 - [ ] Create API Postman collection
 - [ ] Create runbook for operations
-- [ ] Create troubleshooting guide
 
 ### Developer Experience
 - [ ] Create dev container (devcontainer.json)
@@ -490,42 +368,6 @@ BATCH_INTERVAL_SECONDS = 120  # 2 minutes
 | Fluentd | Log aggregation | Apache 2.0 |
 | OpenSearch | Search & analytics | Apache 2.0 |
 
-### Cloud Services (Free Tiers)
-| Service | Purpose | Free Tier |
-|---------|---------|------------|
-| Microsoft Teams | Alerts | Webhook free |
-| Slack | Alerts | Webhook free |
-| Gmail | Email | 500 emails/day |
-| SendGrid | Email | 100 emails/day |
-| PagerDuty | Incident management | Developer free |
-
----
-
-## File Structure
-
-```
-project/
-├── backend-service/              # Spring Boot backend
-├── frontend/                     # React frontend
-├── ml-service/                   # ML service
-│   ├── src/
-│   │   ├── encoders/           # NEW: Metric, Log, Trace encoders
-│   │   ├── models/             # MSIF-LSTM, PLE-GRU, Hybrid
-│   │   └── batch_processor.py   # NEW: Batch query and processing
-│   ├── config.py               # NEW: Batch and model config
-│   └── requirements.txt
-├── infrastructure/
-│   ├── docker/
-│   │   ├── docker-compose.yml  # UPDATED: Add Vault, Fluent Bit, OTel
-│   │   ├── fluent-bit/          # NEW: Fluent Bit config
-│   │   └── oTel-collector/      # NEW: OTel Collector config
-│   └── vault/                   # NEW: Vault configuration
-├── grpc-receiver/               # NEW: gRPC receiver service
-├── proto/                       # NEW: Protocol buffer definitions
-└── docs/
-    └── architecture.md          # Architecture documentation
-```
-
 ---
 
 ## How to Use This File
@@ -533,32 +375,12 @@ project/
 1. **Start with Phase 1** - Secret injection is foundational
 2. **Phase 2-4** - Collection layer (gRPC, Fluent Bit, OTel)
 3. **Phase 5-7** - ML processing (batching, encoders, models)
-4. **Phase 8-9** - Alerting and frontend
-5. **Update this file** as items are completed
+4. **Update this file** as items are completed
 
 ---
 
-## Tracking Progress
+*Last Updated: 2026-04-14*
 
-Use this format to track completion:
-```
-- [ ] Not started
-- [x] Completed (date)
-- [ ] In progress
-- [ ] Blocked (reason)
-```
+*Architecture Version: 1.1*
 
-Example:
-```
-- [x] Add Vault to docker-compose - 2026-04-11
-- [ ] Implement gRPC proto definitions - In progress
-- [ ] Add Fluent Bit configuration - Blocked: waiting for legacy app access
-```
-
----
-
-*Last Updated: 2026-04-11*
-
-*Architecture Version: 1.0*
-
-*Ready for implementation*
+*ML Models Trained and Ready*

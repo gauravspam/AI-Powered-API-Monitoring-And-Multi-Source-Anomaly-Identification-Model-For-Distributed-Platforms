@@ -95,14 +95,32 @@ public class AnomalyService {
                 .diskIo(doubleToLong(defaultIfNull(logEntry.getDiskIo(), 0.0)))
                 .hourOfDay(logEntry.getHourOfDay())
                 .dayOfWeek(logEntry.getDayOfWeek())
-                // apilogs.servicename is marked nullable=false in your entity; keep a default
                 .serviceName(logEntry.getServiceName() != null ? logEntry.getServiceName() : "api-monitoring")
                 .environment(logEntry.getEnvironment() != null ? logEntry.getEnvironment() : "production")
                 .build();
 
         AnomalyPredictionDTO prediction;
+        
+        // Check if multimodal data is provided (logs or traces)
+        boolean hasLogs = logEntry.getLogs() != null && !logEntry.getLogs().isEmpty();
+        boolean hasTraces = logEntry.getTraces() != null && !logEntry.getTraces().isEmpty();
+        boolean hasMetrics = logEntry.getMetrics() != null;
+        
         try {
-            prediction = mlServiceClient.predictAnomaly(record);
+            if (hasLogs || hasTraces || hasMetrics) {
+                // Use multimodal prediction
+                log.info("Using multimodal prediction - logs: {}, traces: {}, metrics: {}", 
+                        hasLogs, hasTraces, hasMetrics);
+                prediction = mlServiceClient.predictAnomalyMultimodal(
+                        record,
+                        logEntry.getLogs(),
+                        logEntry.getTraces(),
+                        logEntry.getMetrics()
+                );
+            } else {
+                // Use legacy prediction
+                prediction = mlServiceClient.predictAnomaly(record);
+            }
         } catch (Exception e) {
             log.error("ML prediction failed for endpoint={}: {}", endpoint, e.getMessage(), e);
             throw new AnomalyProcessingException("ML prediction failed: " + e.getMessage(), e);

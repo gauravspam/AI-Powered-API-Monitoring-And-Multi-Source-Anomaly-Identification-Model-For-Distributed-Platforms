@@ -9,7 +9,78 @@ Output: Normalized embedding vector
 """
 
 import numpy as np
+import torch
+import torch.nn as nn
 from typing import Dict, List, Any
+
+
+class TemporalConvNet(nn.Module):
+    """
+    TCN (Temporal Convolutional Network) for Metric Time Series
+    
+    Uses 1D dilated convolutions to capture temporal patterns
+    in multi-metric time series data.
+    
+    Advantages over LSTM:
+    - Faster inference (parallel convs vs sequential)
+    - Better local pattern capture
+    - Fewer parameters (~500K vs 1M+)
+    """
+    
+    def __init__(self, input_dim=9, embed_dim=128, num_channels=[64, 64, 128], kernel_size=3, dropout=0.2):
+        super(TemporalConvNet, self).__init__()
+        
+        layers = []
+        num_levels = len(num_channels)
+        
+        for i in range(num_levels):
+            in_ch = input_dim if i == 0 else num_channels[i-1]
+            out_ch = num_channels[i]
+            dilation = 2 ** i
+            
+            conv = nn.Conv1d(
+                in_ch, out_ch, kernel_size,
+                padding=(kernel_size - 1) * dilation // 2,
+                dilation=dilation
+            )
+            layers.append(conv)
+            layers.append(nn.BatchNorm1d(out_ch))
+            layers.append(nn.ReLU())
+            layers.append(nn.Dropout(dropout))
+        
+        self.network = nn.Sequential(*layers)
+        self.projection = nn.Linear(num_channels[-1], embed_dim)
+        
+    def forward(self, x):
+        # x: (batch, seq_len, input_dim)
+        x = x.transpose(1, 2)  # (batch, input_dim, seq_len)
+        x = self.network(x)
+        x = x.transpose(1, 2)  # (batch, seq_len, channels)
+        x = x.mean(dim=1)  # Global average pooling
+        return self.projection(x)
+
+
+class MetricEncoderTCN(nn.Module):
+    """
+    Neural Network-based Metric Encoder using TCN
+    
+    Processes sequential metric data for better temporal pattern capture.
+    """
+    
+    def __init__(self, input_dim=9, embed_dim=128, hidden_dim=64):
+        super(MetricEncoderTCN, self).__init__()
+        
+        self.tcn = TemporalConvNet(
+            input_dim=input_dim,
+            embed_dim=embed_dim,
+            num_channels=[32, 64, 64],
+            kernel_size=3,
+            dropout=0.2
+        )
+        
+    def forward(self, x):
+        # x: (batch, seq_len, input_dim)
+        return self.tcn(x)
 
 
 class MetricEncoder:
