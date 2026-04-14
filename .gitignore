@@ -206,7 +206,7 @@ vault-token
 # Use Git LFS for these file types
 *.h5
 *.hdf5
-*.pth
+# *.pth
 *.pt
 *.pkl
 *.joblib
