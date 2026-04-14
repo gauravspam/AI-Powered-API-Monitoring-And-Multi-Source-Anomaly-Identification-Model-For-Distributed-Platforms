@@ -70,25 +70,36 @@ public class MetricsController {
     @PostMapping("/batch")
     public ResponseEntity<Map<String, Object>> ingestMetricsBatch(@RequestBody List<MetricIngestDTO> metrics) {
         int saved = 0;
+        int failed = 0;
         for (MetricIngestDTO dto : metrics) {
-            MetricRecord metric = new MetricRecord();
-            metric.setApiLogId(dto.getApiId());
-            metric.setCpuUsagePercent(dto.getCpuUsage());
-            metric.setMemoryUsagePercent(dto.getMemoryUsage());
-            metric.setResponseTimeMs(
-                    dto.getResponseTimeMs() != null ? dto.getResponseTimeMs().longValue() : null);
-            metric.setErrorRate(dto.getErrorRate());
-            metric.setRequestCount(dto.getRequestCount());
-            metric.setMetricTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
+            try {
+                MetricRecord metric = new MetricRecord();
+                metric.setApiLogId(dto.getApiId());
+                metric.setServiceName(dto.getServiceName() != null ? dto.getServiceName() : "default-service");
+                metric.setCpuUsagePercent(dto.getCpuUsage());
+                metric.setMemoryUsagePercent(dto.getMemoryUsage());
+                metric.setDiskIoBytes(dto.getDiskIoBytes());
+                metric.setNetworkIoBytes(dto.getNetworkIoBytes());
+                metric.setResponseTimeMs(
+                        dto.getResponseTimeMs() != null ? dto.getResponseTimeMs().longValue() : null);
+                metric.setErrorRate(dto.getErrorRate());
+                metric.setRequestCount(dto.getRequestCount());
+                metric.setMetricTimestamp(dto.getTimestamp() != null ? dto.getTimestamp() : LocalDateTime.now());
+                metric.setCreatedAt(LocalDateTime.now());
 
-            metricRepository.save(metric);
-            saved++;
+                metricRepository.save(metric);
+                saved++;
+            } catch (Exception e) {
+                failed++;
+                System.err.println("Error saving metric: " + e.getMessage());
+            }
         }
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "success");
         response.put("message", "Batch ingestion completed");
         response.put("count", saved);
+        response.put("failed", failed);
 
         return ResponseEntity.ok(response);
     }

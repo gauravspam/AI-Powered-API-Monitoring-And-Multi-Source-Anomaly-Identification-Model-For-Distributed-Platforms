@@ -7,6 +7,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.HashMap;
@@ -20,38 +22,49 @@ public class LogsController {
     @Autowired
     private OpenSearchLogService logService;
 
-    @PostMapping
-    public ResponseEntity<Map<String, Object>> ingestLog(@RequestBody LogDTO logDTO) {
-        if (logDTO.getTimestamp() == null) {
-            logDTO.setTimestamp(Instant.now());
-        }
-        
-        // Index to OpenSearch via Fluentd or direct
-        String logId = logService.indexLog(logDTO);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", "success");
-        response.put("message", "Log ingested successfully");
-        response.put("logId", logId);
-        
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/batch")
-    public ResponseEntity<Map<String, Object>> ingestLogsBatch(@RequestBody List<LogDTO> logs) {
+    @PostMapping("/batch/raw")
+    public ResponseEntity<Map<String, Object>> ingestLogsRawBatch(@RequestBody List<Map<String, Object>> rawLogs) {
         int indexed = 0;
-        for (LogDTO log : logs) {
-            if (log.getTimestamp() == null) {
-                log.setTimestamp(Instant.now());
+        int failed = 0;
+        
+        for (Map<String, Object> rawLog : rawLogs) {
+            try {
+                LogDTO log = new LogDTO();
+                log.setServiceName((String) rawLog.getOrDefault("serviceName", "unknown"));
+                log.setLevel((String) rawLog.getOrDefault("level", "INFO"));
+                log.setMessage((String) rawLog.getOrDefault("message", ""));
+                log.setSource((String) rawLog.getOrDefault("source", "test"));
+                log.setTraceId((String) rawLog.getOrDefault("traceId", ""));
+                log.setSpanId((String) rawLog.getOrDefault("spanId", ""));
+                log.setEnvironment((String) rawLog.getOrDefault("environment", "production"));
+                
+                // Handle timestamp - can be string or map
+                Object timestamp = rawLog.get("timestamp");
+                if (timestamp != null) {
+                    try {
+                        if (timestamp instanceof String) {
+                            log.setTimestamp(Instant.parse((String) timestamp));
+                        }
+                    } catch (Exception e) {
+                        log.setTimestamp(Instant.now());
+                    }
+                } else {
+                    log.setTimestamp(Instant.now());
+                }
+                
+                logService.indexLog(log);
+                indexed++;
+            } catch (Exception e) {
+                failed++;
+                System.err.println("Error indexing log: " + e.getMessage());
             }
-            logService.indexLog(log);
-            indexed++;
         }
         
         Map<String, Object> response = new HashMap<>();
         response.put("status", "success");
         response.put("message", "Batch logs ingestion completed");
         response.put("count", indexed);
+        response.put("failed", failed);
         
         return ResponseEntity.ok(response);
     }
