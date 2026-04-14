@@ -211,9 +211,7 @@ vault-token
 *.pkl
 *.joblib
 *.onnx
-models/
 checkpoints/
-ml-service/models/
 
 # Data files
 *.parquet
