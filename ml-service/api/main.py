@@ -9,17 +9,18 @@ import torch
 import torch.nn as nn
 from flask import Flask, jsonify, request
 
-# Add src to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+# Add parent to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Import Models
-from models.hybrid_fusion import HybridFusion
-from models.msif_lstm_model import VariableInputMSIF_LSTM
-from models.ple_gru_model import VariableInputPLE_GRU
-# Import Encoders from new architecture (models folder)
-from models.metric_encoder import MetricEncoder as MetricEncoderTCN
-from models.log_encoder import LogEncoder as LogEncoderTinyBERT
-from models.trace_encoder import TraceEncoder
+from model_defs import (
+    HybridFusion,
+    VariableInputMSIF_LSTM,
+    VariableInputPLE_GRU,
+    MetricEncoder as MetricEncoderTCN,
+    LogEncoder as LogEncoderTinyBERT,
+    TraceEncoder
+)
 
 app = Flask(__name__)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -17,11 +17,10 @@ import warnings
 
 warnings.filterwarnings('ignore')
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
-from models.msif_lstm_model import VariableInputMSIF_LSTM
-from models.ple_gru_model import VariableInputPLE_GRU
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from model_defs import VariableInputMSIF_LSTM, VariableInputPLE_GRU
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FAULT_LABELS_PATH = os.path.join(BASE_DIR, "dataset/AIOps_2020_Competition/fault_labels_preselection.csv")
 
 

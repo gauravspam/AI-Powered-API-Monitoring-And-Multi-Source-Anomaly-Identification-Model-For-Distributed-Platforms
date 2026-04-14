@@ -56,9 +56,9 @@ class LogEncoder(nn.Module):
                                    for k, v in state_dict.items() 
                                    if k.startswith('projection')}
                 self.projection.load_state_dict(projection_state, strict=False)
-                print(f"✅ Loaded pre-trained LogEncoder from {pretrained_path}")
+                print(f"[OK] Loaded pre-trained LogEncoder from {pretrained_path}")
             except Exception as e:
-                print(f"⚠️  Could not load pre-trained weights: {e}")
+                print(f"[!] Could not load pre-trained weights: {e}")
 
     def encode_single_log(self, log_text):
         """
@@ -118,7 +118,7 @@ class LogEncoder(nn.Module):
                 emb = self.encode_single_log(log_text)
                 log_embeddings.append(emb)
             except Exception as e:
-                print(f"⚠️  Failed to encode log: {e}")
+                print(f"[!] Failed to encode log: {e}")
                 continue
 
         if len(log_embeddings) == 0:

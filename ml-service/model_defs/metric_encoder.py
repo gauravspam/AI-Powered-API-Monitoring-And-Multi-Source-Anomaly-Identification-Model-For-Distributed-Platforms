@@ -127,7 +127,7 @@ class MetricEncoder(nn.Module):
                 emb = self.encode_single_metric(time_series, metric_name)
                 metric_embeddings.append(emb)
             except Exception as e:
-                print(f"⚠️  Failed to encode {metric_name}: {e}")
+                print(f"[!] Failed to encode {metric_name}: {e}")
                 continue
 
         if len(metric_embeddings) == 0:
