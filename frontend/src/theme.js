@@ -1,104 +1,66 @@
 import { createTheme } from '@mui/material/styles';
 
-// Professional monitoring dashboard theme inspired by Grafana/Prometheus
-// Deep blue primary + amber/orange accents for alerts
-export const getTheme = (mode) => createTheme({
+const theme = createTheme({
   palette: {
-    mode,
-    ...(mode === 'light'
-      ? {
-          // Light mode
-          primary: {
-            main: '#0d47a1', // Deep blue
-            light: '#5472d3',
-            dark: '#002171',
-            contrastText: '#ffffff',
-          },
-          secondary: {
-            main: '#fb8c00', // Amber/Orange
-            light: '#ffbd45',
-            dark: '#c25e00',
-            contrastText: '#000000',
-          },
-          background: {
-            default: '#f5f7fa',
-            paper: '#ffffff',
-          },
-          error: {
-            main: '#d32f2f',
-          },
-          warning: {
-            main: '#f57c00',
-          },
-          success: {
-            main: '#388e3c',
-          },
-          info: {
-            main: '#0288d1',
-          },
-        }
-      : {
-          // Dark mode - optimized for monitoring
-          primary: {
-            main: '#42a5f5', // Lighter blue for dark bg
-            light: '#80d6ff',
-            dark: '#0077c2',
-            contrastText: '#000000',
-          },
-          secondary: {
-            main: '#ffa726', // Amber
-            light: '#ffd95b',
-            dark: '#c77800',
-            contrastText: '#000000',
-          },
-          background: {
-            default: '#0a1929', // Dark navy
-            paper: '#132f4c',
-          },
-          error: {
-            main: '#ef5350',
-          },
-          warning: {
-            main: '#ff9800',
-          },
-          success: {
-            main: '#66bb6a',
-          },
-          info: {
-            main: '#29b6f6',
-          },
-        }),
+    mode: 'dark',
+    primary: {
+      main: 'hsl(188, 80%, 42%)',
+      light: 'hsl(188, 80%, 52%)',
+      dark: 'hsl(188, 80%, 32%)',
+    },
+    secondary: {
+      main: '#a855f7',
+    },
+    error: {
+      main: '#ef4444',
+    },
+    warning: {
+      main: '#f97316',
+    },
+    success: {
+      main: '#22c55e',
+    },
+    info: {
+      main: '#3b82f6',
+    },
+    background: {
+      default: 'hsl(222, 20%, 8%)',
+      paper: 'hsl(222, 18%, 11%)',
+    },
+    text: {
+      primary: 'hsl(210, 20%, 88%)',
+      secondary: 'hsl(210, 10%, 50%)',
+    },
+    divider: 'hsl(222, 14%, 20%)',
   },
   typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-    h4: {
-      fontWeight: 600,
-    },
-    h5: {
-      fontWeight: 600,
-    },
-    h6: {
-      fontWeight: 600,
-    },
-    subtitle1: {
-      fontWeight: 500,
-    },
+    fontFamily: "'Inter', 'DM Sans', system-ui, sans-serif",
+    fontSize: 14,
   },
   shape: {
     borderRadius: 8,
   },
   components: {
-    MuiAppBar: {
+    MuiCssBaseline: {
       styleOverrides: {
-        root: {
-          backgroundImage: 'none',
+        body: {
+          scrollbarWidth: 'thin',
+          '&::-webkit-scrollbar': {
+            width: '6px',
+            height: '6px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: 'hsl(222, 14%, 20%)',
+            borderRadius: '3px',
+          },
         },
       },
     },
-    MuiDrawer: {
+    MuiButton: {
       styleOverrides: {
-        paper: {
-          backgroundImage: 'none',
+        root: {
+          textTransform: 'none',
+          fontWeight: 500,
         },
       },
     },
@@ -109,12 +71,35 @@ export const getTheme = (mode) => createTheme({
         },
       },
     },
-    MuiChip: {
+    MuiTableCell: {
       styleOverrides: {
-        root: {
+        head: {
+          backgroundColor: 'hsl(222, 18%, 11%)',
+          color: 'hsl(210, 10%, 50%)',
           fontWeight: 500,
+          fontSize: '0.75rem',
         },
       },
     },
   },
 });
+
+// Severity → color map used across pages
+export const SEVERITY_COLORS = {
+  CRITICAL: '#ef4444',
+  HIGH: '#f97316',
+  MEDIUM: '#eab308',
+  LOW: '#22c55e',
+  NORMAL: '#6b7280',
+  ACTIVE: '#ef4444',
+  ACKNOWLEDGED: '#eab308',
+  RESOLVED: '#22c55e',
+  ERROR: '#ef4444',
+  WARN: '#f97316',
+  WARNING: '#f97316',
+  INFO: '#3b82f6',
+  DEBUG: '#6b7280',
+  FATAL: '#ef4444',
+};
+
+export default theme;

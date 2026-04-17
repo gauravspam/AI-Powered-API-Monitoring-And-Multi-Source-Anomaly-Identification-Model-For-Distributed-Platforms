@@ -1,417 +1,323 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Container,
-  Typography,
   Box,
+  Paper,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   ToggleButtonGroup,
   ToggleButton,
-  Paper,
-  Grid,
   IconButton,
-  Tooltip,
+  Snackbar,
+  Alert,
 } from '@mui/material';
-import { Refresh } from '@mui/icons-material';
-import AlertList from '@/components/AlertList';
-import EnvironmentFilter from '@/components/EnvironmentFilter';
-import api from '@/api/http';
+import { CheckCircle, Cancel, Refresh } from '@mui/icons-material';
+import { BACKEND_URL } from '@/api/http';
+import { SeverityBadge, ScoreBar, timeAgo, EmptyState } from '@/components/SharedComponents';
 
-// Module-level cache that persists across component mounts/unmounts
-const cache = {
-  alerts: [],
-  logEvents: [],
-  lastFetchTime: 0,
-  isInitialized: false,
+// ── Helper ────────────────────────────────────────────────────────────────────
+const proxyOrMock = async (path, mockFn) => {
+  try {
+    const resp = await fetch(`${BACKEND_URL}${path}`, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) throw new Error('Backend error');
+    return await resp.json();
+  } catch {
+    return mockFn();
+  }
 };
 
-// Module-level fetching state to prevent duplicate requests
-let isFetching = false;
-let fetchPromise = null;
-let pollingInterval = null;
-
-// Start prefetching immediately when module loads (before component mounts)
-const prefetchData = async () => {
-  if (isFetching || cache.isInitialized) return fetchPromise;
-
-  isFetching = true;
-  fetchPromise = Promise.all([
-    api.get('/alerts').catch(() => ({ data: [] })),
-    api.get('/logs/events').catch(() => ({ data: [] })),
-  ])
-    .then(([alertsRes, logsRes]) => {
-      const newAlerts = alertsRes.data || [];
-      const newLogs = logsRes.data || [];
-
-      cache.alerts = newAlerts;
-      cache.logEvents = newLogs;
-      cache.lastFetchTime = Date.now();
-      cache.isInitialized = true;
-
-      return { alerts: newAlerts, logs: newLogs };
-    })
-    .catch((error) => {
-      console.error('Prefetch error:', error);
-      cache.isInitialized = true; // Mark as initialized even on error
-      return { alerts: [], logs: [] };
-    })
-    .finally(() => {
-      isFetching = false;
-      fetchPromise = null;
-    });
-
-  return fetchPromise;
+const generateMockAlerts = () => {
+  const services = ['api-gateway', 'payment-service', 'user-service', 'auth-service', 'notification-service'];
+  const endpoints = ['/api/users', '/payment/checkout', '/auth/login', '/api/orders', '/api/events'];
+  const severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+  const statuses = ['ACTIVE', 'ACKNOWLEDGED', 'RESOLVED'];
+  return Array.from({ length: 20 }, (_, i) => ({
+    id: 100 - i,
+    apiName: services[i % services.length],
+    endpoint: endpoints[i % endpoints.length],
+    severity: severities[i % 4],
+    hybridEnsembleScore: parseFloat((0.95 - i * 0.04).toFixed(3)),
+    msifLstmScore: parseFloat((0.90 - i * 0.03).toFixed(3)),
+    pleGruScore: parseFloat((0.93 - i * 0.04).toFixed(3)),
+    status: statuses[i % 3],
+    detectedAt: new Date(Date.now() - i * 900000).toISOString(),
+    isAcknowledged: i % 3 === 1,
+    isResolved: i % 3 === 2,
+    environment: i % 2 === 0 ? 'production' : 'staging',
+    _mock: true,
+  }));
 };
-
-// Start prefetching immediately
-prefetchData();
-
-const POLL_INTERVAL = 30000; // 30 seconds
-const THROTTLE_WINDOW = 5000; // 5 seconds
 
 export const Alerts = () => {
-  const [selectedSeverity, setSelectedSeverity] = useState('all');
-  const [selectedStatus, setSelectedStatus] = useState('all');
-  const [selectedEnv, setSelectedEnv] = useState('All');
-  const [selectedAlert, setSelectedAlert] = useState(null);
-  const [alerts, setAlerts] = useState(cache.alerts);
-  const [logEvents, setLogEvents] = useState(cache.logEvents);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  
-  const mountedRef = useRef(true);
-  const updateTimeoutRef = useRef(null);
+  const queryClient = useQueryClient();
+  const [severityFilter, setSeverityFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
-  // Fetch data with throttling and change detection
-  const fetchData = useCallback(async (forceRefresh = false) => {
-    if (!mountedRef.current) return;
+  // Fetch anomalies — try backend /api/anomalies first, fall back to mock
+  const { data: anomalies, isLoading, refetch } = useQuery({
+    queryKey: ['/api/proxy/alerts'],
+    queryFn: () => proxyOrMock('/api/anomalies?limit=30', generateMockAlerts),
+    refetchInterval: 15000,
+  });
 
-    const now = Date.now();
-    const timeSinceLastFetch = now - cache.lastFetchTime;
+  // Acknowledge mutation
+  const acknowledge = useMutation({
+    mutationFn: async (id) => {
+      const res = await fetch(`${BACKEND_URL}/api/anomalies/${id}/acknowledge`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      setSnackbar({ open: true, message: 'Anomaly marked as acknowledged', severity: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['/api/proxy/alerts'] });
+    },
+    onError: () =>
+      setSnackbar({ open: true, message: 'Action failed — backend may be offline', severity: 'error' }),
+  });
 
-    // Throttle requests (unless force refresh or server restart scenario)
-    if (!forceRefresh && timeSinceLastFetch < THROTTLE_WINDOW && cache.isInitialized) {
-      return;
-    }
+  // Resolve mutation
+  const resolve = useMutation({
+    mutationFn: async (id) => {
+      const res = await fetch(`${BACKEND_URL}/api/anomalies/${id}/resolve`, { method: 'POST' });
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    onSuccess: () => {
+      setSnackbar({ open: true, message: 'Anomaly marked as resolved', severity: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['/api/proxy/alerts'] });
+    },
+    onError: () =>
+      setSnackbar({ open: true, message: 'Action failed — backend may be offline', severity: 'error' }),
+  });
 
-    // If already fetching, wait for that request
-    if (isFetching && fetchPromise) {
-      try {
-        const result = await fetchPromise;
-        if (mountedRef.current) {
-          setAlerts(result.alerts);
-          setLogEvents(result.logs);
-        }
-      } catch (error) {
-        console.error('Error waiting for fetch:', error);
-      }
-      return;
-    }
+  const filtered = (anomalies || []).filter((a) => {
+    const matchSev = severityFilter === 'all' || a.severity === severityFilter;
+    const matchStat = statusFilter === 'all' || a.status === statusFilter;
+    return matchSev && matchStat;
+  });
 
-    isFetching = true;
-    if (forceRefresh) setIsRefreshing(true);
-
-    try {
-      const [alertsRes, logsRes] = await Promise.all([
-        api.get('/alerts').catch(() => ({ data: [] })),
-        api.get('/logs/events').catch(() => ({ data: [] })),
-      ]);
-
-      const newAlerts = alertsRes.data || [];
-      const newLogs = logsRes.data || [];
-
-      // Fast length-based change detection
-      const alertsChanged = newAlerts.length !== cache.alerts.length;
-      const logsChanged = newLogs.length !== cache.logEvents.length;
-      const hasData = newAlerts.length > 0 || newLogs.length > 0;
-      const cacheWasEmpty = cache.alerts.length === 0 && cache.logEvents.length === 0;
-
-      // Update if: data changed, cache was empty and now has data, or server restart detected
-      if (alertsChanged || logsChanged || (cacheWasEmpty && hasData)) {
-        cache.alerts = newAlerts;
-        cache.logEvents = newLogs;
-        cache.lastFetchTime = now;
-
-        if (mountedRef.current) {
-          // Batch state updates
-          setAlerts(newAlerts);
-          setLogEvents(newLogs);
-        }
-      } else {
-        // No changes, just update timestamp
-        cache.lastFetchTime = now;
-      }
-
-      cache.isInitialized = true;
-    } catch (error) {
-      console.error('Error fetching data:', error);
-    } finally {
-      isFetching = false;
-      fetchPromise = null;
-      if (forceRefresh && mountedRef.current) {
-        setIsRefreshing(false);
-      }
-    }
-  }, []);
-
-  // Manual refresh handler
-  const handleRefresh = useCallback(() => {
-    fetchData(true);
-  }, [fetchData]);
-
-  // Initial load and polling setup
-  useEffect(() => {
-    mountedRef.current = true;
-
-    // If cache is already populated, use it immediately
-    if (cache.isInitialized && cache.alerts.length > 0) {
-      setAlerts(cache.alerts);
-      setLogEvents(cache.logEvents);
-    }
-
-    // Initial fetch (will be throttled if prefetch succeeded)
-    fetchData();
-
-    // Set up polling interval
-    pollingInterval = setInterval(() => {
-      fetchData();
-    }, POLL_INTERVAL);
-
-    // Cleanup on unmount
-    return () => {
-      mountedRef.current = false;
-      if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-      }
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-    };
-  }, [fetchData]);
-
-  // Fast-path filtering with skip optimization
-  const filteredAlerts = useMemo(() => {
-    // Fast path: if all filters are default, return all alerts
-    if (selectedSeverity === 'all' && selectedStatus === 'all' && selectedEnv === 'All') {
-      return alerts;
-    }
-
-    // Apply filters
-    return alerts.filter((alert) => {
-      if (selectedSeverity !== 'all' && alert.severity !== selectedSeverity) return false;
-      if (selectedStatus !== 'all' && alert.status !== selectedStatus) return false;
-      if (selectedEnv !== 'All' && alert.environment !== selectedEnv) return false;
-      return true;
-    });
-  }, [selectedSeverity, selectedStatus, selectedEnv, alerts]);
-
-  const handleAcknowledge = useCallback(async (alertId) => {
-    try {
-      await api.post(`/alerts/${alertId}/acknowledge`).catch(() => {
-        console.log('Acknowledge API not available, updating locally');
-      });
-
-      const now = new Date().toISOString();
-      const updatedAlerts = alerts.map(alert =>
-        alert.id === alertId 
-          ? { ...alert, status: 'acknowledged', lastUpdatedAt: now } 
-          : alert
-      );
-      
-      // Update both state and cache
-      setAlerts(updatedAlerts);
-      cache.alerts = updatedAlerts;
-
-      // Update selected alert if needed
-      setSelectedAlert(prev => 
-        prev?.id === alertId 
-          ? { ...prev, status: 'acknowledged', lastUpdatedAt: now }
-          : prev
-      );
-    } catch (error) {
-      console.error('Error acknowledging alert:', error);
-    }
-  }, [alerts]);
-
-  const handleResolve = useCallback(async (alertId) => {
-    try {
-      await api.post(`/alerts/${alertId}/resolve`).catch(() => {
-        console.log('Resolve API not available, updating locally');
-      });
-
-      const now = new Date().toISOString();
-      const updatedAlerts = alerts.map(alert =>
-        alert.id === alertId 
-          ? { ...alert, status: 'resolved', lastUpdatedAt: now } 
-          : alert
-      );
-      
-      // Update both state and cache
-      setAlerts(updatedAlerts);
-      cache.alerts = updatedAlerts;
-
-      // Update selected alert if needed
-      setSelectedAlert(prev => 
-        prev?.id === alertId 
-          ? { ...prev, status: 'resolved', lastUpdatedAt: now }
-          : prev
-      );
-    } catch (error) {
-      console.error('Error resolving alert:', error);
-    }
-  }, [alerts]);
-
-  const relatedLogs = useMemo(() => {
-    if (!selectedAlert) return [];
-    return logEvents
-      .filter((log) =>
-        log.serviceName === selectedAlert.serviceName ||
-        log.message?.includes(selectedAlert.endpoint ?? "")
-      )
-      .slice(0, 5);
-  }, [selectedAlert, logEvents]);
+  const counts = {
+    CRITICAL: (anomalies || []).filter((a) => a.severity === 'CRITICAL').length,
+    HIGH: (anomalies || []).filter((a) => a.severity === 'HIGH').length,
+    ACTIVE: (anomalies || []).filter((a) => a.status === 'ACTIVE').length,
+    ACKNOWLEDGED: (anomalies || []).filter((a) => a.status === 'ACKNOWLEDGED').length,
+  };
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-        <Box>
-          <Typography variant="h4" gutterBottom fontWeight="bold">
-            Alerts
-          </Typography>
-          <Typography variant="body1" color="text.secondary" paragraph>
-            Manage and respond to system alerts and anomalies
-          </Typography>
-        </Box>
-        <Tooltip title="Refresh data">
-          <IconButton 
-            onClick={handleRefresh} 
-            disabled={isRefreshing}
-            sx={{ 
-              animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
-              '@keyframes spin': {
-                '0%': { transform: 'rotate(0deg)' },
-                '100%': { transform: 'rotate(360deg)' },
-              },
-            }}
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Summary chips */}
+      <Box sx={{ display: 'flex', gap: 2 }}>
+        {[
+          { label: 'Critical', value: counts.CRITICAL, color: 'error.main' },
+          { label: 'High',     value: counts.HIGH,     color: 'warning.main' },
+          { label: 'Active',   value: counts.ACTIVE,   color: 'error.main' },
+          { label: 'Acknowledged', value: counts.ACKNOWLEDGED, color: 'warning.main' },
+        ].map(({ label, value, color }) => (
+          <Box
+            key={label}
+            sx={{ flex: 1, textAlign: 'center', p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
           >
-            <Refresh />
-          </IconButton>
-        </Tooltip>
+            <Typography variant="h4" sx={{ fontWeight: 700, color }}>
+              {value}
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {label}
+            </Typography>
+          </Box>
+        ))}
       </Box>
 
       {/* Filters */}
-      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <Box>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Severity
-          </Typography>
-          <ToggleButtonGroup
-            value={selectedSeverity}
-            exclusive
-            onChange={(e, val) => val && setSelectedSeverity(val)}
-            size="small"
-          >
-            <ToggleButton value="all">All</ToggleButton>
-            <ToggleButton value="critical">Critical</ToggleButton>
-            <ToggleButton value="high">High</ToggleButton>
-            <ToggleButton value="medium">Medium</ToggleButton>
-            <ToggleButton value="low">Low</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-
-        <Box>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Status
-          </Typography>
-          <ToggleButtonGroup
-            value={selectedStatus}
-            exclusive
-            onChange={(e, val) => val && setSelectedStatus(val)}
-            size="small"
-          >
-            <ToggleButton value="all">All</ToggleButton>
-            <ToggleButton value="open">Open</ToggleButton>
-            <ToggleButton value="acknowledged">Acknowledged</ToggleButton>
-            <ToggleButton value="resolved">Resolved</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-
-        <Box>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Environment
-          </Typography>
-          <EnvironmentFilter
-            value={selectedEnv}
-            onChange={(e) => setSelectedEnv(e.target.value)}
-          />
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          Filter:
+        </Typography>
+        <ToggleButtonGroup
+          value={severityFilter}
+          exclusive
+          onChange={(e, v) => v && setSeverityFilter(v)}
+          size="small"
+        >
+          <ToggleButton value="all">All</ToggleButton>
+          <ToggleButton value="CRITICAL">CRITICAL</ToggleButton>
+          <ToggleButton value="HIGH">HIGH</ToggleButton>
+          <ToggleButton value="MEDIUM">MEDIUM</ToggleButton>
+          <ToggleButton value="LOW">LOW</ToggleButton>
+        </ToggleButtonGroup>
+        <ToggleButtonGroup
+          value={statusFilter}
+          exclusive
+          onChange={(e, v) => v && setStatusFilter(v)}
+          size="small"
+        >
+          <ToggleButton value="all">All Status</ToggleButton>
+          <ToggleButton value="ACTIVE">ACTIVE</ToggleButton>
+          <ToggleButton value="ACKNOWLEDGED">ACKNOWLEDGED</ToggleButton>
+          <ToggleButton value="RESOLVED">RESOLVED</ToggleButton>
+        </ToggleButtonGroup>
+        <Box sx={{ ml: 'auto' }}>
+          <IconButton size="small" onClick={() => refetch()}>
+            <Refresh sx={{ fontSize: 18 }} />
+          </IconButton>
         </Box>
       </Box>
 
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={selectedAlert ? 8 : 12}>
-          <AlertList
-            alerts={filteredAlerts}
-            onSelect={setSelectedAlert}
-            onAcknowledge={handleAcknowledge}
-            onResolve={handleResolve}
-          />
-        </Grid>
-
-        {selectedAlert && (
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2, position: 'sticky', top: 80 }}>
-              <Typography variant="h6" gutterBottom>
-                Alert Details
-              </Typography>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Alert ID
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {selectedAlert.id}
-                </Typography>
-              </Box>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Source
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {selectedAlert.endpoint ?? selectedAlert.serviceName ?? "ML Ensemble"}
-                </Typography>
-              </Box>
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Last Updated
-                </Typography>
-                <Typography variant="body1" fontWeight="medium">
-                  {new Date(selectedAlert.lastUpdatedAt ?? selectedAlert.timestamp).toLocaleString()}
-                </Typography>
-              </Box>
-
-              <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
-                Related Logs
-              </Typography>
-              {relatedLogs.length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {relatedLogs.map((log) => (
-                    <Paper key={log.id} variant="outlined" sx={{ p: 1.5 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(log.timestamp).toLocaleTimeString()}
-                      </Typography>
-                      <Typography variant="body2" sx={{ mt: 0.5 }}>
-                        [{log.level}] {log.message}
-                      </Typography>
-                    </Paper>
-                  ))}
-                </Box>
+      {/* Table */}
+      <Paper>
+        <TableContainer sx={{ maxHeight: 'calc(100dvh - 400px)' }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                {['ID', 'Service', 'Endpoint', 'Severity', 'Hybrid Score', 'MSIF-LSTM', 'PLE-GRU', 'Status', 'Detected', 'Env', 'Actions'].map(
+                  (col) => (
+                    <TableCell key={col} sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
+                      {col}
+                    </TableCell>
+                  )
+                )}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 11 }).map((__, j) => (
+                      <TableCell key={j}>
+                        <Box sx={{ height: 12, bgcolor: 'action.hover', borderRadius: 1 }} />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={11}>
+                    <EmptyState message="No anomalies match filters" />
+                  </TableCell>
+                </TableRow>
               ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No related logs found
-                </Typography>
+                filtered.map((a) => (
+                  <TableRow
+                    key={a.id}
+                    sx={{
+                      '&:hover': { bgcolor: 'action.hover' },
+                      backgroundColor:
+                        a.severity === 'CRITICAL'
+                          ? 'rgba(239,68,68,0.05)'
+                          : a.severity === 'HIGH'
+                          ? 'rgba(249,115,22,0.05)'
+                          : 'transparent',
+                    }}
+                  >
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>#{a.id}</TableCell>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'primary.main' }}>
+                      {a.apiName}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: '0.75rem',
+                        color: 'text.secondary',
+                        maxWidth: 140,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {a.endpoint}
+                    </TableCell>
+                    <TableCell>
+                      <SeverityBadge severity={a.severity} />
+                    </TableCell>
+                    <TableCell>
+                      <ScoreBar score={a.hybridEnsembleScore || 0} />
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {(a.msifLstmScore || 0).toFixed(3)}
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {(a.pleGruScore || 0).toFixed(3)}
+                    </TableCell>
+                    <TableCell>
+                      <SeverityBadge severity={a.status} />
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
+                      {timeAgo(a.detectedAt)}
+                    </TableCell>
+                    <TableCell>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          px: 1,
+                          py: 0.25,
+                          borderRadius: 0.5,
+                          backgroundColor:
+                            a.environment === 'production'
+                              ? 'rgba(59,130,246,0.15)'
+                              : 'rgba(107,114,128,0.15)',
+                          color: a.environment === 'production' ? '#3b82f6' : '#6b7280',
+                        }}
+                      >
+                        {a.environment}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ textAlign: 'right' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                        {!a.isAcknowledged && !a.isResolved && (
+                          <IconButton
+                            size="small"
+                            onClick={() => acknowledge.mutate(a.id)}
+                            disabled={acknowledge.isPending}
+                            sx={{ color: 'warning.main' }}
+                            title="Acknowledge"
+                          >
+                            <CheckCircle sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        )}
+                        {!a.isResolved && (
+                          <IconButton
+                            size="small"
+                            onClick={() => resolve.mutate(a.id)}
+                            disabled={resolve.isPending}
+                            sx={{ color: 'success.main' }}
+                            title="Resolve"
+                          >
+                            <Cancel sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        )}
+                        {a.isResolved && (
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            Closed
+                          </Typography>
+                        )}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
-            </Paper>
-          </Grid>
-        )}
-      </Grid>
-    </Container>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={3000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          severity={snackbar.severity}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
   );
 };
 

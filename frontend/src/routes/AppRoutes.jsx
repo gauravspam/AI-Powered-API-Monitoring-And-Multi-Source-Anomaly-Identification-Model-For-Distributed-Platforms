@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import MainLayout from '@/layouts/MainLayout';
 import Dashboard from '@/pages/Dashboard';
+import Analytics from '@/pages/Analytics';
 import Services from '@/pages/Services';
 import Alerts from '@/pages/Alerts';
 import Logs from '@/pages/Logs';
@@ -26,6 +27,7 @@ export const AppRoutes = () => {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="analytics" element={<Analytics />} />
         <Route path="services" element={<Services />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="logs" element={<Logs />} />

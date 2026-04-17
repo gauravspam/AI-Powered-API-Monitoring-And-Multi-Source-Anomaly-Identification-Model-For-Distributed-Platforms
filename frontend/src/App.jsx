@@ -1,40 +1,47 @@
-import { createContext, useState, useMemo } from 'react';
-import { BrowserRouter } from 'react-router-dom';
-import { ThemeProvider, CssBaseline, createTheme } from '@mui/material';
-import { AppRoutes } from '@/routes/AppRoutes.jsx';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import theme from './theme';
+import MainLayout from './layouts/MainLayout';
+import Dashboard from './pages/Dashboard';
+import Services from './pages/Services';
+import Alerts from './pages/Alerts';
+import Logs from './pages/Logs';
+import Traces from './pages/Traces';
+import Models from './pages/Models';
+import Simulator from './pages/Simulator';
+import NotFound from './pages/NotFound';
 
-export const ThemeContext = createContext({ toggleTheme: () => { } });
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 function App() {
-  const [mode, setMode] = useState('dark');
-  
-  // Use default MUI theme with mode
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode,
-        },
-      }),
-    [mode]
-  );
-
-  const toggleTheme = () => {
-    setMode((prevMode) => (prevMode === 'light' ? 'dark' : 'light'));
-  };
-
   return (
-    <ThemeContext.Provider value={{ toggleTheme }}>
+    <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
         <BrowserRouter>
-          <AuthProvider>
-            <AppRoutes />
-          </AuthProvider>
+          <MainLayout>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/services" element={<Services />} />
+              <Route path="/alerts" element={<Alerts />} />
+              <Route path="/logs" element={<Logs />} />
+              <Route path="/traces" element={<Traces />} />
+              <Route path="/models" element={<Models />} />
+              <Route path="/simulator" element={<Simulator />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </MainLayout>
         </BrowserRouter>
       </ThemeProvider>
-    </ThemeContext.Provider>
+    </QueryClientProvider>
   );
 }
 

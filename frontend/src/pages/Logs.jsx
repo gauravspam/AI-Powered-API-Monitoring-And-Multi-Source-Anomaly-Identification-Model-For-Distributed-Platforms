@@ -1,327 +1,316 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Container,
-  Typography,
   Box,
   Paper,
-  Grid,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   ToggleButtonGroup,
   ToggleButton,
-  Card,
-  CardContent,
+  Switch,
+  InputAdornment,
   IconButton,
-  Tooltip,
 } from '@mui/material';
-import { Refresh as RefreshIcon } from '@mui/icons-material';
-import EnvironmentFilter from '@/components/EnvironmentFilter';
-import LogTimeline from '@/components/LogTimeline';
-import StatusChip from '@/components/StatusChip';
-import api from '@/api/http';
+import { Search as SearchIcon, RefreshCcw as RefreshIcon, ChevronDown as ArrowDownIcon } from 'lucide-react';
+import { BACKEND_URL } from '@/api/http';
+import { SeverityBadge, EmptyState } from '@/components/SharedComponents';
 
-// Cache storage outside component to persist across unmounts
-let cachedData = {
-  logStreams: null,
-  logEvents: null,
-  timestamp: null,
-};
-
-// Pre-fetch data as soon as module loads (even before component mounts)
-let initialFetchPromise = null;
-let prefetchFailed = false;
-
-const prefetchData = () => {
-  if (!initialFetchPromise && !cachedData.logStreams) {
-    initialFetchPromise = Promise.all([
-      api.get('/logs/streams').catch(() => ({ data: [] })),
-      api.get('/logs/events').catch(() => ({ data: [] })),
-    ]).then(([streamsResponse, eventsResponse]) => {
-      const streams = streamsResponse.data || [];
-      const events = eventsResponse.data || [];
-      
-      // Check if we got actual data
-      if (streams.length === 0 && events.length === 0) {
-        prefetchFailed = true;
-      }
-      
-      const data = {
-        logStreams: streams,
-        logEvents: events,
-        timestamp: Date.now(),
-      };
-      cachedData = data;
-      return data;
-    }).catch(() => {
-      prefetchFailed = true;
-      return {
-        logStreams: [],
-        logEvents: [],
-        timestamp: Date.now(),
-      };
-    });
+const proxyOrMock = async (path, mockFn) => {
+  try {
+    const resp = await fetch(`${BACKEND_URL}${path}`, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) throw new Error('Backend error');
+    return await resp.json();
+  } catch {
+    return mockFn();
   }
-  return initialFetchPromise;
 };
 
-// Start prefetching immediately when module loads
-prefetchData();
+const generateMockLogs = () => {
+  const levels = ['INFO', 'WARN', 'ERROR', 'DEBUG', 'CRITICAL'];
+  const services = ['api-gateway', 'payment-service', 'user-service', 'auth-service'];
+  const messages = [
+    'Request processed successfully',
+    'High latency detected on endpoint',
+    'Connection timeout to downstream service',
+    'Cache miss rate elevated',
+    'Database query exceeded threshold',
+    'JWT token validation failed',
+    'Rate limit exceeded for client',
+    'Service health check failed',
+  ];
+  return Array.from({ length: 50 }, (_, i) => ({
+    id: `log-${Date.now()}-${i}`,
+    level: levels[i % 5],
+    message: messages[i % 8],
+    serviceName: services[i % 4],
+    timestamp: new Date(Date.now() - i * 45000).toISOString(),
+    traceId: `trace-${Math.random().toString(36).substr(2, 9)}`,
+    environment: i % 2 === 0 ? 'production' : 'staging',
+    _mock: true,
+  }));
+};
+
+const LEVEL_ORDER = ['CRITICAL', 'FATAL', 'ERROR', 'WARN', 'WARNING', 'INFO', 'DEBUG'];
+
+const levelColor = {
+  CRITICAL: '#ef4444',
+  FATAL:    '#ef4444',
+  ERROR:    '#ef4444',
+  WARN:     '#f97316',
+  WARNING:  '#f97316',
+  INFO:     '#3b82f6',
+  DEBUG:    '#6b7280',
+};
 
 export const Logs = () => {
-  const [selectedEnv, setSelectedEnv] = useState('All');
-  const [selectedService, setSelectedService] = useState('All');
-  const [searchText, setSearchText] = useState('');
-  const [selectedLevel, setSelectedLevel] = useState('all');
-  const [logStreams, setLogStreams] = useState(cachedData.logStreams || []);
-  const [logEvents, setLogEvents] = useState(cachedData.logEvents || []);
-  const pollIntervalRef = useRef(null);
-  const isMountedRef = useRef(true);
-  const lastFetchTime = useRef(cachedData.timestamp || 0);
+  const [search, setSearch] = useState('');
+  const [levelFilter, setLevelFilter] = useState('all');
+  const [autoScroll, setAutoScroll] = useState(false);
+  const bottomRef = useRef(null);
 
-  const fetchLogsData = useCallback(async (isPolling = false) => {
-    try {
-      // Throttle: Don't fetch if last fetch was less than 5 seconds ago (unless manual refresh)
-      if (isPolling && Date.now() - lastFetchTime.current < 5000) {
-        return;
-      }
-
-      const [streamsResponse, eventsResponse] = await Promise.all([
-        api.get('/logs/streams').catch(() => ({ data: [] })),
-        api.get('/logs/events').catch(() => ({ data: [] })),
-      ]);
-
-      if (!isMountedRef.current) return;
-
-      lastFetchTime.current = Date.now();
-      const newStreams = streamsResponse.data || [];
-      const newEvents = eventsResponse.data || [];
-
-      // Fast shallow comparison - only update if lengths differ
-      const shouldUpdate = 
-        newEvents.length !== logEvents.length || 
-        newStreams.length !== logStreams.length;
-
-      if (shouldUpdate || !isPolling) {
-        // Batch state updates
-        setLogStreams(newStreams);
-        setLogEvents(newEvents);
-        
-        cachedData = {
-          logStreams: newStreams,
-          logEvents: newEvents,
-          timestamp: Date.now(),
-        };
-        
-        if (isPolling && shouldUpdate) {
-          console.log(`Logs updated: ${newEvents.length} events, ${newStreams.length} streams`);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching logs data:', err);
-    }
-  }, [logEvents.length, logStreams.length]);
-
-  const startPolling = useCallback(() => {
-    if (!pollIntervalRef.current) {
-      pollIntervalRef.current = setInterval(() => {
-        fetchLogsData(true);
-      }, 30000);
-    }
-  }, [fetchLogsData]);
-
-  const stopPolling = useCallback(() => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-  }, []);
+  const { data: logs, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['/api/proxy/logs'],
+    queryFn: () => proxyOrMock('/api/logs/recent?limit=50', generateMockLogs),
+    refetchInterval: autoScroll ? 5000 : false,
+  });
 
   useEffect(() => {
-    isMountedRef.current = true;
-
-    const loadData = async () => {
-      // If prefetch failed or returned empty data, retry
-      if (prefetchFailed || (cachedData.logStreams && cachedData.logStreams.length === 0)) {
-        // Reset flags
-        initialFetchPromise = null;
-        prefetchFailed = false;
-        await fetchLogsData(false);
-      } else if (initialFetchPromise) {
-        // Use prefetched data if available
-        try {
-          const data = await initialFetchPromise;
-          if (isMountedRef.current && data) {
-            setLogStreams(data.logStreams);
-            setLogEvents(data.logEvents);
-          }
-        } catch (err) {
-          // If prefetch failed, try again
-          await fetchLogsData(false);
-        }
-      } else {
-        // No prefetch, fetch normally
-        await fetchLogsData(false);
-      }
-    };
-
-    loadData();
-    startPolling();
-
-    return () => {
-      isMountedRef.current = false;
-      stopPolling();
-    };
-  }, [fetchLogsData, startPolling, stopPolling]);
-
-  const handleRefresh = useCallback(() => {
-    lastFetchTime.current = 0; // Reset throttle
-    fetchLogsData(false);
-  }, [fetchLogsData]);
-
-  // Memoize filtered events with optimized filtering
-  const filteredEvents = useMemo(() => {
-    if (logEvents.length === 0) return [];
-    
-    const lowerSearch = searchText.toLowerCase();
-    const isAllEnv = selectedEnv === 'All';
-    const isAllService = selectedService === 'All';
-    const isAllLevel = selectedLevel === 'all';
-
-    // Fast path: no filters
-    if (isAllEnv && isAllService && !lowerSearch && isAllLevel) {
-      return logEvents;
+    if (autoScroll && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
+  }, [logs, autoScroll]);
 
-    return logEvents.filter((event) => {
-      if (!isAllEnv && event.environment !== selectedEnv) return false;
-      if (!isAllService && event.serviceName !== selectedService) return false;
-      if (!isAllLevel && event.level !== selectedLevel) return false;
-      if (lowerSearch && !event.message.toLowerCase().includes(lowerSearch)) return false;
-      return true;
-    });
-  }, [selectedEnv, selectedService, searchText, selectedLevel, logEvents]);
+  const filtered = (Array.isArray(logs) ? logs : []).filter((l) => {
+    const matchLevel = levelFilter === 'all' || l.level?.toUpperCase() === levelFilter;
+    const matchSearch =
+      !search ||
+      l.message?.toLowerCase().includes(search.toLowerCase()) ||
+      l.serviceName?.toLowerCase().includes(search.toLowerCase()) ||
+      l.traceId?.toLowerCase().includes(search.toLowerCase());
+    return matchLevel && matchSearch;
+  });
 
-  // Memoize services list
-  const services = useMemo(() => 
-    ['All', ...new Set(logEvents.map((e) => e.serviceName))],
-    [logEvents]
-  );
+  const levelCounts = (Array.isArray(logs) ? logs : []).reduce((acc, l) => {
+    const lvl = (l.level || 'INFO').toUpperCase();
+    acc[lvl] = (acc[lvl] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h4" gutterBottom fontWeight="bold">
-            Logs
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Monitor log streams and trace anomalies across services
-          </Typography>
-        </Box>
-        <Tooltip title="Refresh logs">
-          <IconButton onClick={handleRefresh} color="primary">
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
-      </Box>
-
-      {/* Log Ingestion Status */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Log Ingestion Status
-        </Typography>
-        {logStreams.length > 0 ? (
-          <Grid container spacing={2}>
-            {logStreams.map((stream) => (
-              <Grid item xs={12} sm={6} md={4} lg={2.4} key={stream.id}>
-                <Card>
-                  <CardContent>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Typography variant="body2" fontWeight="bold">
-                        {stream.serviceName}
-                      </Typography>
-                      <StatusChip value={stream.status} type="status" />
-                    </Box>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Source: {stream.source}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Environment: {stream.environment}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" display="block">
-                      Lag: {stream.ingestionLagSec.toFixed(1)}s
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        ) : (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="body1" color="text.secondary">
-              No log streams available
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Level summary */}
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {LEVEL_ORDER.slice(0, 6).map((lvl) => (
+          <Box
+            key={lvl}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              py: 1,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 500, color: levelColor[lvl] }}>
+              {lvl}
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+              {levelCounts[lvl] || 0}
             </Typography>
           </Box>
-        )}
+        ))}
       </Box>
 
-      {/* Log Controls */}
-      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <EnvironmentFilter
-          value={selectedEnv}
-          onChange={(e) => setSelectedEnv(e.target.value)}
-        />
+      {/* Controls */}
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
         <TextField
-          select
-          label="Service"
-          value={selectedService}
-          onChange={(e) => setSelectedService(e.target.value)}
+          placeholder="Search messages, services, trace IDs…"
           size="small"
-          sx={{ minWidth: 200 }}
-          SelectProps={{ native: true }}
-        >
-          {services.map((service) => (
-            <option key={service} value={service}>
-              {service}
-            </option>
-          ))}
-        </TextField>
-        <TextField
-          label="Search messages"
-          variant="outlined"
-          size="small"
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          sx={{ minWidth: 250 }}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon size={18} style={{ color: '#6b7280' }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ minWidth: 280 }}
         />
         <ToggleButtonGroup
-          value={selectedLevel}
+          value={levelFilter}
           exclusive
-          onChange={(e, val) => val && setSelectedLevel(val)}
+          onChange={(e, v) => v && setLevelFilter(v)}
           size="small"
         >
           <ToggleButton value="all">All</ToggleButton>
-          <ToggleButton value="INFO">Info</ToggleButton>
-          <ToggleButton value="WARN">Warn</ToggleButton>
-          <ToggleButton value="ERROR">Error</ToggleButton>
+          <ToggleButton value="ERROR">ERROR</ToggleButton>
+          <ToggleButton value="WARN">WARN</ToggleButton>
+          <ToggleButton value="INFO">INFO</ToggleButton>
+          <ToggleButton value="DEBUG">DEBUG</ToggleButton>
         </ToggleButtonGroup>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            Live tail
+          </Typography>
+          <Switch
+            checked={autoScroll}
+            onChange={(e) => setAutoScroll(e.target.checked)}
+            size="small"
+          />
+          <IconButton size="small" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshIcon
+              size={16}
+              style={{
+                animation: isFetching ? 'spin 1s linear infinite' : 'none',
+              }}
+            />
+          </IconButton>
+        </Box>
       </Box>
 
-      {/* Log Timeline */}
-      <Paper sx={{ p: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Log Timeline
-        </Typography>
-        {filteredEvents.length > 0 ? (
-          <LogTimeline events={filteredEvents} />
-        ) : (
-          <Box sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="body1" color="text.secondary">
-              {logEvents.length === 0 ? 'No logs available' : 'No logs match your filters'}
-            </Typography>
-          </Box>
-        )}
+      {/* Log table */}
+      <Paper>
+        <Box
+          sx={{
+            px: 2,
+            py: 1,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+            {filtered.length} entries {search || levelFilter !== 'all' ? '(filtered)' : ''}
+          </Typography>
+          {autoScroll && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'primary.main' }}>
+              <Box
+                sx={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  bgcolor: 'primary.main',
+                  animation: 'pulse 2s infinite',
+                  '@keyframes pulse': {
+                    '0%, 100%': { opacity: 1 },
+                    '50%': { opacity: 0.4 },
+                  },
+                }}
+              />
+              <Typography variant="caption">Streaming</Typography>
+            </Box>
+          )}
+        </Box>
+        <TableContainer sx={{ maxHeight: 'calc(100dvh - 340px)' }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell sx={{ fontWeight: 500, fontSize: '0.75rem', width: 100 }}>Time</TableCell>
+                <TableCell sx={{ fontWeight: 500, fontSize: '0.75rem', width: 70 }}>Level</TableCell>
+                <TableCell sx={{ fontWeight: 500, fontSize: '0.75rem', width: 120 }}>Service</TableCell>
+                <TableCell sx={{ fontWeight: 500, fontSize: '0.75rem' }}>Message</TableCell>
+                <TableCell sx={{ fontWeight: 500, fontSize: '0.75rem', width: 120 }}>Trace ID</TableCell>
+                <TableCell sx={{ fontWeight: 500, fontSize: '0.75rem', width: 80 }}>Env</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 8 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 6 }).map((__, j) => (
+                      <TableCell key={j}>
+                        <Box sx={{ height: 12, bgcolor: 'action.hover', borderRadius: 1 }} />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6}>
+                    <EmptyState message="No log entries found" />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filtered.map((l, i) => (
+                  <TableRow key={`${l.id}-${i}`} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                    <TableCell
+                      sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap', fontFamily: 'monospace' }}
+                    >
+                      {new Date(l.timestamp).toLocaleTimeString()}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        color: levelColor[(l.level || 'INFO').toUpperCase()] || '#6b7280',
+                      }}
+                    >
+                      {(l.level || 'INFO').toUpperCase()}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontSize: '0.75rem',
+                        color: 'primary.main',
+                        maxWidth: 120,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {l.serviceName}
+                    </TableCell>
+                    <TableCell
+                      sx={{ fontSize: '0.75rem', maxWidth: 400, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      title={l.message}
+                    >
+                      {l.message}
+                    </TableCell>
+                    <TableCell
+                      sx={{
+                        fontSize: '0.75rem',
+                        color: 'text.secondary',
+                        maxWidth: 120,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {l.traceId || '—'}
+                    </TableCell>
+                    <TableCell>
+                      <SeverityBadge severity={l.environment || 'unknown'} />
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+        <div ref={bottomRef} />
       </Paper>
-    </Container>
+
+      {autoScroll && (
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <IconButton size="small" onClick={() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' })}>
+            <ArrowDownIcon size={16} />
+          </IconButton>
+        </Box>
+      )}
+
+      {/* CSS keyframes for spin animation */}
+      <style>{`@keyframes spin { 100% { transform: rotate(360deg); } }`}</style>
+    </Box>
   );
 };
 

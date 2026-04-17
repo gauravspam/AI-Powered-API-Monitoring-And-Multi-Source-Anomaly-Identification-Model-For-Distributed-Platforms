@@ -1,0 +1,256 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* =============================================
+   NEXUS DARK — Monitoring Dashboard Palette
+   Dark-first. Slate surfaces. Cyan accent.
+   ============================================= */
+@layer base {
+  :root {
+    /* Dark mode as default for monitoring dashboards */
+    --background: 222 20% 8%;
+    --foreground: 210 20% 88%;
+
+    --card: 222 18% 11%;
+    --card-foreground: 210 20% 88%;
+
+    --popover: 222 18% 11%;
+    --popover-foreground: 210 20% 88%;
+
+    --primary: 188 80% 42%;
+    --primary-foreground: 222 20% 8%;
+
+    --secondary: 222 15% 18%;
+    --secondary-foreground: 210 15% 75%;
+
+    --muted: 222 14% 15%;
+    --muted-foreground: 210 10% 50%;
+
+    --accent: 188 60% 30%;
+    --accent-foreground: 188 80% 90%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 222 14% 20%;
+    --input: 222 14% 20%;
+    --ring: 188 80% 42%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar tokens */
+    --sidebar-background: 222 22% 7%;
+    --sidebar-foreground: 210 15% 75%;
+    --sidebar-primary: 188 80% 42%;
+    --sidebar-primary-foreground: 222 20% 8%;
+    --sidebar-accent: 222 15% 14%;
+    --sidebar-accent-foreground: 210 20% 88%;
+    --sidebar-border: 222 14% 16%;
+    --sidebar-ring: 188 80% 42%;
+
+    /* Custom semantic tokens */
+    --color-critical: #ef4444;
+    --color-high: #f97316;
+    --color-medium: #eab308;
+    --color-low: #22c55e;
+    --color-normal: #6b7280;
+    --color-info: #3b82f6;
+
+    --color-surface-glow-critical: rgba(239, 68, 68, 0.08);
+    --color-surface-glow-high: rgba(249, 115, 22, 0.08);
+    --color-surface-glow-medium: rgba(234, 179, 8, 0.08);
+  }
+
+  /* Light mode override */
+  .light {
+    --background: 210 20% 97%;
+    --foreground: 222 20% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 20% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 20% 12%;
+    --primary: 188 80% 32%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 15% 93%;
+    --secondary-foreground: 222 20% 30%;
+    --muted: 210 15% 93%;
+    --muted-foreground: 222 10% 48%;
+    --accent: 188 60% 90%;
+    --accent-foreground: 188 80% 25%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 210 12% 85%;
+    --input: 210 12% 85%;
+    --ring: 188 80% 32%;
+    --sidebar-background: 222 15% 15%;
+    --sidebar-foreground: 210 15% 85%;
+    --sidebar-primary: 188 80% 50%;
+    --sidebar-primary-foreground: 222 20% 8%;
+    --sidebar-accent: 222 15% 20%;
+    --sidebar-accent-foreground: 210 20% 95%;
+    --sidebar-border: 222 14% 22%;
+    --sidebar-ring: 188 80% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  #root {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Monospace for data values */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums lining-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+/* ==================== Severity Colors ==================== */
+.severity-critical {
+  color: var(--color-critical);
+}
+.severity-high {
+  color: var(--color-high);
+}
+.severity-medium {
+  color: var(--color-medium);
+}
+.severity-low {
+  color: var(--color-low);
+}
+.severity-normal {
+  color: var(--color-normal);
+}
+
+.badge-critical {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.badge-high {
+  background: rgba(249, 115, 22, 0.15);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+}
+.badge-medium {
+  background: rgba(234, 179, 8, 0.15);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.3);
+}
+.badge-low {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.badge-normal {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
+  border: 1px solid rgba(107, 114, 128, 0.3);
+}
+.badge-info {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+/* ==================== Dashboard layout ==================== */
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  grid-template-rows: 1fr;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.dashboard-main {
+  display: grid;
+  grid-template-rows: 52px 1fr;
+  overflow: hidden;
+}
+
+.dashboard-content {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem 1.5rem 2rem;
+}
+
+/* Sticky table headers */
+.sticky-thead thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: hsl(var(--card));
+}
+
+/* Status dot animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.status-dot-live {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Score bar animation */
+@keyframes score-fill {
+  from { width: 0%; }
+  to { width: var(--score-width); }
+}
+
+.score-bar {
+  animation: score-fill 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Content visibility for performance */
+.card-grid > * {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 180px;
+}
+
+/* Glow effect for anomaly cards */
+.card-critical { box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25), 0 4px 16px rgba(239, 68, 68, 0.06); }
+.card-high { box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.25), 0 4px 16px rgba(249, 115, 22, 0.06); }
+
+

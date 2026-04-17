@@ -121,17 +121,11 @@ def cat_files(files: list[FileToCat], header: str, root: Path) -> int:
         rel = e.fp.relative_to(root) if e.fp.is_relative_to(root) else e.fp
         sys.stdout.write(f"\n{header} {rel.as_posix()} {header}\n")
         try:
-            result = subprocess.run(["cat", "--", str(e.fp)], check=False)
-            if result.returncode != 0:
-                return result.returncode
+            with open(e.fp, "r", encoding="utf-8", errors="replace") as f:
+                sys.stdout.write(f.read())
             sys.stdout.write("\n")
-        except FileNotFoundError:
-            sys.stderr.write(
-                "error: `cat` not found (are you on Windows without MSYS/WSL?)\n"
-            )
-            return 127
         except OSError as ex:
-            sys.stderr.write(f"error running cat on {e.fp}: {ex}\n")
+            sys.stderr.write(f"error reading {e.fp}: {ex}\n")
             return 1
     return 0
 
@@ -354,4 +348,6 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
     raise SystemExit(main())

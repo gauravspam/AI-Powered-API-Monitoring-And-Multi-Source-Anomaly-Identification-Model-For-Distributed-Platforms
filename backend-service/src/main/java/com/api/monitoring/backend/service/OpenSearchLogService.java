@@ -148,7 +148,7 @@ public class OpenSearchLogService {
             SearchRequest searchRequest = new SearchRequest(INDEX_PREFIX + "*");
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             sourceBuilder.query(QueryBuilders.matchAllQuery());
-            sourceBuilder.sort("@timestamp", SortOrder.DESC);
+            sourceBuilder.sort("timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
             
@@ -171,7 +171,7 @@ public class OpenSearchLogService {
             SearchRequest searchRequest = new SearchRequest(INDEX_PREFIX + "*");
             SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
             sourceBuilder.query(QueryBuilders.queryStringQuery(query));
-            sourceBuilder.sort("@timestamp", SortOrder.DESC);
+            sourceBuilder.sort("timestamp", SortOrder.DESC);
             sourceBuilder.size(limit);
             searchRequest.source(sourceBuilder);
             

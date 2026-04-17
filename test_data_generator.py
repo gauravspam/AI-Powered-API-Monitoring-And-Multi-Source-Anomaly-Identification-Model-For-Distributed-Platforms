@@ -190,16 +190,11 @@ def test_ml_prediction():
     print(f"{'='*50}")
     
     test_data = {
-        "logs": ["ERROR: Connection timeout", "WARN: High latency detected"],
         "metrics": {
-            "cpu_usage": [0.8, 0.85, 0.9],
-            "memory_usage": [0.7, 0.75, 0.8],
-        },
-        "trace": {
-            "spans": [
-                {"service": "user-service", "duration": 500, "error": True},
-                {"service": "payment-service", "duration": 300, "error": False},
-            ]
+            "cpu_usage": 0.85,
+            "memory_usage": 0.75,
+            "response_time_ms": 500,
+            "error_rate": 0.1,
         }
     }
     

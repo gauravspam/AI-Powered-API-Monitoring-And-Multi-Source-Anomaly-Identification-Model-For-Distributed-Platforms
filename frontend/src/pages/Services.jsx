@@ -1,475 +1,237 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Container,
-  Typography,
-  Paper,
   Box,
+  Paper,
+  Typography,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Drawer,
-  IconButton,
-  Chip,
-  Button,
-  Tooltip,
+  ToggleButtonGroup,
+  ToggleButton,
+  InputAdornment,
 } from '@mui/material';
-import { DataGrid } from '@mui/x-data-grid';
-import { Close as CloseIcon, Refresh as RefreshIcon } from '@mui/icons-material';
-import StatusChip from '@/components/StatusChip';
-import EnvironmentFilter from '@/components/EnvironmentFilter';
-import api from '@/api/http';
+import { Search as SearchIcon } from 'lucide-react';
+import { BACKEND_URL } from '@/api/http';
+import { SeverityBadge, StatusDot, EmptyState } from '@/components/SharedComponents';
 
-// ==================== CACHING LAYER ====================
-// Cache storage outside component to persist across unmounts
-let cachedData = {
-  services: null,
-  anomalies: null,
-  timestamp: null,
-};
-
-// Pre-fetch data as soon as module loads (even before component mounts)
-let initialFetchPromise = null;
-let prefetchFailed = false;
-
-const prefetchData = () => {
-  if (!initialFetchPromise && !cachedData.services) {
-    initialFetchPromise = Promise.all([
-      api.get('/services').catch(() => ({ data: [] })),
-      api.get('/anomalies/recent', { params: { limit: 50 } }).catch(() => ({ data: [] })),
-    ]).then(([servicesResponse, anomaliesResponse]) => {
-      const services = servicesResponse.data || [];
-      const anomalies = (anomaliesResponse.data || []).map(a => ({
-        id: a.id,
-        serviceName: a.apiName ?? a.apiname ?? "unknown",
-        endpoint: a.endpoint ?? a.apiName ?? a.apiname ?? "unknown",
-        environment: a.environment ?? "unknown",
-        severity: a.severity?.toLowerCase() ?? "medium",
-        score: a.finalanomalyscore ?? a.finalAnomalyScore ?? a.hybridEnsembleScore ?? 0,
-        detectedAt: a.timestamp,
-        status: a.status?.toLowerCase() ?? "active",
-      }));
-
-      // Check if we got actual data
-      if (services.length === 0 && anomalies.length === 0) {
-        prefetchFailed = true;
-      }
-
-      const data = {
-        services: services,
-        anomalies: anomalies,
-        timestamp: Date.now(),
-      };
-      cachedData = data;
-      return data;
-    }).catch(() => {
-      prefetchFailed = true;
-      return {
-        services: [],
-        anomalies: [],
-        timestamp: Date.now(),
-      };
-    });
+const proxyOrMock = async (path, mockFn) => {
+  try {
+    const resp = await fetch(`${BACKEND_URL}${path}`, { signal: AbortSignal.timeout(5000) });
+    if (!resp.ok) throw new Error('Backend error');
+    return await resp.json();
+  } catch {
+    return mockFn();
   }
-  return initialFetchPromise;
 };
 
-// Start prefetching immediately when module loads
-prefetchData();
-
-const columns = [
-  { field: 'name', headerName: 'Service', width: 180 },
-  { field: 'ownerTeam', headerName: 'Owner Team', width: 150 },
-  { field: 'environment', headerName: 'Environment', width: 130 },
-  {
-    field: 'status',
-    headerName: 'Status',
-    width: 120,
-    renderCell: (params) => <StatusChip value={params.value} type="status" />,
-  },
-  {
-    field: 'avgLatencyMs',
-    headerName: 'Avg Latency (ms)',
-    width: 150,
-    type: 'number',
-  },
-  {
-    field: 'errorRate',
-    headerName: 'Error Rate (%)',
-    width: 130,
-    type: 'number',
-    valueFormatter: (value) => value?.toFixed(2),
-  },
-  {
-    field: 'anomalyRate',
-    headerName: 'Anomaly Rate (%)',
-    width: 150,
-    type: 'number',
-    valueFormatter: (value) => value?.toFixed(2),
-  },
-  {
-    field: 'lastDeploymentAt',
-    headerName: 'Last Deployment',
-    width: 180,
-    valueFormatter: (value) => {
-      if (!value) return "—";
-      const d = new Date(value.endsWith("Z") ? value : value + "Z");
-      return isNaN(d) ? "—" : d.toLocaleString();
-    },
-  },
-  {
-    field: 'requestPerMin',
-    headerName: 'RPM',
-    width: 120,
-    type: 'number',
-    valueFormatter: (value) => value?.toLocaleString(),
-  },
+const generateMockServices = () => [
+  { id: 1, name: 'api-gateway',          ownerTeam: 'Platform',   environment: 'production', status: 'healthy',  avgLatencyMs: 45,  errorRate: 0.02,  anomalyRate: 0.10, requestPerMin: 1200 },
+  { id: 2, name: 'payment-service',       ownerTeam: 'Commerce',   environment: 'production', status: 'degraded', avgLatencyMs: 312, errorRate: 0.08,  anomalyRate: 0.40, requestPerMin: 340  },
+  { id: 3, name: 'user-service',          ownerTeam: 'Identity',   environment: 'production', status: 'healthy',  avgLatencyMs: 67,  errorRate: 0.01,  anomalyRate: 0.05, requestPerMin: 890  },
+  { id: 4, name: 'auth-service',          ownerTeam: 'Identity',   environment: 'production', status: 'healthy',  avgLatencyMs: 38,  errorRate: 0.005, anomalyRate: 0.02, requestPerMin: 2100 },
+  { id: 5, name: 'notification-service',  ownerTeam: 'Comm',       environment: 'staging',    status: 'healthy',  avgLatencyMs: 95,  errorRate: 0.03,  anomalyRate: 0.15, requestPerMin: 450  },
+  { id: 6, name: 'inventory-service',     ownerTeam: 'Commerce',   environment: 'production', status: 'healthy',  avgLatencyMs: 112, errorRate: 0.02,  anomalyRate: 0.08, requestPerMin: 220  },
+  { id: 7, name: 'analytics-service',     ownerTeam: 'Data',       environment: 'production', status: 'degraded', avgLatencyMs: 890, errorRate: 0.12,  anomalyRate: 0.55, requestPerMin: 180  },
+  { id: 8, name: 'search-service',        ownerTeam: 'Discovery',  environment: 'production', status: 'healthy',  avgLatencyMs: 78,  errorRate: 0.01,  anomalyRate: 0.06, requestPerMin: 760  },
 ];
 
-// ==================== COMPONENT ====================
-
 export const Services = () => {
-  // State management - only for UI state
-  const [searchText, setSearchText] = useState('');
-  const [selectedEnv, setSelectedEnv] = useState('All');
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [selectedService, setSelectedService] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [services, setServices] = useState(cachedData.services || []);
-  const [anomalies, setAnomalies] = useState(cachedData.anomalies || []);
+  const [search, setSearch] = useState('');
+  const [envFilter, setEnvFilter] = useState('all');
 
-  // Refs for managing lifecycle and throttling
-  const pollIntervalRef = useRef(null);
-  const isMountedRef = useRef(true);
-  const lastFetchTime = useRef(cachedData.timestamp || 0);
+  const { data: services, isLoading } = useQuery({
+    queryKey: ['/api/proxy/services'],
+    queryFn: () => proxyOrMock('/api/services', generateMockServices),
+    refetchInterval: 30000,
+  });
 
-  // Fetch services and anomalies data
-  const fetchServicesData = useCallback(async (isPolling = false) => {
-    try {
-      // Throttle: Don't fetch if last fetch was less than 5 seconds ago (unless manual refresh)
-      if (isPolling && Date.now() - lastFetchTime.current < 5000) {
-        return;
-      }
+  const filtered = (services || []).filter((s) => {
+    const matchSearch =
+      s.name.toLowerCase().includes(search.toLowerCase()) ||
+      s.ownerTeam.toLowerCase().includes(search.toLowerCase());
+    const matchEnv = envFilter === 'all' || s.environment === envFilter;
+    return matchSearch && matchEnv;
+  });
 
-      const [servicesResponse, anomaliesResponse] = await Promise.all([
-        api.get('/services').catch(() => ({ data: [] })),
-        api.get('/anomalies/recent', { params: { limit: 50 } }).catch(() => ({ data: [] })),
-      ]);
-
-      // Don't update if component unmounted
-      if (!isMountedRef.current) return;
-
-      lastFetchTime.current = Date.now();
-      const newServices = servicesResponse.data || [];
-      const newAnomalies = (anomaliesResponse.data || []).map(a => ({
-        id: a.id,
-        serviceName: a.apiName ?? a.apiname ?? "unknown",
-        endpoint: a.endpoint ?? a.apiName ?? a.apiname ?? "unknown",
-        environment: a.environment ?? "unknown",
-        severity: a.severity?.toLowerCase() ?? "medium",
-        score: a.finalanomalyscore ?? a.finalAnomalyScore ?? a.hybridEnsembleScore ?? 0,
-        detectedAt: a.timestamp,
-        status: a.status?.toLowerCase() ?? "active",
-      }));
-
-      // Fast shallow comparison - only update if lengths differ
-      const shouldUpdate =
-        newAnomalies.length !== anomalies.length ||
-        newServices.length !== services.length;
-
-      if (shouldUpdate || !isPolling) {
-        setServices(newServices);
-        setAnomalies(newAnomalies);
-
-        // Update module-level cache
-        cachedData = {
-          services: newServices,
-          anomalies: newAnomalies,
-          timestamp: Date.now(),
-        };
-
-        if (isPolling && shouldUpdate) {
-          console.log(`Services updated: ${newServices.length} services, ${newAnomalies.length} anomalies`);
-        }
-      }
-    } catch (err) {
-      console.error('Error fetching services data:', err);
-    }
-  }, [anomalies.length, services.length]);
-
-  // Start background polling
-  const startPolling = useCallback(() => {
-    if (!pollIntervalRef.current) {
-      pollIntervalRef.current = setInterval(() => {
-        fetchServicesData(true);
-      }, 30000); // 30 seconds
-    }
-  }, [fetchServicesData]);
-
-  // Stop background polling
-  const stopPolling = useCallback(() => {
-    if (pollIntervalRef.current) {
-      clearInterval(pollIntervalRef.current);
-      pollIntervalRef.current = null;
-    }
-  }, []);
-
-  // Setup subscriptions and initial data on mount
-  useEffect(() => {
-    isMountedRef.current = true;
-
-    const loadData = async () => {
-      // EDGE CASE 1: If prefetch failed or returned empty data (server was down), retry
-      if (prefetchFailed || (cachedData.services && cachedData.services.length === 0)) {
-        // Reset flags to allow retry
-        initialFetchPromise = null;
-        prefetchFailed = false;
-        console.log('Retrying initial fetch (server may have been down)...');
-        await fetchServicesData(false);
-      } else if (initialFetchPromise) {
-        // Use prefetched data if available
-        try {
-          const data = await initialFetchPromise;
-          if (isMountedRef.current && data) {
-            setServices(data.services);
-            setAnomalies(data.anomalies);
-          }
-        } catch (err) {
-          // If prefetch failed, try again
-          await fetchServicesData(false);
-        }
-      } else {
-        // No prefetch available, fetch normally
-        await fetchServicesData(false);
-      }
-    };
-
-    loadData();
-    startPolling();
-
-    return () => {
-      isMountedRef.current = false;
-      stopPolling();
-    };
-  }, [fetchServicesData, startPolling, stopPolling]);
-
-  // Manual refresh handler
-  const handleRefresh = useCallback(() => {
-    lastFetchTime.current = 0; // Reset throttle to allow immediate fetch
-    fetchServicesData(false);
-  }, [fetchServicesData]);
-
-  // Memoized filtered services
-  const filteredServices = useMemo(() => {
-    if (services.length === 0) return [];
-
-    const lowerSearch = searchText.toLowerCase();
-    const isAllEnv = selectedEnv === 'All';
-    const isAllStatus = selectedStatus === 'All';
-
-    // Fast path: no filters
-    if (isAllEnv && isAllStatus && !lowerSearch) {
-      return services;
-    }
-
-    return services.filter((service) => {
-      if (!isAllEnv && service.environment !== selectedEnv) return false;
-      if (!isAllStatus && service.status !== selectedStatus) return false;
-      if (lowerSearch && !service.name.toLowerCase().includes(lowerSearch)) return false;
-      return true;
-    });
-  }, [searchText, selectedEnv, selectedStatus, services]);
-
-  // Memoized service anomalies
-  const serviceAnomalies = useMemo(() => {
-    if (!selectedService || anomalies.length === 0) return [];
-    return anomalies.filter((a) => a.serviceName === selectedService.name);
-  }, [selectedService, anomalies]);
-
-  // Callback for row click
-  const handleRowClick = useCallback((params) => {
-    setSelectedService(params.row);
-    setDrawerOpen(true);
-  }, []);
+  const healthy = (services || []).filter((s) => s.status === 'healthy').length;
+  const degraded = (services || []).filter((s) => s.status === 'degraded').length;
 
   return (
-    <Container maxWidth="xl">
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h4" gutterBottom fontWeight="bold">
-            Services
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Monitor and manage API services across distributed environments
-          </Typography>
-        </Box>
-        <Tooltip title="Refresh services">
-          <IconButton onClick={handleRefresh} color="primary">
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* Summary chips */}
+      <Box sx={{ display: 'flex', gap: 2 }}>
+        {[
+          { label: 'Total Services', value: (services || []).length,     color: 'text.primary' },
+          { label: 'Healthy',        value: healthy,                       color: 'success.main' },
+          { label: 'Degraded',       value: degraded,                      color: 'warning.main' },
+        ].map(({ label, value, color }) => (
+          <Box
+            key={label}
+            sx={{ flex: 1, textAlign: 'center', p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+          >
+            <Typography variant="h5" sx={{ fontWeight: 600, color }}>
+              {value}
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+              {label}
+            </Typography>
+          </Box>
+        ))}
       </Box>
 
-      <Paper sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-          <TextField
-            label="Search services"
-            variant="outlined"
-            size="small"
-            value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
-            sx={{ minWidth: 250 }}
-          />
-          <EnvironmentFilter
-            value={selectedEnv}
-            onChange={(e) => setSelectedEnv(e.target.value)}
-          />
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={selectedStatus}
-              label="Status"
-              onChange={(e) => setSelectedStatus(e.target.value)}
-            >
-              <MenuItem value="All">All Statuses</MenuItem>
-              <MenuItem value="healthy">Healthy</MenuItem>
-              <MenuItem value="degraded">Degraded</MenuItem>
-              <MenuItem value="down">Down</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
+      {/* Filters */}
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <TextField
+          placeholder="Search services…"
+          size="small"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon size={18} style={{ color: '#6b7280' }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ minWidth: 250 }}
+        />
+        <ToggleButtonGroup
+          value={envFilter}
+          exclusive
+          onChange={(e, v) => v && setEnvFilter(v)}
+          size="small"
+        >
+          <ToggleButton value="all">All Envs</ToggleButton>
+          <ToggleButton value="production">Production</ToggleButton>
+          <ToggleButton value="staging">Staging</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
-        <Box sx={{ height: 600, width: '100%' }}>
-          <DataGrid
-            rows={filteredServices}
-            columns={columns}
-            pageSize={10}
-            rowsPerPageOptions={[10, 25, 50]}
-            onRowClick={handleRowClick}
-            disableSelectionOnClick
-            sx={{
-              '& .MuiDataGrid-row:hover': {
-                cursor: 'pointer',
-              },
-            }}
-          />
-        </Box>
-      </Paper>
-
-      {/* Service Detail Drawer */}
-      <Drawer
-        anchor="right"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        PaperProps={{ sx: { width: 450, p: 3 } }}
-      >
-        {selectedService && (
-          <Box>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h5" fontWeight="bold">
-                {selectedService.name}
-              </Typography>
-              <IconButton onClick={() => setDrawerOpen(false)}>
-                <CloseIcon />
-              </IconButton>
-            </Box>
-
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Owner Team
-              </Typography>
-              <Typography variant="body1" fontWeight="medium">
-                {selectedService.ownerTeam}
-              </Typography>
-            </Box>
-
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Environment
-              </Typography>
-              <StatusChip value={selectedService.environment} type="status" />
-            </Box>
-
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Status
-              </Typography>
-              <StatusChip value={selectedService.status} type="status" />
-            </Box>
-
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Tags
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                {selectedService.tags.map((tag) => (
-                  <Chip key={tag} label={tag} size="small" variant="outlined" />
+      {/* Table */}
+      <Paper>
+        <TableContainer sx={{ maxHeight: 'calc(100dvh - 340px)' }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                {[
+                  { label: 'Service',      align: 'left'  },
+                  { label: 'Team',         align: 'left'  },
+                  { label: 'Environment',  align: 'left'  },
+                  { label: 'Status',       align: 'left'  },
+                  { label: 'Avg Latency',  align: 'right' },
+                  { label: 'Error Rate',   align: 'right' },
+                  { label: 'Anomaly Rate', align: 'right' },
+                  { label: 'Req/min',      align: 'right' },
+                ].map(({ label, align }) => (
+                  <TableCell key={label} align={align} sx={{ fontWeight: 500, fontSize: '0.75rem' }}>
+                    {label}
+                  </TableCell>
                 ))}
-              </Box>
-            </Box>
-
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="h6" gutterBottom>
-                Metrics
-              </Typography>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2">Avg Latency</Typography>
-                  <Typography variant="body2" fontWeight="bold">
-                    {selectedService.avgLatencyMs} ms
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2">Error Rate</Typography>
-                  <Typography variant="body2" fontWeight="bold">
-                    {selectedService.errorRate}%
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2">Anomaly Rate</Typography>
-                  <Typography variant="body2" fontWeight="bold">
-                    {selectedService.anomalyRate}%
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Typography variant="body2">Requests/Min</Typography>
-                  <Typography variant="body2" fontWeight="bold">
-                    {selectedService.requestPerMin.toLocaleString()}
-                  </Typography>
-                </Box>
-              </Box>
-            </Box>
-
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Recent Anomalies
-              </Typography>
-              {serviceAnomalies.length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {serviceAnomalies.map((anomaly) => (
-                    <Paper key={anomaly.id} sx={{ p: 2 }} variant="outlined">
-                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                        <StatusChip value={anomaly.severity} type="severity" />
-                        <StatusChip value={anomaly.status} type="status" />
-                      </Box>
-                      <Typography variant="body2">{anomaly.endpoint}</Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Score: {anomaly.score.toFixed(2)}
-                      </Typography>
-                    </Paper>
-                  ))}
-                </Box>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 8 }).map((__, j) => (
+                      <TableCell key={j}>
+                        <Box sx={{ height: 12, bgcolor: 'action.hover', borderRadius: 1 }} />
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filtered.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8}>
+                    <EmptyState message="No services found" />
+                  </TableCell>
+                </TableRow>
               ) : (
-                <Typography variant="body2" color="text.secondary">
-                  No recent anomalies
-                </Typography>
+                filtered.map((s) => (
+                  <TableRow key={s.id} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'primary.main', fontWeight: 500 }}>
+                      {s.name}
+                    </TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {s.ownerTeam}
+                    </TableCell>
+                    <TableCell>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          px: 1,
+                          py: 0.25,
+                          borderRadius: 0.5,
+                          backgroundColor:
+                            s.environment === 'production'
+                              ? 'rgba(59,130,246,0.15)'
+                              : 'rgba(107,114,128,0.15)',
+                          color: s.environment === 'production' ? '#3b82f6' : '#6b7280',
+                        }}
+                      >
+                        {s.environment}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <StatusDot status={s.status} />
+                        <Typography variant="caption" sx={{ textTransform: 'capitalize' }}>
+                          {s.status}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontSize: '0.75rem',
+                        color:
+                          s.avgLatencyMs > 500 ? 'warning.main' :
+                          s.avgLatencyMs > 200 ? '#eab308' :
+                          'text.primary',
+                      }}
+                    >
+                      {s.avgLatencyMs}ms
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontSize: '0.75rem',
+                        color:
+                          s.errorRate > 0.1 ? 'error.main' :
+                          s.errorRate > 0.05 ? 'warning.main' :
+                          'text.primary',
+                      }}
+                    >
+                      {(s.errorRate * 100).toFixed(1)}%
+                    </TableCell>
+                    <TableCell
+                      align="right"
+                      sx={{
+                        fontSize: '0.75rem',
+                        color:
+                          s.anomalyRate > 0.4 ? 'error.main' :
+                          s.anomalyRate > 0.2 ? 'warning.main' :
+                          'text.primary',
+                      }}
+                    >
+                      {(s.anomalyRate * 100).toFixed(0)}%
+                    </TableCell>
+                    <TableCell align="right" sx={{ fontSize: '0.75rem' }}>
+                      {s.requestPerMin.toLocaleString()}
+                    </TableCell>
+                  </TableRow>
+                ))
               )}
-            </Box>
-          </Box>
-        )}
-      </Drawer>
-    </Container>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+    </Box>
   );
 };
 

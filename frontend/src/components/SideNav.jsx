@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import {
   Insights as InsightsIcon,
+  Analytics as AnalyticsIcon,
   Http as HttpIcon,
   NotificationsActive as NotificationsActiveIcon,
   Article as ArticleIcon,
@@ -21,6 +22,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 const navItems = [
   { label: 'Dashboard', path: '/', icon: <InsightsIcon /> },
+  { label: 'Analytics', path: '/analytics', icon: <AnalyticsIcon /> },
   { label: 'Services', path: '/services', icon: <HttpIcon /> },
   { label: 'Alerts', path: '/alerts', icon: <NotificationsActiveIcon /> },
   { label: 'Logs', path: '/logs', icon: <ArticleIcon /> },

@@ -151,6 +151,21 @@ public class AnomalyController {
         return acknowledgeAnomaly(id, "system");
     }
 
+    // --- List All Anomalies ---
+    
+    @GetMapping("")
+    public ResponseEntity<List<AnomalyResponse>> getAllAnomalies(
+        @RequestParam(defaultValue = "100") int limit
+    ) {
+        try {
+            List<AnomalyResponse> anomalies = anomalyService.getRecentAnomalies(limit);
+            return ResponseEntity.ok(anomalies);
+        } catch (Exception e) {
+            log.error("Error fetching all anomalies: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     // --- Stats ---
 
     @GetMapping("/stats")

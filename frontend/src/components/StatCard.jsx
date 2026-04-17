@@ -1,7 +1,7 @@
 import { Paper, Typography, Box, useTheme } from '@mui/material';
 import { TrendingUp, TrendingDown, TrendingFlat } from '@mui/icons-material';
 
-export const StatCard = ({ label, value, unit, trend, trendDirection, icon: Icon }) => {
+export const StatCard = ({ label, value, unit, trend, trendDirection, icon: Icon, color }) => {
   const theme = useTheme();
   const TrendIcon = trendDirection === 'up' ? TrendingUp : trendDirection === 'down' ? TrendingDown : TrendingFlat;
   const trendColor =
@@ -10,6 +10,7 @@ export const StatCard = ({ label, value, unit, trend, trendDirection, icon: Icon
       : trendDirection === 'down'
         ? theme.palette.error.main
         : theme.palette.text.secondary;
+  const valueColor = color ? theme.palette[color.split('.')[0]]?.[color.split('.')[1]] || theme.palette.text.primary : theme.palette.text.primary;
 
   return (
     <Paper
@@ -38,7 +39,7 @@ export const StatCard = ({ label, value, unit, trend, trendDirection, icon: Icon
         {label}
       </Typography>
       <Box sx={{ display: 'flex', alignItems: 'baseline', mb: 1 }}>
-        <Typography variant="h4" component="div" fontWeight="bold">
+        <Typography variant="h4" component="div" fontWeight="bold" sx={{ color: valueColor }}>
           {value}
         </Typography>
         {unit && (
