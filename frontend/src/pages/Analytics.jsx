@@ -78,7 +78,7 @@ export const Analytics = () => {
                 return;
             }
 
-            const [kpiRes, anomaliesRes, servicesRes] = await Promise.all([
+            const [, anomaliesRes, _servicesRes] = await Promise.all([
                 api.get("/dashboard/kpi").catch(() => ({ data: {} })),
                 api.get("/anomalies", { params: { limit: 100 } }).catch(() => ({ data: [] })),
                 api.get("/services").catch(() => ({ data: [] })),
@@ -88,7 +88,6 @@ export const Analytics = () => {
 
             lastFetchTime.current = Date.now();
 
-            const kpi = kpiRes.data || {};
             const anomalies = anomaliesRes.data || [];
 
             const newMetrics = {

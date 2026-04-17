@@ -4,7 +4,7 @@
 // each alert have the status field which can be 'open', 'acknowledged' or 'resolved'
 
 // http://localhost:8080/api/alerts
-const alerts = [
+export const alerts = [
   {
     id: 1,
     title: 'Critical Latency Spike Detected',

@@ -1,5 +1,10 @@
+import SpeedIcon from '@mui/icons-material/Speed';
+import ErrorIcon from '@mui/icons-material/Error';
+import WarningIcon from '@mui/icons-material/Warning';
+import TimerIcon from '@mui/icons-material/Timer';
+
 // http://localhost:8080/api/dashboard/kpi
-const kpiCards = [
+export const kpiCards = [
   {
     id: 1,
     label: 'Total Requests',
@@ -39,7 +44,7 @@ const kpiCards = [
 ];
 
 // http://localhost:8080/api/dashboard/env-summary
-const environmentSummary = [
+export const environmentSummary = [
   {
     id: 1,
     name: 'On Prem',
@@ -88,7 +93,7 @@ const environmentSummary = [
 ];
 
 // http://localhost:8080/api/dashboard/anomalies
-const recentAnomalies = [
+export const recentAnomalies = [
   {
     id: 1,
     serviceName: 'auth-service',
@@ -148,7 +153,7 @@ const recentAnomalies = [
 
 
 // http://localhost:8080/api/dashboard/traffic
-const traffic=[
+export const traffic=[
     {
         "timestamp": "2026-01-10T17:19:26.501Z",
         "requestsPerSec": 34400.75350540322,

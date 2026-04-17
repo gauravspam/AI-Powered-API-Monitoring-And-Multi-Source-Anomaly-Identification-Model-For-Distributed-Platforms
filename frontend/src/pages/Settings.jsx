@@ -14,7 +14,6 @@ import {
   Snackbar,
   Alert,
 } from '@mui/material';
-import axios from 'axios';
 import api from '@/api/http';
 
 export const Settings = () => {

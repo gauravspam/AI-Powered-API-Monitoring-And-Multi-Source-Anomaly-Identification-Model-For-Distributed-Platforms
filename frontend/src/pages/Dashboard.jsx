@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Box,
@@ -9,43 +10,35 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  useTheme,
 } from '@mui/material';
 import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
+  AreaChart, Area, BarChart, Bar, Cell,
+  ComposedChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import {
-  Warning as WarningIcon,
-  Speed as SpeedIcon,
-  Dns as DnsIcon,
-  Description as DescriptionIcon,
-  AccountTree as AccountTreeIcon,
-  TrendingUp as TrendingUpIcon,
-} from '@mui/icons-material';
+  AlertTriangle, Server, Activity, Gauge, TrendingUp, CheckCircle,
+  Clock, Zap, BarChart2,
+} from 'lucide-react';
 import { BACKEND_URL } from '@/api/http';
-import { KpiCard, SeverityBadge, ScoreBar, timeAgo, EmptyState } from '@/components/SharedComponents';
+import {
+  KpiCard, SeverityBadge, ScoreBar, timeAgo, EmptyState, LoadingRows, ChartTooltip,
+} from '@/components/SharedComponents';
+import { SEVERITY_COLORS } from '@/theme';
 
-// ── Helper: try backend, fall back to mock ──────────────────────────────────
+// ── proxyOrMock ───────────────────────────────────────────────────────────────
 const proxyOrMock = async (path, mockFn) => {
   try {
-    const resp = await fetch(`${BACKEND_URL}${path}`, { signal: AbortSignal.timeout(5000) });
-    if (!resp.ok) throw new Error('Backend error');
-    return await resp.json();
+    const r = await fetch(`${BACKEND_URL}${path}`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error('Backend error');
+    return r.json();
   } catch {
     return mockFn();
   }
 };
 
-// ── Mock generators ──────────────────────────────────────────────────────────
+// ── Mock data ─────────────────────────────────────────────────────────────────
 const generateMockOverview = () => ({
   totalServices: 12,
   totalMetrics: 15420,
@@ -55,14 +48,19 @@ const generateMockOverview = () => ({
   activeAnomalies: 5,
   healthyServices: 10,
   degradedServices: 2,
+  p99LatencyMs: 842,
+  errorRatePct: 4.7,
+  throughputRps: 18.4,
+  errorBudgetBurnRate: 2.3,
+  mttrMinutes: 14,
   _mock: true,
 });
 
 const generateMockAnomalies = () => {
-  const services = ['api-gateway', 'payment-service', 'user-service', 'auth-service', 'notification-service'];
+  const services  = ['api-gateway', 'payment-service', 'user-service', 'auth-service', 'notification-service'];
   const endpoints = ['/api/users', '/payment/checkout', '/auth/login', '/api/orders', '/api/events'];
   const severities = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
-  const statuses = ['ACTIVE', 'ACKNOWLEDGED', 'RESOLVED'];
+  const statuses   = ['ACTIVE', 'ACKNOWLEDGED', 'RESOLVED'];
   return Array.from({ length: 20 }, (_, i) => ({
     id: 100 - i,
     apiName: services[i % services.length],
@@ -75,12 +73,11 @@ const generateMockAnomalies = () => {
     detectedAt: new Date(Date.now() - i * 900000).toISOString(),
     isAcknowledged: i % 3 === 1,
     isResolved: i % 3 === 2,
-    environment: i % 2 === 0 ? 'production' : 'staging',
     _mock: true,
   }));
 };
 
-const generateMockTrafficMetrics = () => {
+const generateMockTraffic = () => {
   const now = Date.now();
   return Array.from({ length: 30 }, (_, i) => ({
     timestamp: new Date(now - (29 - i) * 60000).toISOString(),
@@ -88,39 +85,21 @@ const generateMockTrafficMetrics = () => {
     errorRate: parseFloat((0.01 + Math.random() * 0.08).toFixed(4)),
     avgLatencyMs: Math.floor(50 + Math.random() * 200),
     p99LatencyMs: Math.floor(200 + Math.random() * 800),
+    p95LatencyMs: Math.floor(150 + Math.random() * 500),
   }));
 };
 
-// ── Custom tooltip for Recharts ──────────────────────────────────────────────
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && Array.isArray(payload) && payload.length) {
-    return (
-      <Paper sx={{ p: 1.5, border: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="caption" sx={{ color: 'text.secondary', mb: 0.5, display: 'block' }}>
-          {label}
-        </Typography>
-        {payload.map((p) => (
-          <Typography
-            key={p.dataKey}
-            variant="caption"
-            sx={{ display: 'block', color: p.color, fontVariantNumeric: 'tabular-nums' }}
-          >
-            {p.dataKey}:{' '}
-            {typeof p.value === 'number'
-              ? p.dataKey?.includes('Rate')
-                ? (p.value * 100).toFixed(2) + '%'
-                : p.value.toLocaleString()
-              : p.value}
-          </Typography>
-        ))}
-      </Paper>
-    );
-  }
-  return null;
-};
+// Spark trend helper
+const genSpark = (base, variance, len = 12) =>
+  Array.from({ length: len }, () => Math.max(0, base + (Math.random() - 0.5) * variance));
 
-// ── Page component ───────────────────────────────────────────────────────────
+// ── Dashboard ─────────────────────────────────────────────────────────────────
 export const Dashboard = () => {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const gridColor = isDark ? 'hsl(222, 14%, 16%)' : 'hsl(222, 14%, 88%)';
+  const tickColor = isDark ? '#6b7280' : '#9ca3af';
+
   const { data: overview, isLoading: ovLoading } = useQuery({
     queryKey: ['/api/proxy/overview'],
     queryFn: () => proxyOrMock('/api/overview', generateMockOverview),
@@ -135,172 +114,172 @@ export const Dashboard = () => {
 
   const { data: traffic, isLoading: trafficLoading } = useQuery({
     queryKey: ['/api/proxy/metrics/traffic'],
-    queryFn: () => proxyOrMock('/api/metrics/traffic?limit=30', generateMockTrafficMetrics),
+    queryFn: () => proxyOrMock('/api/metrics/traffic?limit=30', generateMockTraffic),
     refetchInterval: 30000,
   });
 
-  const trafficData = Array.isArray(traffic)
-    ? traffic.map((t) => ({
-        time: new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        requests: t.requestCount,
-        errorRate: t.errorRate,
-        latency: t.avgLatencyMs,
-      }))
-    : [];
+  const trafficData = useMemo(() =>
+    (Array.isArray(traffic) ? traffic : []).map((t) => ({
+      time: new Date(t.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      rps: parseFloat((t.requestCount / 60).toFixed(1)),
+      errorRate: t.errorRate,
+      p99: t.p99LatencyMs,
+      p95: t.p95LatencyMs || Math.floor(t.p99LatencyMs * 0.75),
+      avg: t.avgLatencyMs,
+    })), [traffic]);
 
-  const anomalyList = Array.isArray(anomalies) ? anomalies.slice(0, 10) : [];
+  const anomalyList = useMemo(() =>
+    (Array.isArray(anomalies) ? anomalies : []).slice(0, 12), [anomalies]);
 
-  const severityCounts = anomalyList.reduce((acc, a) => {
-    const s = a.severity || 'NORMAL';
-    acc[s] = (acc[s] || 0) + 1;
-    return acc;
-  }, {});
+  const severityDistData = useMemo(() => {
+    const counts = anomalyList.reduce((acc, a) => {
+      acc[a.severity] = (acc[a.severity] || 0) + 1;
+      return acc;
+    }, {});
+    return [
+      { name: 'Critical', value: counts['CRITICAL'] || 0, fill: SEVERITY_COLORS.CRITICAL },
+      { name: 'High',     value: counts['HIGH']     || 0, fill: SEVERITY_COLORS.HIGH },
+      { name: 'Medium',   value: counts['MEDIUM']   || 0, fill: SEVERITY_COLORS.MEDIUM },
+      { name: 'Low',      value: counts['LOW']      || 0, fill: SEVERITY_COLORS.LOW },
+    ];
+  }, [anomalyList]);
 
-  const severityDistData = [
-    { name: 'Critical', value: severityCounts['CRITICAL'] || 0, fill: '#ef4444' },
-    { name: 'High',     value: severityCounts['HIGH']     || 0, fill: '#f97316' },
-    { name: 'Medium',   value: severityCounts['MEDIUM']   || 0, fill: '#eab308' },
-    { name: 'Low',      value: severityCounts['LOW']      || 0, fill: '#22c55e' },
+  // Sparkline data (mock trend direction)
+  const latSpark  = genSpark(overview?.p99LatencyMs   || 842,  200);
+  const errSpark  = genSpark(overview?.errorRatePct   || 4.7,  1.5);
+const rpsSpark = genSpark(overview?.throughputRps || 18.4, 4);
+
+  // KPI cards definition
+  const kpis = [
+    {
+      label: 'P99 Latency',
+      value: ovLoading ? '—' : `${overview?.p99LatencyMs ?? 842}ms`,
+      sub: 'Tail latency across all services',
+      accent: (overview?.p99LatencyMs ?? 0) > 1000 ? 'critical' : (overview?.p99LatencyMs ?? 0) > 500 ? 'high' : 'low',
+      icon: Clock,
+      delta: -3.2,
+      deltaUnit: '%',
+      lowerIsBetter: true,
+      sparkData: latSpark,
+      highlight: true,
+    },
+    {
+      label: 'Error Rate',
+      value: ovLoading ? '—' : `${(overview?.errorRatePct ?? 4.7).toFixed(1)}%`,
+      sub: '4xx + 5xx combined',
+      accent: (overview?.errorRatePct ?? 0) > 5 ? 'critical' : (overview?.errorRatePct ?? 0) > 2 ? 'high' : 'low',
+      icon: AlertTriangle,
+      delta: +0.4,
+      deltaUnit: '%',
+      lowerIsBetter: true,
+      sparkData: errSpark,
+      highlight: true,
+    },
+    {
+      label: 'Throughput',
+      value: ovLoading ? '—' : `${(overview?.throughputRps ?? 18.4).toFixed(1)} RPS`,
+      sub: 'Request rate (all services)',
+      accent: 'default',
+      icon: Zap,
+      delta: +2.1,
+      deltaUnit: '%',
+      sparkData: rpsSpark,
+    },
+    {
+      label: 'Active Anomalies',
+      value: ovLoading ? '—' : overview?.activeAnomalies ?? 5,
+      sub: 'Require immediate attention',
+      accent: (overview?.activeAnomalies ?? 0) > 3 ? 'critical' : (overview?.activeAnomalies ?? 0) > 0 ? 'high' : 'low',
+      icon: AlertTriangle,
+      highlight: (overview?.activeAnomalies ?? 0) > 0,
+    },
+    {
+      label: 'MTTR',
+      value: ovLoading ? '—' : `${overview?.mttrMinutes ?? 14}m`,
+      sub: 'Mean time to resolve',
+      accent: (overview?.mttrMinutes ?? 0) > 30 ? 'high' : 'low',
+      icon: Clock,
+    },
+    {
+      label: 'Healthy Services',
+      value: ovLoading ? '—' : `${overview?.healthyServices ?? 10} / ${overview?.totalServices ?? 12}`,
+      sub: `${overview?.degradedServices ?? 2} degraded`,
+      accent: (overview?.degradedServices ?? 0) > 0 ? 'high' : 'low',
+      icon: Server,
+    },
+    {
+      label: 'Total Anomalies',
+      value: ovLoading ? '—' : overview?.totalAnomalies ?? 23,
+      sub: 'All time detected',
+      accent: 'info',
+      icon: Activity,
+    },
   ];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-      {/* KPI row */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-        {[
-          {
-            label: 'Active Anomalies',
-            value: ovLoading ? '—' : overview?.activeAnomalies ?? 0,
-            sub: 'Require attention',
-            accent: 'critical',
-            icon: <WarningIcon sx={{ fontSize: 14 }} />,
-          },
-          {
-            label: 'Total Services',
-            value: ovLoading ? '—' : overview?.totalServices ?? 0,
-            sub: `${overview?.degradedServices ?? 0} degraded`,
-            accent: overview?.degradedServices > 0 ? 'high' : 'low',
-            icon: <DnsIcon sx={{ fontSize: 14 }} />,
-          },
-          {
-            label: 'Metrics Ingested',
-            value: ovLoading ? '—' : (overview?.totalMetrics ?? 0).toLocaleString(),
-            sub: 'All time',
-            icon: <SpeedIcon sx={{ fontSize: 14 }} />,
-          },
-          {
-            label: 'Log Entries',
-            value: ovLoading ? '—' : (overview?.totalLogs ?? 0).toLocaleString(),
-            sub: 'OpenSearch indexed',
-            icon: <DescriptionIcon sx={{ fontSize: 14 }} />,
-          },
-          {
-            label: 'Trace Spans',
-            value: ovLoading ? '—' : (overview?.totalTraces ?? 0).toLocaleString(),
-            sub: 'Distributed traces',
-            icon: <AccountTreeIcon sx={{ fontSize: 14 }} />,
-          },
-          {
-            label: 'Total Anomalies',
-            value: ovLoading ? '—' : overview?.totalAnomalies ?? 0,
-            sub: 'All time detected',
-            accent: 'info',
-            icon: <TrendingUpIcon sx={{ fontSize: 14 }} />,
-          },
-        ].map((kpi) => (
-          <Box key={kpi.label} sx={{ flex: '1 1 140px', minWidth: 140 }}>
-            <KpiCard {...kpi} />
-          </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+      {/* ── Golden Signals KPI row ── */}
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 1.5 }}>
+        {kpis.map((kpi) => (
+          <KpiCard key={kpi.label} {...kpi} />
         ))}
       </Box>
 
-      {/* Charts row */}
+      {/* ── Charts row ── */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-        {/* Traffic area chart */}
+        {/* Traffic + Error Rate combo chart */}
         <Box sx={{ flex: '1 1 500px', minWidth: 300 }}>
-          <Paper sx={{ p: 2 }}>
+          <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                Request Traffic
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Traffic & Error Rate
               </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Last 30 min
-              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Last 30 min</Typography>
             </Box>
             {trafficLoading ? (
-              <Box sx={{ height: 176, bgcolor: 'action.hover', borderRadius: 1 }} />
+              <Box sx={{ height: 180, bgcolor: 'action.hover', borderRadius: 1 }} />
             ) : trafficData.length === 0 ? (
               <EmptyState message="No traffic data" />
             ) : (
-              <ResponsiveContainer width="100%" height={176}>
-                <AreaChart data={trafficData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
+              <ResponsiveContainer width="100%" height={180}>
+                <ComposedChart data={trafficData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
                   <defs>
-                    <linearGradient id="gradRequests" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(188, 80%, 42%)" stopOpacity={0.3} />
+                    <linearGradient id="gradRps" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="hsl(188, 80%, 42%)" stopOpacity={0.3} />
                       <stop offset="95%" stopColor="hsl(188, 80%, 42%)" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e2a38" vertical={false} />
-                  <XAxis
-                    dataKey="time"
-                    tick={{ fontSize: 10, fill: '#6b7280' }}
-                    tickLine={false}
-                    axisLine={false}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: '#6b7280' }}
-                    tickLine={false}
-                    axisLine={false}
-                    width={40}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="requests"
-                    name="Requests"
-                    stroke="hsl(188, 80%, 42%)"
-                    fill="url(#gradRequests)"
-                    strokeWidth={1.5}
-                    dot={false}
-                  />
-                </AreaChart>
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                  <YAxis yAxisId="rps" tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} width={36} />
+                  <YAxis yAxisId="err" orientation="right" tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} width={40}
+                    tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '0.7rem' }} />
+                  <Area yAxisId="rps" type="monotone" dataKey="rps" name="RPS" stroke="hsl(188, 80%, 42%)" fill="url(#gradRps)" strokeWidth={1.5} dot={false} />
+                  <Line yAxisId="err" type="monotone" dataKey="errorRate" name="Error Rate" stroke="#ef4444" strokeWidth={1.5} dot={false} />
+                </ComposedChart>
               </ResponsiveContainer>
             )}
           </Paper>
         </Box>
 
-        {/* Severity bar chart */}
+        {/* Severity distribution */}
         <Box sx={{ flex: '1 1 200px', minWidth: 200 }}>
-          <Paper sx={{ p: 2 }}>
+          <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-                Severity Distribution
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Recent 10
-              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>Anomaly Severity</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>Recent {anomalyList.length}</Typography>
             </Box>
             {anomLoading ? (
-              <Box sx={{ height: 176, bgcolor: 'action.hover', borderRadius: 1 }} />
+              <Box sx={{ height: 180, bgcolor: 'action.hover', borderRadius: 1 }} />
             ) : (
-              <ResponsiveContainer width="100%" height={176}>
+              <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={severityDistData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e2a38" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    tick={{ fontSize: 10, fill: '#6b7280' }}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: '#6b7280' }}
-                    tickLine={false}
-                    axisLine={false}
-                    allowDecimals={false}
-                    width={25}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} allowDecimals={false} width={24} />
+                  <Tooltip content={<ChartTooltip />} />
                   <Bar dataKey="value" name="Count" radius={[3, 3, 0, 0]}>
                     {severityDistData.map((entry, idx) => (
                       <Cell key={idx} fill={entry.fill} />
@@ -313,136 +292,80 @@ export const Dashboard = () => {
         </Box>
       </Box>
 
-      {/* Error rate & latency chart */}
-      <Paper sx={{ p: 2 }}>
+      {/* ── P99 / P95 / Avg Latency chart ── */}
+      <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary' }}>
-            Error Rate & Latency
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Last 30 min
-          </Typography>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>Latency Percentiles</Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>Last 30 min · P99 / P95 / Avg</Typography>
         </Box>
         {trafficLoading ? (
-          <Box sx={{ height: 128, bgcolor: 'action.hover', borderRadius: 1 }} />
+          <Box sx={{ height: 120, bgcolor: 'action.hover', borderRadius: 1 }} />
         ) : trafficData.length === 0 ? (
           <EmptyState message="No data" />
         ) : (
-          <ResponsiveContainer width="100%" height={128}>
+          <ResponsiveContainer width="100%" height={120}>
             <AreaChart data={trafficData} margin={{ top: 4, right: 8, bottom: 4, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2a38" vertical={false} />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 10, fill: '#6b7280' }}
-                tickLine={false}
-                axisLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: '#6b7280' }}
-                tickLine={false}
-                axisLine={false}
-                width={40}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-              <Area
-                type="monotone"
-                dataKey="errorRate"
-                name="Error Rate"
-                stroke="#ef4444"
-                fill="transparent"
-                strokeWidth={1.5}
-                dot={false}
-              />
-              <Area
-                type="monotone"
-                dataKey="latency"
-                name="Latency (ms)"
-                stroke="#f97316"
-                fill="transparent"
-                strokeWidth={1.5}
-                dot={false}
-              />
+              <defs>
+                <linearGradient id="gradP99" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#f97316" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
+              <XAxis dataKey="time" tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10, fill: tickColor }} tickLine={false} axisLine={false} width={42} unit="ms" />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend iconType="circle" iconSize={7} wrapperStyle={{ fontSize: '0.7rem' }} />
+              <Area type="monotone" dataKey="p99" name="P99" stroke="#f97316" fill="url(#gradP99)" strokeWidth={1.5} dot={false} />
+              <Area type="monotone" dataKey="p95" name="P95" stroke="#eab308" fill="transparent" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+              <Area type="monotone" dataKey="avg" name="Avg" stroke="hsl(188, 80%, 42%)" fill="transparent" strokeWidth={1} dot={false} strokeDasharray="2 3" />
             </AreaChart>
           </ResponsiveContainer>
         )}
       </Paper>
 
-      {/* Recent anomalies table */}
-      <Paper>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            p: 2,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            Recent Anomalies
+      {/* ── Recent Anomalies table ── */}
+      <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          p: 2, borderBottom: '1px solid', borderColor: 'divider',
+        }}>
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>Recent Anomalies</Typography>
+          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+            {anomalyList.length} most recent
           </Typography>
         </Box>
-        <TableContainer sx={{ maxHeight: 400 }}>
+        <TableContainer sx={{ maxHeight: 380 }}>
           <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
-                {['Service', 'Endpoint', 'Severity', 'Hybrid Score', 'Status', 'Detected'].map(
-                  (col) => (
-                    <TableCell key={col} sx={{ fontWeight: 600, fontSize: '0.7rem', color: 'text.secondary' }}>
-                      {col}
-                    </TableCell>
-                  )
-                )}
+                {['Service', 'Endpoint', 'Severity', 'Hybrid Score', 'Status', 'Detected'].map((col) => (
+                  <TableCell key={col}>{col}</TableCell>
+                ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {anomLoading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((__, j) => (
-                      <TableCell key={j}>
-                        <Box sx={{ height: 12, bgcolor: 'action.hover', borderRadius: 1, width: '60%' }} />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
+                <LoadingRows cols={6} rows={7} />
               ) : anomalyList.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
-                    <EmptyState message="No anomalies detected" />
-                  </TableCell>
+                  <TableCell colSpan={6}><EmptyState message="No anomalies detected" icon="✓" /></TableCell>
                 </TableRow>
               ) : (
                 anomalyList.map((a, i) => (
-                  <TableRow key={i} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'primary.main' }}>
+                  <TableRow key={a.id ?? i} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'primary.main', fontWeight: 500 }}>
                       {a.apiName}
                     </TableCell>
-                    <TableCell
-                      sx={{
-                        fontFamily: 'monospace',
-                        fontSize: '0.75rem',
-                        color: 'text.secondary',
-                        maxWidth: 160,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                    >
+                    <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'text.secondary', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {a.endpoint}
                     </TableCell>
-                    <TableCell>
-                      <SeverityBadge severity={a.severity} />
-                    </TableCell>
-                    <TableCell>
+                    <TableCell><SeverityBadge severity={a.severity} /></TableCell>
+                    <TableCell sx={{ minWidth: 160 }}>
                       <ScoreBar score={a.hybridEnsembleScore || a.hybridScore || 0} />
                     </TableCell>
-                    <TableCell>
-                      <SeverityBadge severity={a.status} />
-                    </TableCell>
-                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>
+                    <TableCell><SeverityBadge severity={a.status} /></TableCell>
+                    <TableCell sx={{ fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap' }}>
                       {timeAgo(a.detectedAt)}
                     </TableCell>
                   </TableRow>

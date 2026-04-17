@@ -69,7 +69,8 @@ function saveHistory(history) {
 }
 
 // ── Modality control ──────────────────────────────────────────────────────────
-function ModalityControl({ icon: Icon, label, description, count, setCount, enabled, setEnabled, color }) {
+function ModalityControl({ icon: _Icon, label, description, count, setCount, enabled, setEnabled, color }) {
+  const Icon = _Icon;
   return (
     <Paper
       sx={{

@@ -22,12 +22,10 @@ export const AuthProvider = ({ children }) => {
   const checkAuth = useCallback(async () => {
     try {
       setIsLoading(true);
-      
       // Bypass auth check - assume authenticated for demo purposes
-      // Backend has no auth, so we simulate a logged-in user
       setUser({ id: 1, email: 'admin@api.local', role: 'admin' });
       setIsAuthenticated(true);
-    } catch (error) {
+    } catch {
       setUser(null);
       setIsAuthenticated(false);
     } finally {
@@ -36,19 +34,17 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   // Login function
-  const login = useCallback(async (email, password) => {
+  const login = useCallback(async (email, _password) => {
     try {
       setIsLoading(true);
-      
       // Bypass actual auth - accept any credentials for demo
       setUser({ id: 1, email: email || 'admin@api.local', role: 'admin' });
       setIsAuthenticated(true);
       return { success: true, user: { id: 1, email: email || 'admin@api.local', role: 'admin' } };
-    } catch (error) {
-      const errorMessage = error.message || 'Login failed.';
+    } catch {
       setUser(null);
       setIsAuthenticated(false);
-      return { success: false, error: errorMessage };
+      return { success: false, error: 'Login failed.' };
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +60,6 @@ export const AuthProvider = ({ children }) => {
 
   // Refresh user data
   const refreshUser = useCallback(async () => {
-    // Simulate refresh - still authenticated for demo
     setUser({ id: 1, email: 'admin@api.local', role: 'admin' });
     setIsAuthenticated(true);
     return { success: true, user: { id: 1, email: 'admin@api.local', role: 'admin' } };

@@ -95,7 +95,7 @@ export const Login = () => {
           general: result.error || 'Login failed. Please try again.',
         });
       }
-    } catch (error) {
+    } catch {
       setErrors({
         email: '',
         password: '',

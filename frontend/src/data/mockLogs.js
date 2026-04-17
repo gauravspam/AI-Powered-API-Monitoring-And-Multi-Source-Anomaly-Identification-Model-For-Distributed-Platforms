@@ -44,7 +44,7 @@ export const logStreams = [
 ];
 
 // http://localhost:8080/api/logs/events
-let events = [
+export const events = [
   {
     "id": 1,
     "timestamp": "2026-01-10T18:22:48.758Z",
