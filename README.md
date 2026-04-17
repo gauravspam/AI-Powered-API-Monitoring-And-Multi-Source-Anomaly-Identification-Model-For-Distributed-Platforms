@@ -38,6 +38,38 @@
 
 This project presents an AI-powered monitoring system designed to detect anomalies in distributed platforms by analyzing multiple data modalities simultaneously. The system collects API logs, system metrics, and network traces, processes them through advanced machine learning models, and provides real-time anomaly detection with automated alerting capabilities.
 
+---
+
+## Current Status
+
+### Completed Components
+
+| Component | Status | Description |
+|-----------|--------|-------------|
+| **Frontend** | Ready | React 19 + MUI 7 dashboard with 8 pages |
+| **Backend** | Ready | Spring Boot 3.x REST API with 11 controllers |
+| **ML Service** | Ready | FastAPI with MSIF-LSTM + PLE-GRU ensemble |
+| **Infrastructure** | Ready | Docker configs for OpenSearch, Fluent Bit |
+
+### Quick Start
+
+```bash
+# Frontend (http://localhost:5173)
+cd frontend && npm run dev
+
+# Backend (http://localhost:8080)
+cd backend-service && ./mvnw spring-boot:run
+
+# ML Service (http://localhost:9000)
+cd ml-service && uvicorn api.main:app --port 9000
+```
+
+### Documentation
+
+- [FRONTEND.md](./FRONTEND.md) - Frontend setup, pages, API endpoints
+- [BACKEND.md](./BACKEND.md) - Backend controllers, services, endpoints
+- [ML_SERVICE.md](./ML_SERVICE.md) - ML models, prediction API
+
 Our approach leverages a hybrid ensemble of deep learning models (MSIF-LSTM and PLE-GRU) to achieve **96.40% accuracy** in anomaly detection, significantly outperforming traditional single-modality approaches.
 
 ---
