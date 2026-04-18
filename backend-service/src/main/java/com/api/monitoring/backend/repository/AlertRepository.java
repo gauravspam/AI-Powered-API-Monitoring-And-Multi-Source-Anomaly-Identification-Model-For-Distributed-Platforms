@@ -6,5 +6,6 @@ import java.util.List;
 
 public interface AlertRepository extends JpaRepository<AlertRecord, Long> {
     List<AlertRecord> findByEnabled(boolean enabled);
+    List<AlertRecord> findByEnabledTrue();
     List<AlertRecord> findByAlertName(String alertName);
 }

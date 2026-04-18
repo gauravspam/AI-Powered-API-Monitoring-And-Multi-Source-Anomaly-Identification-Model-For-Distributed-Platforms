@@ -161,14 +161,22 @@ export const Simulator = () => {
     const payload = { severity };
 
     if (metricsEnabled) {
-      payload.metrics = Array.from({ length: metricsCount }, (_, i) => ({
+      const metricEntry = {
         cpu_usage: m.cpu + (Math.random() - 0.5) * 5,
         memory_usage: m.mem + (Math.random() - 0.5) * 5,
-        response_time: m.rt + (Math.random() - 0.5) * 50,
+        response_time_ms: m.rt + (Math.random() - 0.5) * 50,
         error_rate: m.err + (Math.random() - 0.5) * 2,
         request_count: 100 + Math.floor(Math.random() * 900),
-        service_id: `service-${i + 1}`,
-      }));
+        service_id: 'service-1',
+      };
+      if (metricsCount > 1) {
+        payload.metrics = Array.from({ length: metricsCount }, (_, i) => ({
+          ...metricEntry,
+          service_id: `service-${(i % 4) + 1}`,
+        }));
+      } else {
+        payload.metrics = metricEntry;
+      }
     }
 
     if (logsEnabled) {

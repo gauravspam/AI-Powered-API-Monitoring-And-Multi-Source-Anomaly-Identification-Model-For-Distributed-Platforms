@@ -38,6 +38,12 @@ spring:
         serialization:
             write-dates-as-timestamps: false
             indent-output: true
+
+# gRPC Server Configuration
+grpc:
+    server:
+        port: 9090
+        max-message-size: 10MB
         default-property-inclusion: non_null
         time-zone: UTC
 
@@ -109,5 +115,24 @@ python:
 app:
     ml:
         enabled: true
+        batch:
+            enabled: true
     api:
         anomaly-threshold: 0.7
+
+# Alert Configuration
+alert:
+    teams:
+        webhook: ${TEAMS_WEBHOOK_URL:}
+    slack:
+        webhook: ${SLACK_WEBHOOK_URL:}
+    email:
+        enabled: ${EMAIL_ALERT_ENABLED:false}
+        smtp-host: ${SMTP_HOST:}
+        smtp-port: ${SMTP_PORT:587}
+        from: ${EMAIL_FROM:}
+        to: ${EMAIL_TO:}
+    pagerduty:
+        enabled: ${PAGERDUTY_ENABLED:false}
+        api-key: ${PAGERDUTY_API_KEY:}
+        service-id: ${PAGERDUTY_SERVICE_ID:}

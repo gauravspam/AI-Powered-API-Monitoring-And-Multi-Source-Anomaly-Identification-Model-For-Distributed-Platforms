@@ -4,6 +4,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.retry.annotation.EnableRetry;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
@@ -13,11 +14,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * - @EnableRetry: Enables retry mechanism for ML service calls
  * - @EnableCaching: Enables caching for ML service health checks
  * - @EnableScheduling: Enables scheduled jobs (for Priority 2)
+ * - @EnableAsync: Enables async notification sending
  */
 @SpringBootApplication
 @EnableRetry
 @EnableCaching
 @EnableScheduling
+@EnableAsync
 public class ApiMonitoringBackendApplication {
 
     public static void main(String[] args) {

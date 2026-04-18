@@ -1,6 +1,7 @@
 package com.api.monitoring.backend.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.List;
 import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -44,6 +45,57 @@ public class MLPredictionResponse {
 
     @JsonProperty("trace_id")
     private String traceId;
+
+    // Batch response fields
+    @JsonProperty("status")
+    private String status;
+
+    @JsonProperty("batch_id")
+    private String batchId;
+
+    @JsonProperty("timestamp")
+    private String timestamp;
+
+    @JsonProperty("total_items")
+    private Integer totalItems;
+
+    @JsonProperty("modalities")
+    private Map<String, Integer> modalities;
+
+    @JsonProperty("summary")
+    private Map<String, Object> summary;
+
+    @JsonProperty("predictions")
+    private List<BatchPrediction> predictions;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class BatchPrediction {
+        @JsonProperty("index")
+        private Integer index;
+
+        @JsonProperty("prediction_id")
+        private String predictionId;
+
+        @JsonProperty("final_score")
+        private Double finalScore;
+
+        @JsonProperty("msif_score")
+        private Double msifScore;
+
+        @JsonProperty("ple_score")
+        private Double pleScore;
+
+        @JsonProperty("confidence")
+        private Double confidence;
+
+        @JsonProperty("modalities_present")
+        private Integer modalitiesPresent;
+
+        @JsonProperty("severity")
+        private String severity;
+    }
 
     /**
      * Convert confidence string to double value

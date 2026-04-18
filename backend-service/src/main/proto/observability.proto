@@ -1,0 +1,146 @@
+// Protocol Buffer Definitions for gRPC-based Observability Data Collection
+// This file defines the data structures for ingesting logs, metrics, and traces
+// via gRPC for the AI-Powered API Monitoring System
+
+syntax = "proto3";
+
+package observability;
+
+// Option to generate service code
+option java_generic_services = true;
+
+// ============================================
+// Log Entry Definitions
+// ============================================
+
+message LogEntry {
+    string trace_id = 1;
+    string span_id = 2;
+    string service_name = 3;
+    string level = 4;  // DEBUG, INFO, WARN, ERROR, FATAL
+    string message = 5;
+    string timestamp = 6;
+    map<string, string> metadata = 7;
+    string environment = 8;
+}
+
+message LogBatchRequest {
+    repeated LogEntry logs = 1;
+}
+
+message LogBatchResponse {
+    int32 received_count = 1;
+    int32 failed_count = 2;
+    repeated string error_messages = 3;
+}
+
+// ============================================
+// Metric Entry Definitions
+// ============================================
+
+message MetricEntry {
+    string service_name = 1;
+    double cpu_usage = 2;
+    double memory_usage = 3;
+    int64 disk_io_bytes = 4;
+    int64 network_io_bytes = 5;
+    int64 response_time_ms = 6;
+    int64 request_count = 7;
+    double error_rate = 8;
+    string timestamp = 9;
+    string environment = 10;
+    map<string, string> metadata = 11;
+}
+
+message MetricBatchRequest {
+    repeated MetricEntry metrics = 1;
+}
+
+message MetricBatchResponse {
+    int32 received_count = 1;
+    int32 failed_count = 2;
+    repeated string error_messages = 3;
+}
+
+// ============================================
+// Trace Entry Definitions
+// ============================================
+
+message TraceEntry {
+    string trace_id = 1;
+    string span_id = 2;
+    string parent_span_id = 3;
+    string service_name = 4;
+    string operation_name = 5;
+    int64 duration_ms = 6;
+    int32 status_code = 7;
+    string timestamp = 8;
+    map<string, string> tags = 9;
+    string environment = 10;
+}
+
+message TraceBatchRequest {
+    repeated TraceEntry traces = 1;
+}
+
+message TraceBatchResponse {
+    int32 received_count = 1;
+    int32 failed_count = 2;
+    repeated string error_messages = 3;
+}
+
+// ============================================
+// Combined Ingest Request
+// ============================================
+
+message IngestRequest {
+    oneof data {
+        LogBatchRequest logs = 1;
+        MetricBatchRequest metrics = 2;
+        TraceBatchRequest traces = 3;
+    }
+}
+
+message IngestResponse {
+    bool success = 1;
+    string message = 2;
+    int32 received_count = 3;
+}
+
+// ============================================
+// Health Check
+// ============================================
+
+message HealthRequest {
+    string service = 1;
+}
+
+message HealthResponse {
+    string status = 1;
+    string version = 2;
+    int64 uptime_seconds = 3;
+}
+
+// ============================================
+// gRPC Service Definitions
+// ============================================
+
+service LogIngestService {
+    rpc IngestLog(LogEntry) returns (IngestResponse);
+    rpc IngestLogBatch(LogBatchRequest) returns (LogBatchResponse);
+}
+
+service MetricIngestService {
+    rpc IngestMetric(MetricEntry) returns (IngestResponse);
+    rpc IngestMetricBatch(MetricBatchRequest) returns (MetricBatchResponse);
+}
+
+service TraceIngestService {
+    rpc IngestTrace(TraceEntry) returns (IngestResponse);
+    rpc IngestTraceBatch(TraceBatchRequest) returns (TraceBatchResponse);
+}
+
+service ObservabilityService {
+    rpc Ingest(IngestRequest) returns (IngestResponse);
+    rpc HealthCheck(HealthRequest) returns (HealthResponse);
+}

@@ -1,5 +1,6 @@
 package com.api.monitoring.backend.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,7 +12,7 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class MetricIngestDTO {
     private Long apiId;
-    private String serviceName; // ADD THIS
+    private String serviceName;
     private Double cpuUsage;
     private Double memoryUsage;
     private Long diskIoBytes;
@@ -20,68 +21,14 @@ public class MetricIngestDTO {
     private Integer requestCount;
     private Double errorRate;
     private LocalDateTime timestamp;
-
-    public MetricIngestDTO(Long apiId, Double responseTimeMs, Integer requestCount) {
-        this.apiId = apiId;
-        this.responseTimeMs = responseTimeMs;
-        this.requestCount = requestCount;
-        this.timestamp = LocalDateTime.now();
-    }
-
-    // Getters and Setters
-    public Long getApiId() {
-        return apiId;
-    }
-
-    public void setApiId(Long apiId) {
-        this.apiId = apiId;
-    }
-
-    public Double getCpuUsage() {
-        return cpuUsage;
-    }
-
-    public void setCpuUsage(Double cpuUsage) {
-        this.cpuUsage = cpuUsage;
-    }
-
-    public Double getMemoryUsage() {
-        return memoryUsage;
-    }
-
-    public void setMemoryUsage(Double memoryUsage) {
-        this.memoryUsage = memoryUsage;
-    }
-
-    public Double getResponseTimeMs() {
-        return responseTimeMs;
-    }
-
-    public void setResponseTimeMs(Double responseTimeMs) {
-        this.responseTimeMs = responseTimeMs;
-    }
-
-    public Double getErrorRate() {
-        return errorRate;
-    }
-
-    public void setErrorRate(Double errorRate) {
-        this.errorRate = errorRate;
-    }
-
-    public Integer getRequestCount() {
-        return requestCount;
-    }
-
-    public void setRequestCount(Integer requestCount) {
-        this.requestCount = requestCount;
-    }
-
-    public LocalDateTime getTimestamp() {
-        return timestamp;
-    }
-
-    public void setTimestamp(LocalDateTime timestamp) {
-        this.timestamp = timestamp;
-    }
+    
+    // Alias setters for snake_case from JSON
+    public void setService_name(String val) { this.serviceName = val; }
+    public void setCpu_usage(Double val) { this.cpuUsage = val; }
+    public void setMemory_usage(Double val) { this.memoryUsage = val; }
+    public void setDisk_io_bytes(Long val) { this.diskIoBytes = val; }
+    public void setNetwork_io_bytes(Long val) { this.networkIoBytes = val; }
+    public void setResponse_time_ms(Double val) { this.responseTimeMs = val; }
+    public void setRequest_count(Integer val) { this.requestCount = val; }
+    public void setError_rate(Double val) { this.errorRate = val; }
 }

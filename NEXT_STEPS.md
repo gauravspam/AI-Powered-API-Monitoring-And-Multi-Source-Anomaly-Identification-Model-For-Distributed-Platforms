@@ -4,383 +4,413 @@
 
 **Project Name:** AI-Powered API Monitoring and Multi-Source Anomaly Identification Model for Distributed Platforms
 
-**Current State:** Core ML models trained and functional
-**Target State:** Production-ready enterprise monitoring platform
+**Current State:** 
+- ML models trained and functional
+- Backend REST APIs working
+- Frontend dashboard operational
+- Simulator page connected to ML service
+
+**Target State:** Production-ready enterprise monitoring platform with:
+- gRPC data ingestion
+- Fluentd log aggregation
+- Batch ML processing every 2 minutes
+- Multi-channel alert system (Teams, Slack, Email, PagerDuty)
 
 ---
 
-## Architecture Summary
+## Architecture Summary (Updated 2026-04-18)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          SOURCES                                           │
+│                          DATA SOURCES                                        │
 │                                                                              │
-│  Type 1: Your Services (gRPC)                                              │
-│  Type 2: Legacy Apps (Fluent Bit)                                          │
-│  Type 3: Cloud/SaaS (OTel Collector)                                       │
+│  Type 1: Your Services (REST API) ← Currently working                     │
+│  Type 2: Simulator (Manual testing) ← Currently working                   │
+│  Type 3: gRPC (To be implemented)                                          │
+│  Type 4: Fluent Bit (Legacy app support)                                   │
+│  Type 5: OTel Collector (Cloud/SaaS support)                               │
 └──────────────────────────────┬──────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    SECRET INJECTION (HashiCorp Vault)                        │
+│                    FLUENTD (Central Aggregator)                             │
 │                                                                              │
-│  - Dynamic database credentials                                             │
-│  - TLS certificates for mTLS                                                │
-│  - API keys for services                                                    │
-│  - FREE Open Source Edition                                                 │
+│  ✓ Enabled in docker-compose.yml                                           │
+│  ✓ Configured routing:                                                      │
+│    - logs.*    → OpenSearch                                                │
+│    - metrics.* → Backend API → PostgreSQL                                   │
+│    - traces.*  → Backend API → PostgreSQL                                   │
 └──────────────────────────────┬──────────────────────────────────────────────┘
                                │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                       COLLECTOR AGENT LAYER                                  │
-│                                                                              │
-│  - gRPC Receiver (Primary for your microservices)                          │
-│  - Fluent Bit (Legacy app support)                                         │
-│  - OTel Collector (Cloud/SaaS support)                                     │
-└──────────────────────────────┬──────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           FLUENTD (Central Aggregator)                       │
-└──────────────────────────────┬──────────────────────────────────────────────┘
-                               │
-                               ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           OPENSEARCH                                         │
-│                                                                              │
-│  Stores: logs, traces, metrics, anomalies                                   │
-└──────────────────────────────┬──────────────────────────────────────────────┘
-                               │
-                               │ Batch query every 2 minutes
+                    ┌──────────┴──────────┐
+                    ▼                     ▼
+┌────────────────────────────────┐  ┌──────────────────────────────────────────┐
+│         OPENSEARCH             │  │           POSTGRESQL                     │
+│                                │  │                                          │
+│  Stores: logs                  │  │  Stores: metrics, traces, anomalies     │
+│  Query source for ML batch     │  │  Query source for frontend               │
+└───────────────────────────────┬─┘  └──────────────────────────────┬───────────┘
+                               │                                    │
+                               │ Batch query every 2 min            │
                                │ 5000 logs + 5000 traces + 5000 metrics
-                               ▼
+                               ▼                                    ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           ML SERVICE                                         │
+│                                                                              │
+│  Current: On-demand prediction via /predict/flexible                      │
+│  To Add: Batch scheduler every 2 minutes                                    │
 │                                                                              │
 │  Encoders: Metric → Log → Trace → Embeddings                                │
 │  Models: MSIF-LSTM + PLE-GRU → Hybrid Ensemble                              │
 │                                                                              │
-│  Severity: CRITICAL(≥0.8) | HIGH(≥0.6) | MEDIUM(≥0.4) | LOW(<0.4)         │
-└──────────────────────────────┬──────────────────────────────────────────────┘
+│  Severity: CRITICAL(≥0.8) | HIGH(≥0.6) | MEDIUM(≥0.4) | LOW(<0.4)           │
+└──────────────────────────────┬───────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                         ALERT SYSTEM                                         │
 │                                                                              │
-│  Channels: Microsoft Teams | Slack | Email | PagerDuty                     │
-│  Triggered on: CRITICAL and HIGH severity                                  │
-└──────────────────────────────┬──────────────────────────────────────────────┘
+│  To Implement:                                                              │
+│  - Microsoft Teams (webhook)                                               │
+│  - Slack (webhook)                                                          │
+│  - Email (SMTP)                                                              │
+│  - PagerDuty (API)                                                          │
+│                                                                              │
+│  Triggered on: CRITICAL and HIGH severity                                   │
+└──────────────────────────────┬───────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           FRONTEND (React)                                   │
 │                                                                              │
-│  Smart Polling: Check prediction_time, show badge, manual refresh            │
+│  Pages: Overview | Dashboard | Metrics | Logs | Traces | Alerts | Simulator │
+│  Data Source: PostgreSQL (metrics/traces) + OpenSearch (logs)              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Completed ML Training
+## Implementation Phases (Updated Order)
 
-### Model Performance (AIOps 2020 Dataset)
+### Phase 1: Fluentd Layer Setup ✅ COMPLETED 2026-04-18
+*Goal: Enable Fluentd for log aggregation and routing*
 
-| Model | Best F1 Score | Training Hardware |
-|-------|----------------|-------------------|
-| MSIF-LSTM | **90%** | GTX 1660 Super (6GB) |
-| PLE-GRU | **92.6%** | GTX 1660 Super (6GB) |
+#### 1.1 Enable Fluentd in docker-compose.yml
+- [x] Uncomment Fluentd service in `infrastructure/docker/configs/docker-compose.yml`
+- [x] Configure build context for fluentd.Dockerfile
+- [x] Add environment variables for OpenSearch connection
 
-### Training Details
+#### 1.2 Configure fluent.conf routing
+- [x] Route `logs.**` → OpenSearch (index: logs-YYYY.mm.dd)
+- [x] Route `metrics.**` → Backend API (`http://backend:8080/api/metrics`)
+- [x] Route `traces.**` → Backend API (`http://backend:8080/api/traces/ingest`)
+- [x] Add buffering for reliability
+- [x] Add retry logic for failed submissions
 
-- **Dataset**: AIOps 2020 Challenge (train-ticket microservice system)
-- **Training Samples**: ~2500 sequences
-- **Anomaly Rate**: ~5.8% (144 anomalies out of 2500)
-- **Key Fix**: UTC+8 timezone alignment for timestamp matching
-- **Training Epochs**: 60 epochs with early stopping
-- **Hyperparameters**: 
-  - Hidden dim: 256
-  - Learning rate: 0.0005
-  - Batch size: 16
-
-### Model Files
-
-```
-ml-service/models/enhanced/
-├── metric_encoder_aiops.pth    # TCN metric encoder (616KB)
-├── msif_lstm_strict.pth       # MSIF-LSTM model (12.3MB)
-└── ple_gru_strict.pth          # PLE-GRU model (28.8MB)
-```
-
-### Training Commands
-
+#### 1.3 Start Fluentd
 ```bash
-cd ml-service
-
-# Install PyTorch with CUDA (for GPU training)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Train MSIF-LSTM
-python train_aiops_fixed.py --model msif --epochs 60 --batch 16 --hidden 256 --lr 0.0005
-
-# Train PLE-GRU
-python train_aiops_fixed.py --model ple --epochs 60 --batch 16 --hidden 256 --lr 0.0005
+cd infrastructure/docker/configs
+docker compose up -d fluentd
 ```
 
----
+#### 1.4 Test Fluentd
+```bash
+# Test log ingestion to OpenSearch
+curl -X POST http://localhost:9880/logs.app \
+  -d '{"message":"test error","level":"ERROR","service":"user-service"}'
 
-## Implementation Phases
+# Test metrics to backend
+curl -X POST http://localhost:9880/metrics.app \
+  -d '{"cpu_usage":45,"memory_usage":60,"response_time_ms":120}'
 
-### Phase 1: Secret Injection with HashiCorp Vault (Priority: HIGH)
-*Goal: Secure credential management - FREE and self-hosted*
+# Verify in OpenSearch
+curl http://localhost:9200/logs-*/_search?size=1
 
-#### 1.1 Vault Setup
-- [ ] Install HashiCorp Vault (Open Source - FREE)
-- [ ] Run Vault in dev mode or production mode
-- [ ] Configure secrets engines:
-  - [ ] KV secrets engine (version 2) for general secrets
-  - [ ] Database secrets engine for PostgreSQL credentials
-  - [ ] PKI secrets engine for TLS certificates
-
-#### 1.2 Vault Integration
-- [ ] Implement Direct API integration (simpler for B.Tech project):
-  - [ ] Add `vault` Python client to ML service
-  - [ ] Add `vault` dependency to backend
-  - [ ] Create VaultServiceClient utility
-- [ ] Configure secrets:
-  - [ ] PostgreSQL username/password
-  - [ ] OpenSearch credentials
-  - [ ] Alert service API keys (Teams, Slack, Email, PagerDuty)
-
-#### 1.3 Dynamic Credentials
-- [ ] Implement dynamic database credentials from Vault
-- [ ] Implement certificate rotation via Vault PKI
-- [ ] Add lease renewal handling
+# Verify in PostgreSQL
+docker exec postgres psql -U api_monitor -d api_monitoring -c "SELECT * FROM system_metrics LIMIT 3;"
+```
 
 ---
 
 ### Phase 2: gRPC Receiver Service (Priority: HIGH)
-*Goal: Replace REST API ingestion with secure gRPC*
+*Goal: Add gRPC ingestion as alternative to REST APIs*
 
-#### 2.1 Proto Definition
-- [ ] Create `proto/observability.proto`:
-  - [ ] LogEntry message
-  - [ ] MetricEntry message
-  - [ ] TraceEntry message
-  - [ ] IngestLog/Metric/Trace RPC methods
-  - [ ] BatchIngest methods for bulk operations
+#### 2.1 Create gRPC Server Module
+- [ ] Create `backend-service/src/main/java/com/api/monitoring/backend/grpc/`
+- [ ] Add gRPC dependencies to `pom.xml`:
+  ```xml
+  <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-spring-boot-starter</artifactId>
+      <version>0.4.3</version>
+  </dependency>
+  <dependency>
+      <groupId>io.grpc</groupId>
+      <artifactId>grpc-netty</artifactId>
+      <version>1.59.0</version>
+  </dependency>
+  ```
 
-#### 2.2 gRPC Server Implementation
-- [ ] Create new service: `grpc-receiver/`
-- [ ] Implement:
-  - [ ] LogIngestService (receives logs via gRPC)
-  - [ ] MetricIngestService (receives metrics via gRPC)
-  - [ ] TraceIngestService (receives traces via gRPC)
-- [ ] Add mTLS configuration:
-  - [ ] Server certificate validation
-  - [ ] Client certificate validation
-  - [ ] Encrypted communication
+#### 2.2 Implement ObservabilityService
+- [ ] Create `ObservabilityServiceImpl.java` based on `proto/observability.proto`
+- [ ] Implement methods:
+  - `IngestMetric(MetricRequest) → MetricResponse`
+  - `IngestLog(LogRequest) → LogResponse`
+  - `IngestTrace(TraceRequest) → TraceResponse`
+  - `StreamTelemetry(stream of TelemetryData) → StreamResponse`
 
----
+#### 2.3 gRPC Server Configuration
+- [ ] Create `GrpcServerProperties.java` for config
+- [ ] Add port configuration (default: 9090)
+- [ ] Add TLS/mTLS configuration (optional)
 
-### Phase 3: Fluent Bit for Legacy Support (Priority: MEDIUM)
-*Goal: Support legacy applications that write to files*
+#### 2.4 Forward to Storage
+- [ ] Integrate with existing services (MetricsService, LogsService, TracesService)
+- [ ] Forward metrics → PostgreSQL
+- [ ] Forward logs → OpenSearch (via existing service)
+- [ ] Forward traces → PostgreSQL
 
-#### 3.1 Fluent Bit Configuration
-- [ ] Add Fluent Bit to docker-compose:
-  - [ ] Configure input: tail plugin for log files
-  - [ ] Configure output: forward to Fluentd
-  - [ ] Configure filters for parsing
-- [ ] Create Fluent Bit config for legacy apps:
-  - [ ] Parse Log4j2 JSON format
-  - [ ] Parse plain text logs
-  - [ ] Add metadata (hostname, service name)
+#### 2.5 Test gRPC Client
+- [ ] Create sample gRPC client to send data
+- [ ] Document proto usage
 
-#### 3.2 Legacy App Integration
-- [ ] Document how legacy apps should write logs
-- [ ] Create Log4j2 appender configuration example
-- [ ] Test end-to-end flow
-
----
-
-### Phase 4: OTel Collector for Cloud/SaaS (Priority: MEDIUM)
-*Goal: Support cloud services and SaaS integrations*
-
-#### 4.1 OTel Collector Setup
-- [ ] Add OTel Collector to docker-compose:
-  - [ ] Configure receivers:
-    - [ ] OTLP receiver (for gRPC)
-    - [ ] HTTP receiver (for SaaS webhooks)
-  - [ ] Configure processors:
-    - [ ] Batch processor
-    - [ ] Memory limiter
-    - [ ] Resource attributes
-  - [ ] Configure exporters:
-    - [ ] Forward to Fluentd
-    - [ ] Debug exporter (for testing)
-
-#### 4.2 Cloud Service Integration
-- [ ] Document OTel SDK integration for:
-  - [ ] AWS Lambda
-  - [ ] GCP Cloud Run
-  - [ ] Azure Functions
-- [ ] Create sample configurations
+**File locations:**
+- Proto: `proto/observability.proto`
+- New gRPC server: `backend-service/src/main/java/com/api/monitoring/backend/grpc/`
+- gRPC port: 9090
 
 ---
 
-### Phase 5: ML Service Batch Processing (Priority: HIGH)
-*Goal: Process data in batches every 2 minutes*
+### Phase 3: ML Batch Processing (Priority: HIGH)
+*Goal: Query OpenSearch every 2 minutes for batch prediction*
 
-#### 5.1 Batch Configuration
-- [ ] Make batch sizes configurable:
+#### 3.1 Create Batch Scheduler Module
+- [ ] Create `ml-service/api/batch_scheduler.py`
+
+#### 3.2 OpenSearch Query Service
+- [ ] Query recent logs (last 2 minutes, max 5000)
+- [ ] Query recent metrics (last 2 minutes, max 5000)
+- [ ] Query recent traces (last 2 minutes, max 5000)
+- [ ] Track processed record IDs to avoid duplicates
+- [ ] Handle partial batches
+
+#### 3.3 ML Batch Processing
+- [ ] Process batch through encoders (MetricEncoder, LogEncoder, TraceEncoder)
+- [ ] Run through MSIF-LSTM model
+- [ ] Run through PLE-GRU model
+- [ ] Calculate Hybrid Ensemble score
+- [ ] Apply rule-based boosting
+
+#### 3.4 Store Predictions
+- [ ] Save to PostgreSQL `anomaly_detections` table:
+  - `hybrid_score`, `msif_score`, `ple_score`
+  - `severity`, `confidence`
+  - `modalities_present`, `fusion_method`
+  - `prediction_timestamp`
+- [ ] Optional: Update OpenSearch with scores
+
+#### 3.5 Alert Integration
+- [ ] Trigger alerts for CRITICAL/HIGH severity
+- [ ] Send to alert service (Phase 4)
+
+**Configuration:**
 ```python
-# config.py
-BATCH_SIZE_LOGS = 5000       # Configurable per modality
-BATCH_SIZE_TRACES = 5000
-BATCH_SIZE_METRICS = 5000
+# ml-service/api/config.py
 BATCH_INTERVAL_SECONDS = 120  # 2 minutes
-```
-
-#### 5.2 Batch Query Service
-- [ ] Create BatchQueryService:
-  - [ ] Query OpenSearch for recent data
-  - [ ] Maintain batch state
-  - [ ] Handle partial batches
-  - [ ] Track processed record IDs (avoid duplicates)
-
-#### 5.3 Scheduler
-- [ ] Add APScheduler or similar:
-  - [ ] Run prediction every 2 minutes
-  - [ ] Handle missed runs
-  - [ ] Add jitter to prevent thundering herd
-
----
-
-### Phase 6: Alert System (Priority: HIGH)
-*Goal: Send notifications via Teams, Slack, Email, PagerDuty*
-
-#### 6.1 Alert Service
-- [ ] Create AlertService:
-  - [ ] Queue alerts for processing
-  - [ ] Rate limiting (prevent alert storms)
-  - [ ] Retry logic for failed sends
-  - [ ] Deduplication (same alert within X minutes)
-
-#### 6.2 Microsoft Teams Integration
-- [ ] Create Teams notification channel:
-  - [ ] Incoming webhook configuration
-  - [ ] Adaptive cards format
-
-#### 6.3 Slack Integration
-- [ ] Create Slack notification channel:
-  - [ ] Incoming webhook configuration
-  - [ ] Block kit message format
-  - [ ] Channel routing by severity
-
-#### 6.4 Email Integration
-- [ ] Configure SMTP settings (from Vault):
-  - [ ] Gmail/SendGrid/SMTP relay
-  - [ ] HTML email templates
-
-#### 6.5 PagerDuty Integration
-- [ ] Create PagerDuty channel:
-  - [ ] Events API v2 integration
-  - [ ] Severity mapping to PagerDuty urgency
-
----
-
-### Phase 7: Frontend Smart Polling (Priority: HIGH)
-*Goal: Efficient frontend updates with minimal polling*
-
-#### 7.1 Backend API Enhancement
-- [ ] Add prediction metadata endpoint
-
-#### 7.2 Smart Polling Implementation
-- [ ] Implement in frontend:
-```javascript
-const pollForUpdates = async () => {
-  const latest = await api.get('/api/predictions/latest');
-  if (latest.prediction_time !== lastPredictionTime) {
-    setNewAlertCount(latest.alert_count);
-    showBadge(true);
-  }
-};
-```
-
-#### 7.3 User Interface Updates
-- [ ] Add alert badge
-- [ ] Click badge → refresh dashboard
-- [ ] Keep manual refresh button
-
----
-
-## Quick Wins (Can Be Done Anytime)
-
-### Documentation
-- [ ] Create architecture diagrams
-- [ ] Create API Postman collection
-- [ ] Create runbook for operations
-
-### Developer Experience
-- [ ] Create dev container (devcontainer.json)
-- [ ] Create one-command startup script
-- [ ] Add pre-commit hooks
-- [ ] Create CI/CD pipeline template
-
----
-
-## Configuration Reference
-
-### ML Service Batch Settings
-```python
-# ml-service/config.py
+BATCH_SIZE_METRICS = 5000
 BATCH_SIZE_LOGS = 5000
 BATCH_SIZE_TRACES = 5000
-BATCH_SIZE_METRICS = 5000
-BATCH_INTERVAL_SECONDS = 120  # 2 minutes
 ```
 
-### Hardware Recommendations
-| Hardware | Batch Size | Use Case |
-|----------|------------|----------|
-| CPU only | 2,500-5,000 | Development, testing |
-| CPU + 4GB GPU | 5,000-10,000 | Small production |
-| CPU + 16GB GPU | 10,000-50,000 | Medium production |
-| CPU + 32GB+ GPU | 50,000+ | Large scale |
+---
 
-### Severity Thresholds
-| Score Range | Severity | Action |
-|-------------|----------|--------|
-| 0.8 - 1.0 | CRITICAL | Immediate alert |
-| 0.6 - 0.79 | HIGH | Alert in 1 minute |
-| 0.4 - 0.59 | MEDIUM | Log only |
-| 0.0 - 0.39 | LOW | Ignore |
+### Phase 4: Alert System (Priority: HIGH)
+*Goal: Send notifications via Teams, Slack, Email, PagerDuty*
+
+#### 4.1 Alert Service Architecture
+- [ ] Create `backend-service/src/main/java/com/api/monitoring/backend/service/AlertService.java`
+- [ ] Create `backend-service/src/main/java/com/api/monitoring/backend/service/AlertQueueService.java`
+
+#### 4.2 Alert Data Model
+- [ ] Create `AlertRecord` entity:
+  ```java
+  // Already exists: com.api.monitoring.backend.model.AlertRecord
+  // Fields needed: severity, message, channels, timestamp, sent
+  ```
+
+#### 4.3 Alert Channels Implementation
+
+##### Microsoft Teams
+- [ ] Create `TeamsAlertHandler.java`
+- [ ] Configure incoming webhook URL
+- [ ] Create Adaptive Card template:
+  ```json
+  {
+    "type": "AdaptiveCard",
+    "body": [
+      {"type": "TextBlock", "text": "${severity}: ${message}", "weight": "bolder"},
+      {"type": "FactSet", "facts": [
+        {"title": "Service", "value": "${service}"},
+        {"title": "Score", "value": "${score}"},
+        {"title": "Time", "value": "${timestamp}"}
+      ]}
+    ],
+    "actions": [{"type": "Action.OpenUrl", "title": "View Dashboard", "url": "${dashboardUrl}"}]
+  }
+  ```
+
+##### Slack
+- [ ] Create `SlackAlertHandler.java`
+- [ ] Configure incoming webhook URL
+- [ ] Create Block Kit message:
+  ```json
+  {
+    "blocks": [
+      {"type": "header", "text": {"type": "plain_text", "text": ":warning: ${severity} Alert"}},
+      {"type": "section", "text": {"type": "mrkdwn", "text": "${message}"}},
+      {"type": "context", "elements": [
+        {"type": "mrkdwn", "text": "Service: ${service}"},
+        {"type": "mrkdwn", "text": "Score: ${score}"}
+      ]}
+    ]
+  }
+  ```
+
+##### Email
+- [ ] Create `EmailAlertHandler.java`
+- [ ] Configure SMTP settings (from environment or Vault):
+  ```yaml
+  spring.mail.host: smtp.gmail.com
+  spring.mail.port: 587
+  spring.mail.username: ${SMTP_USERNAME}
+  spring.mail.password: ${SMTP_PASSWORD}
+  ```
+- [ ] Create HTML email template
+- [ ] Support multiple recipients
+
+##### PagerDuty
+- [ ] Create `PagerDutyAlertHandler.java`
+- [ ] Configure API key
+- [ ] Map severity to PagerDuty urgency:
+  - CRITICAL → P1 (high)
+  - HIGH → P2 (high)
+  - MEDIUM/LOW → P3/P4 (low)
+- [ ] Include triggering data payload
+
+#### 4.4 Alert Queue and Throttling
+- [ ] Implement in-memory queue (or Redis)
+- [ ] Rate limiting: max 10 alerts per minute per service
+- [ ] Deduplication: ignore same alert within 5 minutes
+- [ ] Retry logic: 3 retries with exponential backoff
+
+#### 4.5 Alert Triggering
+- [ ] Trigger from ML batch scheduler when:
+  - `severity == CRITICAL` (score >= 0.8)
+  - `severity == HIGH` (score >= 0.6)
+- [ ] Queue alert with selected channels
+
+---
+
+### Phase 5: Frontend Integration (Priority: HIGH)
+*Goal: Connect frontend to updated data flow*
+
+#### 5.1 Update API Layer
+- [ ] Ensure frontend queries PostgreSQL for metrics/traces
+- [ ] Ensure frontend queries OpenSearch for logs (optional)
+
+#### 5.2 Smart Polling
+- [ ] Implement polling for new anomaly detections
+- [ ] Add alert badge on new data
+
+#### 5.3 Simulator Updates (Optional)
+- [ ] Option to send data via gRPC instead of direct ML call
+- [ ] Option to send via Fluentd HTTP endpoint
+
+---
+
+## Known Bugs Fixed (2026-04-18)
+
+### ML Service Payload Handling
+- [x] Fixed: `encode_metric()` - handle array of metrics (was failing with 400)
+- [x] Fixed: `encode_traces()` - handle status_code as number (was comparing string to 400)
+- [x] Fixed: `predict_flexible()` - handle array metrics in rule-based scoring
+
+### Frontend
+- [x] Fixed: Simulator.jsx - duplicate useState, Icon prop
+- [x] Fixed: Traces.jsx - changed ScatterChart to BarChart
+- [x] Fixed: Dashboard.jsx - removed Error Budget Burn card
+
+### Database
+- [x] PostgreSQL is accessible and storing data correctly
 
 ---
 
 ## Dependencies Reference
 
-### Free Tools (All Open Source)
-| Tool | Purpose | License |
-|------|---------|---------|
-| HashiCorp Vault | Secret management | Open Source (FREE) |
-| Fluent Bit | Log collection | Apache 2.0 |
-| OTel Collector | Cloud observability | Apache 2.0 |
-| Fluentd | Log aggregation | Apache 2.0 |
-| OpenSearch | Search & analytics | Apache 2.0 |
+### Docker Services (infrastructure/docker/configs/docker-compose.yml)
+| Service | Port | Status |
+|---------|------|--------|
+| PostgreSQL | 5433 | ✅ Running |
+| OpenSearch | 9200 | ✅ Running |
+| Fluentd | 24224, 9880, 8888 | 🔄 To start |
+
+### Backend Services
+| Service | Port | Status |
+|---------|------|--------|
+| Backend API | 8080 | ✅ Running |
+| ML Service | 9000 | ✅ Running |
+| gRPC Server | 9090 | 🔄 To implement |
+
+### Frontend
+| Service | Port | Status |
+|---------|------|--------|
+| Frontend | 5173 | ✅ Running |
 
 ---
 
 ## How to Use This File
 
-1. **Start with Phase 1** - Secret injection is foundational
-2. **Phase 2-4** - Collection layer (gRPC, Fluent Bit, OTel)
-3. **Phase 5-7** - ML processing (batching, encoders, models)
-4. **Update this file** as items are completed
+1. **Start Fluentd** (Phase 1): `cd infrastructure/docker/configs && docker compose up -d fluentd`
+2. **Implement gRPC** (Phase 2): Add gRPC server to backend
+3. **Add ML batch** (Phase 3): Create batch scheduler in ML service
+4. **Implement alerts** (Phase 4): Add all 4 notification channels
+5. **Test end-to-end**: Send data → verify storage → verify ML prediction → verify alerts
 
 ---
 
-*Last Updated: 2026-04-14*
+## Quick Start Commands
 
-*Architecture Version: 1.1*
+```bash
+# Start all infrastructure
+cd infrastructure/docker/configs
+docker compose up -d
 
-*ML Models Trained and Ready*
+# Verify services
+docker compose ps
+curl http://localhost:9200  # OpenSearch
+curl http://localhost:5433  # PostgreSQL
+
+# Start backend (in another terminal)
+cd backend-service
+./gradlew bootRun
+
+# Start ML service (in another terminal)
+cd ml-service
+python api/main.py
+
+# Start frontend (in another terminal)
+cd frontend
+npm run dev
+```
+
+---
+
+*Last Updated: 2026-04-18*
+
+*Architecture Version: 2.0*
+
+*Changes:*
+- Phase 1 (Fluentd) completed
+- Phase 2-5 detailed steps added
+- Known bugs documented
+- Implementation order clarified
