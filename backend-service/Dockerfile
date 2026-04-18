@@ -9,13 +9,13 @@ ENV PATH=/opt/gradle/bin:$PATH
 WORKDIR /app
 
 # Copy Gradle files
-COPY build.gradle settings.gradle ./
+COPY build.gradle settings.gradle gradle.properties ./
 
 # Copy ALL source code
 COPY src ./src
 
 # Build the application
-RUN gradle build --no-daemon -x test
+RUN gradle build --no-daemon -x test -x processResources
 
 # Runtime stage
 FROM eclipse-temurin:21-jre
@@ -26,7 +26,7 @@ RUN groupadd -r spring && useradd -r -g spring spring
 COPY --from=build /app/build/libs/*.jar app.jar
 RUN chown spring:spring app.jar
 USER spring
-EXPOSE 8081
+EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8081/health || exit 1
+    CMD curl -f http://localhost:8080/actuator/health || curl -f http://localhost:8080/health || exit 1
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

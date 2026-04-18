@@ -8,6 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from flask import Flask, jsonify, request
+from flask_cors import CORS
 
 # Add parent to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -23,6 +24,7 @@ from model_defs import (
 )
 
 app = Flask(__name__)
+CORS(app)
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Global components
@@ -138,11 +140,18 @@ def encode_metric(metrics_data):
     """
     Encode metric data to embedding.
     Always returns (1, 128) tensor.
+    Handles both single dict and array of dicts.
     """
     if not metrics_data:
         return None
     
     try:
+        # Handle array of metrics - use first one or aggregate
+        if isinstance(metrics_data, list):
+            if len(metrics_data) == 0:
+                return None
+            metrics_data = metrics_data[0]  # Use first metric entry for now
+        
         # Extract values from dict
         cpu = float(metrics_data.get('cpu_usage', metrics_data.get('cpuUsagePercent', 0)))
         memory = float(metrics_data.get('memory_usage', metrics_data.get('memoryUsagePercent', 0)))
@@ -230,8 +239,15 @@ def encode_traces(traces_data):
         
         # Extract features from traces
         # Support both 'duration' and 'latency_ms' field names
+        # Handle status_code as number (200, 500) or string ('error', 'timeout')
+        def get_trace_errors(t):
+            status = t.get('status_code', t.get('status', 200))
+            if isinstance(status, str):
+                return status.lower() in ['error', 'timeout']
+            return status >= 400
+        
         total_duration = sum(t.get('duration', t.get('latency_ms', 0)) for t in traces_data)
-        error_count = sum(1 for t in traces_data if t.get('status_code', t.get('status', '')) in ['error', 'timeout'] or t.get('status_code', 200) >= 400)
+        error_count = sum(1 for t in traces_data if get_trace_errors(t))
         max_duration = max(t.get('duration', t.get('latency_ms', 0)) for t in traces_data)
         service_count = len(set(t.get('service', 'unknown') for t in traces_data))
         
@@ -319,20 +335,25 @@ def load_models():
     except Exception as e:
         print(f"WARN Metric Encoder: {e}")
     
-    # Log Encoder (TinyBERT-4)
-    try:
-        log_enc = LogEncoderTinyBERT(embedding_dim=128).to(DEVICE)
-        print(f"OK Log TinyBERT-4 initialized (14.5M params)")
-        log_path = os.path.join(base_dir, "models/encoders/log/log_encoder.pth")
-        if os.path.exists(log_path):
-            log_enc.load_state_dict(torch.load(log_path, map_location=DEVICE), strict=False)
-            print(f"OK Log TinyBERT-4 loaded with weights")
-        else:
-            print(f"OK Log TinyBERT-4 (fresh, no weights)")
-        log_enc.eval()
-        encoders['log'] = log_enc
-    except Exception as e:
-        print(f"WARN Log Encoder: {e}")
+    # Log encoder can trigger large model downloads on cold start.
+    # By default we skip loading it because encode_logs() uses lightweight heuristics.
+    load_log_encoder = os.getenv("LOAD_LOG_ENCODER", "false").lower() == "true"
+    if load_log_encoder:
+        try:
+            log_enc = LogEncoderTinyBERT(embedding_dim=128).to(DEVICE)
+            print(f"OK Log TinyBERT-4 initialized (14.5M params)")
+            log_path = os.path.join(base_dir, "models/encoders/log/log_encoder.pth")
+            if os.path.exists(log_path):
+                log_enc.load_state_dict(torch.load(log_path, map_location=DEVICE), strict=False)
+                print(f"OK Log TinyBERT-4 loaded with weights")
+            else:
+                print(f"OK Log TinyBERT-4 (fresh, no weights)")
+            log_enc.eval()
+            encoders['log'] = log_enc
+        except Exception as e:
+            print(f"WARN Log Encoder: {e}")
+    else:
+        print("OK Log Encoder skipped (set LOAD_LOG_ENCODER=true to enable)")
     
     # Trace Encoder
     try:
@@ -414,10 +435,12 @@ def predict_flexible():
         rule_boost = 0.0
         
         # Extract values for rule-based scoring
-        cpu = float(metrics_data.get('cpu_usage', 0) if metrics_data else 0)
-        memory = float(metrics_data.get('memory_usage', 0) if metrics_data else 0)
-        response_time = float(metrics_data.get('response_time_ms', 0) if metrics_data else 0)
-        error_rate = float(metrics_data.get('error_rate', 0) if metrics_data else 0)
+        # Handle array or single dict for metrics
+        metrics_for_rules = metrics_data[0] if isinstance(metrics_data, list) else metrics_data
+        cpu = float(metrics_for_rules.get('cpu_usage', 0) if metrics_for_rules else 0)
+        memory = float(metrics_for_rules.get('memory_usage', 0) if metrics_for_rules else 0)
+        response_time = float(metrics_for_rules.get('response_time_ms', 0) if metrics_for_rules else 0)
+        error_rate = float(metrics_for_rules.get('error_rate', 0) if metrics_for_rules else 0)
         
         # Check log severity
         log_severity = 0
@@ -761,4 +784,4 @@ def predict():
 
 if __name__ == "__main__":
     load_models()
-    app.run(host="0.0.0.0", port=9000, debug=False)
+    app.run(host="0.0.0.0", port=int(os.getenv("ML_SERVICE_PORT", "9000")), debug=False)
