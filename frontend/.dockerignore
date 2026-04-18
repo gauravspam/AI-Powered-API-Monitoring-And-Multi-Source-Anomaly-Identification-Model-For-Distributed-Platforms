@@ -1,0 +1,12 @@
+node_modules/
+dist/
+build/
+.git
+.vscode/
+.idea/
+*.md
+docs/
+.DS_Store
+*.log
+cat_output/
+scripts/

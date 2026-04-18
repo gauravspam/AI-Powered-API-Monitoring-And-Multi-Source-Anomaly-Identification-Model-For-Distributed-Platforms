@@ -104,6 +104,8 @@ lerna-debug.log*
 # =============================
 .idea/
 .vscode/
+.vscode/*
+.vscode/settings.json
 *.swp
 *.swo
 *~
@@ -174,8 +176,6 @@ tmp/
 # Docker
 # =============================
 docker-compose.override.yml
-*.dockerignore
-Dockerfile*
 opensearch-data/
 postgres-data/
 
@@ -206,7 +206,6 @@ vault-token
 # Use Git LFS for these file types
 *.h5
 *.hdf5
-# *.pth
 *.pt
 *.pkl
 *.joblib

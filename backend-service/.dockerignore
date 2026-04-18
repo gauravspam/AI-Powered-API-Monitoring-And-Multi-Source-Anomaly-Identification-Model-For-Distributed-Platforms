@@ -1,0 +1,13 @@
+build/
+.gradle/
+.idea/
+*.iml
+*.class
+*.log
+.DS_Store
+src/test/
+src/resources/
+*.md
+docs/
+cat_output/
+.vscode/
