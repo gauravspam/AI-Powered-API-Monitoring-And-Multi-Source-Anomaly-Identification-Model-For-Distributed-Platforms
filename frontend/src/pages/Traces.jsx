@@ -19,7 +19,8 @@ const proxyOrMock = async (path, mockFn) => {
     if (!r.ok) throw new Error();
     return r.json();
   } catch {
-    return mockFn();
+    const fallback = typeof mockFn === 'function' ? mockFn() : mockFn;
+    return Array.isArray(fallback) ? [] : {};
   }
 };
 
@@ -37,6 +38,26 @@ const generateMockTraces = () => {
     timestamp: new Date(Date.now() - i * 90000).toISOString(),
     _mock: true,
   }));
+};
+
+const normalizeTrace = (t, index) => {
+  const durationMs =
+    t.durationMs ??
+    t.duration_ms ??
+    t.duration ??
+    0;
+
+  return {
+    id: t.id ?? index,
+    traceId: t.traceId || t.trace_id || `trace-${index}`,
+    spanId: t.spanId || t.span_id || `span-${index}`,
+    serviceName: t.serviceName || t.service_name || 'unknown-service',
+    operationName: t.operationName || t.operation_name || 'unknown-operation',
+    durationMs,
+    statusCode: t.statusCode ?? t.status_code ?? 200,
+    timestamp: t.timestamp || t.startTime || t.start_time || new Date().toISOString(),
+    _mock: t._mock,
+  };
 };
 
 const DURATION_THRESHOLDS = [
@@ -84,7 +105,7 @@ export const Traces = () => {
 
   const traces = useMemo(() => {
     const raw = Array.isArray(tracesRaw) ? tracesRaw : (tracesRaw?.content || []);
-    return raw;
+    return raw.map((t, i) => normalizeTrace(t, i));
   }, [tracesRaw]);
 
   const services = useMemo(() => {

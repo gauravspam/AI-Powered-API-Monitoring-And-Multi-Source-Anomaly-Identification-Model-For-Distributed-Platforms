@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Box,
   Paper,
@@ -179,6 +180,7 @@ function ModalityControl({ icon: _Icon, label, description, count, setCount, ena
 
 // ── Page component ─────────────────────────────────────────────────────────────
 export const Simulator = () => {
+  const queryClient = useQueryClient();
   const [severity, setSeverity] = useState('MEDIUM');
   const [metricsEnabled, setMetricsEnabled] = useState(true);
   const [logsEnabled, setLogsEnabled] = useState(true);
@@ -366,6 +368,12 @@ export const Simulator = () => {
         severity: 'warning',
       });
     } else {
+      if (sendViaBackend) {
+        queryClient.invalidateQueries({ queryKey: ['/api/proxy/alerts'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/proxy/anomalies'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/proxy/overview'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/sidebar/badge'] });
+      }
       setSnackbar({
         open: true,
         message: `${sendViaBackend ? 'Backend' : 'ML service'} returned severity: ${mlResult.severity}`,

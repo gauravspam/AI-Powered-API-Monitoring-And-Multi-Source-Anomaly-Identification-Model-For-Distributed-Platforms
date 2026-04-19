@@ -113,6 +113,7 @@ python:
             max-delay: 10000
 
 app:
+    seed-demo-data: true
     ml:
         enabled: true
         batch:

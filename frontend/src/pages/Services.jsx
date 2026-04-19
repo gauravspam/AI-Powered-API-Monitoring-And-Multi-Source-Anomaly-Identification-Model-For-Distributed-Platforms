@@ -15,7 +15,8 @@ const proxyOrMock = async (path, mockFn) => {
     if (!r.ok) throw new Error();
     return r.json();
   } catch {
-    return mockFn();
+    const fallback = typeof mockFn === 'function' ? mockFn() : mockFn;
+    return Array.isArray(fallback) ? [] : {};
   }
 };
 

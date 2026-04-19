@@ -1,21 +1,18 @@
 FROM eclipse-temurin:21-jdk AS build
 
-WORKDIR /opt
-RUN apt-get update && apt-get install -y wget unzip && rm -rf /var/lib/apt/lists/* && \
-    wget -q https://services.gradle.org/distributions/gradle-8.8-bin.zip && \
-    unzip gradle-8.8-bin.zip && rm gradle-8.8-bin.zip && mv gradle-8.8 gradle
-ENV PATH=/opt/gradle/bin:$PATH
-
 WORKDIR /app
 
-# Copy Gradle files
-COPY build.gradle settings.gradle gradle.properties ./
+# Copy Gradle wrapper and build descriptors first for better layer caching
+COPY gradlew gradlew.bat build.gradle settings.gradle gradle.properties ./
+COPY gradle ./gradle
 
-# Copy ALL source code
+# Copy the full project sources needed by the build
 COPY src ./src
 
-# Build the application
-RUN gradle build --no-daemon -x test
+RUN chmod +x gradlew
+
+# Build the application with project wrapper for deterministic Gradle version
+RUN ./gradlew build --no-daemon -x test
 
 # Runtime stage
 FROM eclipse-temurin:21-jre

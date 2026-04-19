@@ -18,7 +18,8 @@ const proxyOrMock = async (path, mockFn) => {
     if (!r.ok) throw new Error();
     return r.json();
   } catch {
-    return mockFn();
+    const fallback = typeof mockFn === 'function' ? mockFn() : mockFn;
+    return Array.isArray(fallback) ? [] : {};
   }
 };
 
@@ -92,6 +93,9 @@ export const Alerts = () => {
     queryKey: ['/api/proxy/alerts'],
     queryFn: () => proxyOrMock('/api/anomalies?limit=30', generateMockAlerts),
     refetchInterval: 15000,
+    refetchOnMount: 'always',
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   // Acknowledge

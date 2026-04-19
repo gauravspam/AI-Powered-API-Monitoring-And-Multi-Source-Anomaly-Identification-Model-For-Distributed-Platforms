@@ -147,8 +147,15 @@ public class AnomalyController {
 
     @PostMapping("/{id}/resolve")
     public ResponseEntity<Boolean> resolveAnomaly(@PathVariable Long id) {
-        // Reuse acknowledge logic for now, or add resolve() to service
-        return acknowledgeAnomaly(id, "system");
+        try {
+            boolean success = anomalyService.resolveAnomaly(id);
+            return ResponseEntity.ok(success);
+        } catch (Exception e) {
+            log.error("Error resolving anomaly {}: {}", id, e.getMessage());
+            return ResponseEntity.status(
+                HttpStatus.INTERNAL_SERVER_ERROR
+            ).build();
+        }
     }
 
     // --- List All Anomalies ---

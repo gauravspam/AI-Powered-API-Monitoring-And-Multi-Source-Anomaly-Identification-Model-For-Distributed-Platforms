@@ -17,38 +17,53 @@ public class ModelsController {
     @GetMapping("/models")
     public ResponseEntity<List<Map<String, Object>>> getModels() {
         List<Map<String, Object>> models = Arrays.asList(
-            Map.of(
-                "id", 1,
-                "name", "MSIF-LSTM",
-                "version", "1.0.0",
-                "type", "LSTM",
-                "status", "online",
-                "latencyMs", 45,
-                "throughputPerSec", 220,
-                "accuracy", 94.2,
-                "lastRetrainAt", LocalDateTime.now().minusDays(3).toString()
+            Map.ofEntries(
+                Map.entry("id", 1),
+                Map.entry("name", "MSIF-LSTM"),
+                Map.entry("version", "1.0.0"),
+                Map.entry("type", "LSTM"),
+                Map.entry("status", "online"),
+                Map.entry("latencyMs", 45),
+                Map.entry("throughputPerSec", 220),
+                Map.entry("accuracy", 94.2),
+                Map.entry("f1Score", 0.921),
+                Map.entry("precision", 0.936),
+                Map.entry("recall", 0.907),
+                Map.entry("confidenceDrift", -0.012),
+                Map.entry("inferenceLast24h", 18420),
+                Map.entry("lastRetrainAt", LocalDateTime.now().minusDays(3).toString())
             ),
-            Map.of(
-                "id", 2,
-                "name", "PLE-GRU",
-                "version", "1.0.0",
-                "type", "GRU",
-                "status", "online",
-                "latencyMs", 38,
-                "throughputPerSec", 280,
-                "accuracy", 91.7,
-                "lastRetrainAt", LocalDateTime.now().minusDays(3).toString()
+            Map.ofEntries(
+                Map.entry("id", 2),
+                Map.entry("name", "PLE-GRU"),
+                Map.entry("version", "1.0.0"),
+                Map.entry("type", "GRU"),
+                Map.entry("status", "online"),
+                Map.entry("latencyMs", 38),
+                Map.entry("throughputPerSec", 280),
+                Map.entry("accuracy", 91.7),
+                Map.entry("f1Score", 0.894),
+                Map.entry("precision", 0.913),
+                Map.entry("recall", 0.878),
+                Map.entry("confidenceDrift", 0.004),
+                Map.entry("inferenceLast24h", 22105),
+                Map.entry("lastRetrainAt", LocalDateTime.now().minusDays(3).toString())
             ),
-            Map.of(
-                "id", 3,
-                "name", "Hybrid Ensemble",
-                "version", "1.0.0",
-                "type", "Ensemble",
-                "status", "online",
-                "latencyMs", 82,
-                "throughputPerSec", 150,
-                "accuracy", 96.1,
-                "lastRetrainAt", LocalDateTime.now().minusDays(3).toString()
+            Map.ofEntries(
+                Map.entry("id", 3),
+                Map.entry("name", "Hybrid Ensemble"),
+                Map.entry("version", "1.0.0"),
+                Map.entry("type", "Ensemble"),
+                Map.entry("status", "online"),
+                Map.entry("latencyMs", 82),
+                Map.entry("throughputPerSec", 150),
+                Map.entry("accuracy", 96.1),
+                Map.entry("f1Score", 0.947),
+                Map.entry("precision", 0.962),
+                Map.entry("recall", 0.935),
+                Map.entry("confidenceDrift", -0.005),
+                Map.entry("inferenceLast24h", 15922),
+                Map.entry("lastRetrainAt", LocalDateTime.now().minusDays(3).toString())
             )
         );
 

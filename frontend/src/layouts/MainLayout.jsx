@@ -59,7 +59,7 @@ const useActiveBadge = () =>
         const list = Array.isArray(d) ? d : [];
         return list.filter((a) => a.status === 'ACTIVE').length;
       } catch {
-        return 5; // mock fallback
+        return 0;
       }
     },
     refetchInterval: 20000,
