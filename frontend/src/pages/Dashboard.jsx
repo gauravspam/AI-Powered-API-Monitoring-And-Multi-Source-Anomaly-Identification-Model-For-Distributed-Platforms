@@ -77,6 +77,20 @@ const generateMockAnomalies = () => {
   }));
 };
 
+const normalizeAnomaly = (a, index) => ({
+  id: a.id ?? index,
+  apiName: a.apiName || a.api_name || a.serviceName || a.service_name || a.endpoint || 'unknown-service',
+  endpoint: a.endpoint || a.apiName || a.api_name || 'n/a',
+  severity: (a.severity || 'LOW').toUpperCase(),
+  hybridEnsembleScore: a.hybridEnsembleScore ?? a.hybrid_ensemble_score ?? a.finalAnomalyScore ?? a.final_anomaly_score ?? 0,
+  msifLstmScore: a.msifLstmScore ?? a.msif_lstm_score ?? 0,
+  pleGruScore: a.pleGruScore ?? a.ple_gru_score ?? 0,
+  status: (a.status || 'ACTIVE').toUpperCase(),
+  detectedAt: a.detectedAt || a.timestamp || a.createdAt || a.created_at || null,
+  isAcknowledged: a.isAcknowledged ?? (a.status || '').toUpperCase() === 'ACKNOWLEDGED',
+  isResolved: a.isResolved ?? (a.status || '').toUpperCase() === 'RESOLVED',
+});
+
 const generateMockTraffic = () => {
   const now = Date.now();
   return Array.from({ length: 30 }, (_, i) => ({
@@ -129,7 +143,7 @@ export const Dashboard = () => {
     })), [traffic]);
 
   const anomalyList = useMemo(() =>
-    (Array.isArray(anomalies) ? anomalies : []).slice(0, 12), [anomalies]);
+    (Array.isArray(anomalies) ? anomalies : []).map((a, i) => normalizeAnomaly(a, i)).slice(0, 12), [anomalies]);
 
   const severityDistData = useMemo(() => {
     const counts = anomalyList.reduce((acc, a) => {

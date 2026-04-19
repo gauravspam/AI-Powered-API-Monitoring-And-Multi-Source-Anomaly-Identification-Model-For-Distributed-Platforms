@@ -42,11 +42,11 @@ const SEVERITY_COLORS = {
 
 // Metric values used when building the ML request payload
 const SEVERITY_METRICS = {
-  NORMAL:   { cpu: 25, mem: 35, rt: 120,  err: 1  },
-  LOW:      { cpu: 45, mem: 55, rt: 350,  err: 5  },
-  MEDIUM:   { cpu: 65, mem: 70, rt: 900,  err: 15 },
-  HIGH:     { cpu: 82, mem: 85, rt: 2500, err: 30 },
-  CRITICAL: { cpu: 95, mem: 92, rt: 5500, err: 60 },
+  NORMAL:   { cpu: 25, mem: 35, rt: 120,  err: 0.01 },
+  LOW:      { cpu: 45, mem: 55, rt: 350,  err: 0.05 },
+  MEDIUM:   { cpu: 65, mem: 70, rt: 900,  err: 0.15 },
+  HIGH:     { cpu: 82, mem: 85, rt: 2500, err: 0.30 },
+  CRITICAL: { cpu: 95, mem: 92, rt: 5500, err: 0.60 },
 };
 
 const LS_KEY = 'simulator_history';
@@ -191,7 +191,7 @@ export const Simulator = () => {
   const [expandedRow, setExpandedRow] = useState(null);
   const [history, setHistory] = useState(loadHistory);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
-  const [sendViaBackend, setSendViaBackend] = useState(false);
+  const [sendViaBackend, setSendViaBackend] = useState(true);
 
   const activeModalities = [metricsEnabled, logsEnabled, tracesEnabled].filter(Boolean).length;
   const selectedSev = SEVERITY_OPTIONS.find((s) => s.value === severity);
@@ -206,7 +206,7 @@ export const Simulator = () => {
         cpu_usage: m.cpu + (Math.random() - 0.5) * 5,
         memory_usage: m.mem + (Math.random() - 0.5) * 5,
         response_time_ms: m.rt + (Math.random() - 0.5) * 50,
-        error_rate: m.err + (Math.random() - 0.5) * 2,
+        error_rate: Math.max(0, Math.min(1, m.err + (Math.random() - 0.5) * 0.02)),
         request_count: 100 + Math.floor(Math.random() * 900),
         service_id: 'service-1',
       };

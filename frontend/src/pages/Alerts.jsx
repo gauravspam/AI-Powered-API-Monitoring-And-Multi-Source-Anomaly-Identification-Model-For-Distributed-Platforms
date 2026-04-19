@@ -45,6 +45,27 @@ const generateMockAlerts = () => {
   }));
 };
 
+const normalizeAlert = (a, index) => {
+  const detectedAt = a.detectedAt || a.timestamp || a.createdAt || a.created_at || null;
+  const resolvedAt = a.resolvedAt || a.resolved_at || null;
+  const status = (a.status || 'ACTIVE').toUpperCase();
+
+  return {
+    id: a.id ?? index,
+    apiName: a.apiName || a.api_name || a.serviceName || a.service_name || a.endpoint || 'unknown-service',
+    endpoint: a.endpoint || a.apiName || a.api_name || 'n/a',
+    severity: (a.severity || 'LOW').toUpperCase(),
+    hybridEnsembleScore: a.hybridEnsembleScore ?? a.hybrid_ensemble_score ?? a.finalAnomalyScore ?? a.final_anomaly_score ?? 0,
+    msifLstmScore: a.msifLstmScore ?? a.msif_lstm_score ?? 0,
+    pleGruScore: a.pleGruScore ?? a.ple_gru_score ?? 0,
+    status,
+    detectedAt,
+    resolvedAt,
+    isAcknowledged: a.isAcknowledged ?? status === 'ACKNOWLEDGED',
+    isResolved: a.isResolved ?? status === 'RESOLVED',
+  };
+};
+
 // Compute MTTR for resolved anomalies (detected → resolved)
 const calcMttr = (anomaly) => {
   if (!anomaly.resolvedAt || !anomaly.detectedAt) return null;
@@ -103,7 +124,10 @@ export const Alerts = () => {
     onError: () => setSnackbar({ open: true, message: 'Action failed — backend offline', severity: 'error' }),
   });
 
-  const allAlerts = useMemo(() => (Array.isArray(anomalies) ? anomalies : []), [anomalies]);
+  const allAlerts = useMemo(
+    () => (Array.isArray(anomalies) ? anomalies.map((a, i) => normalizeAlert(a, i)) : []),
+    [anomalies]
+  );
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -114,7 +138,8 @@ export const Alerts = () => {
       const matchService = !serviceSearch  ||
         a.apiName?.toLowerCase().includes(serviceSearch.toLowerCase()) ||
         a.endpoint?.toLowerCase().includes(serviceSearch.toLowerCase());
-      const matchTime    = timeRange === 0 || new Date(a.detectedAt).getTime() >= cutoff;
+      const detectedMs = a.detectedAt ? new Date(a.detectedAt).getTime() : null;
+      const matchTime = timeRange === 0 || (detectedMs !== null && !Number.isNaN(detectedMs) && detectedMs >= cutoff);
       return matchSev && matchStat && matchService && matchTime;
     });
   }, [allAlerts, severityFilter, statusFilter, serviceSearch, timeRange]);
