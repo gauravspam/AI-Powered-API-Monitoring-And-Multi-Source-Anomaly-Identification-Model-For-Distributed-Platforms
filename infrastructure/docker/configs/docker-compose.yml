@@ -124,10 +124,11 @@ services:
             dockerfile: Dockerfile
         container_name: backend
         environment:
+            - SPRING_PROFILES_ACTIVE=docker
             - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/api_monitoring?timezone=UTC
             - SPRING_DATASOURCE_USERNAME=api_monitor
             - SPRING_DATASOURCE_PASSWORD=api_monitor_pwd
-            - SPRING_FLYWAY_ENABLED=false
+            - SPRING_FLYWAY_ENABLED=true
             - OPENSEARCH_HOST=opensearch
             - OPENSEARCH_PORT=9200
             - FLUENTD_HOST=fluentd

@@ -8,6 +8,8 @@ import {
   LinearProgress,
   Snackbar,
   Alert,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Speed as SpeedIcon,
@@ -18,7 +20,7 @@ import {
   KeyboardArrowUp,
   KeyboardArrowDown,
 } from '@mui/icons-material';
-import { ML_SERVICE_URL } from '@/api/http';
+import { ML_SERVICE_URL, BACKEND_URL } from '@/api/http';
 import { SeverityBadge, ScoreBar, timeAgo, EmptyState } from '@/components/SharedComponents';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -66,6 +68,44 @@ function saveHistory(history) {
   } catch {
     // localStorage may be full — ignore silently
   }
+}
+
+function normalizeToArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function buildBackendPayload(payload, selectedSeverity) {
+  const now = new Date();
+  const metrics = Array.isArray(payload.metrics) ? payload.metrics[0] : payload.metrics || {};
+  const severityStatusCode = {
+    NORMAL: 200,
+    LOW: 200,
+    MEDIUM: 429,
+    HIGH: 500,
+    CRITICAL: 503,
+  };
+
+  return {
+    apiName: '/simulator/signal',
+    method: 'POST',
+    responseTime: Number(metrics.response_time_ms ?? 0),
+    statusCode: severityStatusCode[selectedSeverity] ?? 200,
+    requestCount: Number(metrics.request_count ?? 1),
+    errorRate: Number(metrics.error_rate ?? 0),
+    cpuUsage: Number(metrics.cpu_usage ?? 0),
+    memoryUsage: Number(metrics.memory_usage ?? 0),
+    networkIo: Number(metrics.network_io ?? 0),
+    diskIo: Number(metrics.disk_io ?? 0),
+    hourOfDay: now.getHours(),
+    dayOfWeek: ((now.getDay() + 6) % 7) + 1,
+    timestamp: now.toISOString(),
+    environment: 'development',
+    serviceName: 'frontend-simulator',
+    logs: normalizeToArray(payload.logs),
+    traces: normalizeToArray(payload.traces),
+    metrics,
+  };
 }
 
 // ── Modality control ──────────────────────────────────────────────────────────
@@ -151,6 +191,7 @@ export const Simulator = () => {
   const [expandedRow, setExpandedRow] = useState(null);
   const [history, setHistory] = useState(loadHistory);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [sendViaBackend, setSendViaBackend] = useState(false);
 
   const activeModalities = [metricsEnabled, logsEnabled, tracesEnabled].filter(Boolean).length;
   const selectedSev = SEVERITY_OPTIONS.find((s) => s.value === severity);
@@ -215,6 +256,7 @@ export const Simulator = () => {
     const pending = {
       id: runId,
       timestamp: startedAt,
+      route: sendViaBackend ? 'backend' : 'ml-service',
       severity,
       metricsCount: metricsEnabled ? metricsCount : 0,
       logsCount: logsEnabled ? logsCount : 0,
@@ -238,17 +280,50 @@ export const Simulator = () => {
 
     try {
       const payload = buildPayload();
-      const resp = await fetch(`${ML_SERVICE_URL}/predict/flexible`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(10000),
-      });
 
-      if (!resp.ok) throw new Error(`ML service responded with ${resp.status}`);
-      mlResult = await resp.json();
+      if (sendViaBackend) {
+        const backendPayload = buildBackendPayload(payload, severity);
+        const resp = await fetch(`${BACKEND_URL}/api/anomalies/analyze`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(backendPayload),
+          signal: AbortSignal.timeout(12000),
+        });
+
+        if (!resp.ok) throw new Error(`Backend service responded with ${resp.status}`);
+        const backendResult = await resp.json();
+
+        const backendScore =
+          backendResult.final_anomaly_score ??
+          backendResult.finalAnomalyScore ??
+          backendResult.hybrid_ensemble_score ??
+          backendResult.hybridEnsembleScore ??
+          selectedSev.score;
+
+        mlResult = {
+          final_score: backendScore,
+          hybrid_score: backendScore,
+          msif_score: null,
+          ple_score: null,
+          severity: backendResult.severity ?? severity,
+          confidence: backendResult.confidence ?? (activeModalities / 3),
+          fusion_method: backendResult.source ?? 'backend-analysis',
+          _backend: true,
+          backend_response: backendResult,
+        };
+      } else {
+        const resp = await fetch(`${ML_SERVICE_URL}/predict/flexible`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (!resp.ok) throw new Error(`ML service responded with ${resp.status}`);
+        mlResult = await resp.json();
+      }
     } catch (err) {
-      // ML service offline — generate mock result
+      // Service unavailable - fallback to mock result
       isMock = true;
       errorMsg = err.message;
       const base = selectedSev.score;
@@ -260,6 +335,7 @@ export const Simulator = () => {
         confidence: activeModalities / 3,
         fusion_method: 'weighted_ensemble',
         _mock: true,
+        _backend: sendViaBackend,
       };
     }
 
@@ -286,13 +362,13 @@ export const Simulator = () => {
     if (isMock) {
       setSnackbar({
         open: true,
-        message: `Simulation complete (Mock): ML service unavailable`,
+        message: `Simulation complete (Mock): ${sendViaBackend ? 'backend' : 'ML service'} unavailable`,
         severity: 'warning',
       });
     } else {
       setSnackbar({
         open: true,
-        message: `ML returned severity: ${mlResult.severity}`,
+        message: `${sendViaBackend ? 'Backend' : 'ML service'} returned severity: ${mlResult.severity}`,
         severity: 'success',
       });
     }
@@ -310,11 +386,16 @@ export const Simulator = () => {
             Signal Simulator
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            Send synthetic telemetry signals (metrics, logs, traces) directly to the ML service via{' '}
+            Send synthetic telemetry signals (metrics, logs, traces) either directly to ML or through backend.
+            Backend mode persists anomalies and can trigger alerts via{' '}
+            <Typography component="span" sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
+              POST /api/anomalies/analyze
+            </Typography>
+            . Direct mode uses{' '}
             <Typography component="span" sx={{ fontFamily: 'monospace', color: 'primary.main' }}>
               POST /predict/flexible
             </Typography>
-            . Configure modalities and severity level below. History is stored locally in this browser.
+            . History is stored locally in this browser.
           </Typography>
         </Box>
       </Paper>
@@ -407,9 +488,26 @@ export const Simulator = () => {
             startIcon={isPending ? <RefreshIcon /> : <SendIcon />}
           >
             {isPending
-              ? 'Sending to ML Service…'
+              ? `Sending to ${sendViaBackend ? 'Backend' : 'ML Service'}…`
               : `Send Signal · ${activeModalities} modalit${activeModalities === 1 ? 'y' : 'ies'}`}
           </Button>
+          <FormControlLabel
+            sx={{ mt: 1, ml: 0.25 }}
+            control={
+              <Switch
+                size="small"
+                checked={sendViaBackend}
+                onChange={(e) => setSendViaBackend(e.target.checked)}
+              />
+            }
+            label={
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                {sendViaBackend
+                  ? 'Via Backend (persist + alerts)'
+                  : 'Direct to ML (no persistence)'}
+              </Typography>
+            }
+          />
           {activeModalities === 0 && (
             <Typography variant="caption" sx={{ color: 'text.secondary', textAlign: 'center', display: 'block', mt: 1 }}>
               Enable at least one modality to send.
@@ -594,6 +692,19 @@ export const Simulator = () => {
                     <Typography variant="caption" sx={{ width: 80, color: 'text.secondary', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
                       {timeAgo(h.timestamp)}
                     </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        px: 0.75,
+                        py: 0.2,
+                        borderRadius: 0.5,
+                        backgroundColor: h.route === 'backend' ? 'rgba(34,197,94,0.15)' : 'rgba(59,130,246,0.15)',
+                        color: h.route === 'backend' ? '#22c55e' : '#3b82f6',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      {h.route === 'backend' ? 'backend' : 'ml'}
+                    </Typography>
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
                       {h.metricsCount > 0 && (
                         <Typography variant="caption" sx={{ px: 0.5, py: 0.25, borderRadius: 0.5, backgroundColor: 'rgba(59,130,246,0.15)', color: '#3b82f6' }}>
@@ -666,7 +777,7 @@ export const Simulator = () => {
                       }}
                     >
                       <Typography variant="caption" sx={{ fontWeight: 500, color: 'text.secondary', mb: 1, display: 'block' }}>
-                        ML Service Response
+                        Response Payload
                       </Typography>
                       <Box
                         component="pre"

@@ -15,7 +15,7 @@ COPY build.gradle settings.gradle gradle.properties ./
 COPY src ./src
 
 # Build the application
-RUN gradle build --no-daemon -x test -x processResources
+RUN gradle build --no-daemon -x test
 
 # Runtime stage
 FROM eclipse-temurin:21-jre
