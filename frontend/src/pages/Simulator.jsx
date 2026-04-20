@@ -43,11 +43,11 @@ const SEVERITY_COLORS = {
 
 // Metric values used when building the ML request payload
 const SEVERITY_METRICS = {
-  NORMAL:   { cpu: 25, mem: 35, rt: 120,  err: 0.01 },
-  LOW:      { cpu: 45, mem: 55, rt: 350,  err: 0.05 },
-  MEDIUM:   { cpu: 65, mem: 70, rt: 900,  err: 0.15 },
-  HIGH:     { cpu: 82, mem: 85, rt: 2500, err: 0.30 },
-  CRITICAL: { cpu: 95, mem: 92, rt: 5500, err: 0.60 },
+  NORMAL:   { cpu: 25, mem: 35, rt: 120,  err: 1  },
+  LOW:      { cpu: 45, mem: 55, rt: 350,  err: 5  },
+  MEDIUM:   { cpu: 65, mem: 70, rt: 900,  err: 15 },
+  HIGH:     { cpu: 82, mem: 85, rt: 2500, err: 30 },
+  CRITICAL: { cpu: 95, mem: 92, rt: 5500, err: 60 },
 };
 
 const LS_KEY = 'simulator_history';
@@ -93,7 +93,10 @@ function buildBackendPayload(payload, selectedSeverity) {
     responseTime: Number(metrics.response_time_ms ?? 0),
     statusCode: severityStatusCode[selectedSeverity] ?? 200,
     requestCount: Number(metrics.request_count ?? 1),
-    errorRate: Number(metrics.error_rate ?? 0),
+    errorRate: (() => {
+      const value = Number(metrics.error_rate ?? 0);
+      return Math.max(0, Math.min(1, value > 1 ? value / 100 : value));
+    })(),
     cpuUsage: Number(metrics.cpu_usage ?? 0),
     memoryUsage: Number(metrics.memory_usage ?? 0),
     networkIo: Number(metrics.network_io ?? 0),
@@ -205,10 +208,10 @@ export const Simulator = () => {
 
     if (metricsEnabled) {
       const metricEntry = {
-        cpu_usage: m.cpu + (Math.random() - 0.5) * 5,
-        memory_usage: m.mem + (Math.random() - 0.5) * 5,
-        response_time_ms: m.rt + (Math.random() - 0.5) * 50,
-        error_rate: Math.max(0, Math.min(1, m.err + (Math.random() - 0.5) * 0.02)),
+        cpu_usage: m.cpu,
+        memory_usage: m.mem,
+        response_time_ms: m.rt,
+        error_rate: m.err / 100,
         request_count: 100 + Math.floor(Math.random() * 900),
         service_id: 'service-1',
       };
@@ -223,7 +226,7 @@ export const Simulator = () => {
     }
 
     if (logsEnabled) {
-      const logLevels = { NORMAL: 'INFO', LOW: 'WARN', MEDIUM: 'ERROR', HIGH: 'ERROR', CRITICAL: 'CRITICAL' };
+      const logLevels = { NORMAL: 'INFO', LOW: 'WARNING', MEDIUM: 'ERROR', HIGH: 'ERROR', CRITICAL: 'FATAL' };
       payload.logs = Array.from({ length: logsCount }, (_, i) => ({
         level: logLevels[severity],
         message: `[${severity}] Synthetic log entry #${i + 1}`,
@@ -239,7 +242,10 @@ export const Simulator = () => {
         service: `service-${(i % 4) + 1}`,
         operation: 'http.request',
         duration_ms: m.rt + Math.floor(Math.random() * 200),
+        latency_ms: m.rt + Math.floor(Math.random() * 200),
+        duration: m.rt + Math.floor(Math.random() * 200),
         status_code: severity === 'CRITICAL' || severity === 'HIGH' ? 500 : 200,
+        status: severity === 'CRITICAL' ? 'timeout' : severity === 'HIGH' ? 'error' : 'ok',
       }));
     }
 
@@ -609,7 +615,7 @@ export const Simulator = () => {
                 <Box sx={{ flex: '1 1 150px', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                   {[
                     { label: 'MSIF-LSTM', val: lastResult.mlResult?.msif_score ?? 0 },
-                    { label: 'PLE-GRU',   val: lastResult.mlResult?.ple_score ?? 0 },
+                    { label: 'PLE-GRU', val: lastResult.mlResult?.ple_score ?? 0 },
                   ].map(({ label, val }) => (
                     <Box key={label} sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="caption" sx={{ color: 'text.secondary' }}>
@@ -756,15 +762,15 @@ export const Simulator = () => {
                         py: 0.25,
                         borderRadius: 0.5,
                         backgroundColor:
-                          h.status === 'completed'      ? 'rgba(34,197,94,0.15)'  :
-                          h.status === 'completed_mock' ? 'rgba(234,179,8,0.15)'  :
-                          h.status === 'running'        ? 'rgba(59,130,246,0.15)' :
-                                                          'rgba(107,114,128,0.15)',
+                          h.status === 'completed' ? 'rgba(34,197,94,0.15)' :
+                            h.status === 'completed_mock' ? 'rgba(234,179,8,0.15)' :
+                              h.status === 'running' ? 'rgba(59,130,246,0.15)' :
+                                'rgba(107,114,128,0.15)',
                         color:
-                          h.status === 'completed'      ? '#22c55e' :
-                          h.status === 'completed_mock' ? '#eab308' :
-                          h.status === 'running'        ? '#3b82f6' :
-                                                          '#6b7280',
+                          h.status === 'completed' ? '#22c55e' :
+                            h.status === 'completed_mock' ? '#eab308' :
+                              h.status === 'running' ? '#3b82f6' :
+                                '#6b7280',
                       }}
                     >
                       {h.status}
