@@ -1,0 +1,52 @@
+Run timestamp: 2026-04-29T16:19:56+05:30
+
+TC-01 | ML Model Loading Test
+Expected: MSIF-LSTM, PLE-GRU, MDN-EVL available
+Actual:   models_loaded=['msif', 'ple', 'fusion']; names=['MSIF-LSTM', 'PLE-GRU', 'Hybrid Ensemble']
+Status:   Fail
+
+TC-02 | Log Ingestion Test
+Expected: OpenSearch doc has service, level, timestamp, correlationId
+Actual:   ingest=count=1,failed=0; fields=['level', 'logId', 'message', 'metadata', 'serviceName', 'source', 'spanId', 'timestamp', 'traceId']
+Status:   Fail
+
+TC-03 | Metric Collection Test
+Expected: Metric persisted with apiId and timestamp
+Actual:   api={  "id" : 753,  "message" : "Metric saved successfully",  "status" : "success",  "timestamp" : "2026-04-29T10:49:20"}; db=91001|billing-api|2026-04-29 10:49:20
+Status:   Pass
+
+TC-04 | Multi-Source Feature Fusion Test
+Expected: ML receives correctly fused 3-modality input
+Actual:   ml={"confidence":1.0,"final_score":0.8,"fusion_method":"weighted_agreement","modalities_present":3,"modalities_used":{"logs":true,"metrics":true,"traces":true},"model_agreement":0.96,"msif_score":0.533,"ple_score":0.4957,"prediction_id":"a8a5da08-8df0-4dd8-8868-dee29f58302a","raw_score":0.8,"severity":"CRITICAL","status":"success","timestamp":"2026-04-29T10:49:20.999280"}; backend={  "stage" : null,  "model" : null,  "status" : "DETECTED",  "severity" : "CRITICAL",  "confidence" : 1.0,  "timestamp" : "2026-04-29T10:49:21.053412190",  "id" : null,  "environment" : null,  "serviceName" : null,  "endpoint" : null,  "hybridEnsembleScore" : null,  "source" : null,  "api_name" : "fusion-service",  "anomaly_score" : null,  "stage2_score" : null,  "final_anomaly_score" : 0.8,  "acknowledged" : null}
+Status:   Pass
+
+TC-08 | Alert Acknowledge/Resolve Test
+Expected: Status transitions to ACKNOWLEDGED then RESOLVED in DB
+Actual:   id=591 ack_api=true ack_db=ACKNOWLEDGED|t resolve_api=true resolve_db=RESOLVED|f
+Status:   Fail
+
+TC-09 | Dashboard Real-Time Update Test
+Expected: KPI anomaly count updates within polling interval
+Actual:   before=3 after=3 updated_within_30s=0
+Status:   Fail
+
+TC-10 | Log Timeline Filter Test
+Expected: Environment+level filter returns matching entries
+Actual:   filtered_env_level_count=20 ingested_match_messages_seen=18
+Status:   Pass
+
+TC-12 | Model Registry Status Test
+Expected: Models page returns version, accuracy, throughput
+Actual:   [('MSIF-LSTM', '1.0.0', 94.2, 220), ('PLE-GRU', '1.0.0', 91.7, 280), ('Hybrid Ensemble', '1.0.0', 96.1, 150)]
+Status:   Pass
+
+TC-13 | High Throughput Stability Test
+Expected: Sustained load without crashes or record loss
+Actual:   codes=    120 200; delta=120 backend_health=UP ml_health=healthy restarts_backend=0 restarts_ml=0
+Status:   Pass
+
+TC-14 | Database Persistence Test
+Expected: Anomaly persisted with score, endpoint, service
+Actual:   1|persist-api-1777459758|persist-api-1777459758
+Status:   Pass
+
