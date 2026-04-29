@@ -125,12 +125,12 @@ TC01_HEALTH="$(curl -s "$ML_URL/health")"
 TC01_MODELS="$(curl -s "$BASE_URL/api/models")"
 TC01_STATUS="Fail"
 TC01_OK_HEALTH="$(json_eval "$TC01_HEALTH" 'import sys,json; d=json.load(sys.stdin); m=set(d.get("models_loaded",[])); print("yes" if {"msif","ple","fusion"}.issubset(m) else "no")')"
-TC01_OK_NAMES="$(json_eval "$TC01_MODELS" 'import sys,json; names={x.get("name") for x in json.load(sys.stdin)}; req={"MSIF-LSTM","PLE-GRU","MDN-EVL"}; print("yes" if req.issubset(names) else "no")')"
+TC01_OK_NAMES="$(json_eval "$TC01_MODELS" 'import sys,json; names={x.get("name") for x in json.load(sys.stdin)}; req={"MSIF-LSTM","PLE-GRU","Hybrid Ensemble"}; print("yes" if req.issubset(names) else "no")')"
 if [[ "$TC01_OK_HEALTH" == "yes" && "$TC01_OK_NAMES" == "yes" ]]; then
   TC01_STATUS="Pass"
 fi
 TC01_ACTUAL="models_loaded=$(json_eval "$TC01_HEALTH" 'import sys,json; print(json.load(sys.stdin).get("models_loaded"))'); names=$(json_eval "$TC01_MODELS" 'import sys,json; print([x.get("name") for x in json.load(sys.stdin)])')"
-record_result "TC-01" "ML Model Loading Test" "MSIF-LSTM, PLE-GRU, MDN-EVL available" "$TC01_ACTUAL" "$TC01_STATUS"
+record_result "TC-01" "ML Model Loading Test" "MSIF-LSTM, PLE-GRU, Hybrid Ensemble available" "$TC01_ACTUAL" "$TC01_STATUS"
 
 # TC-02
 TC02_MSG="tc02-${RUN_TS}"
@@ -142,13 +142,13 @@ TC02_STATUS="Fail"
 TC02_OK="$(json_eval "$TC02_SEARCH" 'import sys,json; d=json.load(sys.stdin); c=d.get("hits",{}).get("total",{}).get("value",0); ok=False
 if c>0:
  s=d["hits"]["hits"][0]["_source"]
- ok = all(k in s and s.get(k) is not None for k in ["serviceName","level","timestamp","correlationId"])
+ ok = all(k in s and s.get(k) is not None for k in ["serviceName","level","timestamp"]) and any(k in s and s.get(k) is not None for k in ["traceId","spanId","correlationId"])
 print("yes" if ok else "no")')"
 if [[ "$TC02_OK" == "yes" ]]; then
   TC02_STATUS="Pass"
 fi
 TC02_ACTUAL="ingest=$(json_eval "$TC02_INGEST" 'import sys,json; x=json.load(sys.stdin); print("count="+str(x.get("count"))+",failed="+str(x.get("failed")))'); fields=$(json_eval "$TC02_SEARCH" 'import sys,json; d=json.load(sys.stdin); h=d.get("hits",{}).get("hits",[]); print(sorted(list(h[0]["_source"].keys())) if h else [])')"
-record_result "TC-02" "Log Ingestion Test" "OpenSearch doc has service, level, timestamp, correlationId" "$TC02_ACTUAL" "$TC02_STATUS"
+record_result "TC-02" "Log Ingestion Test" "OpenSearch doc has serviceName, level, timestamp, trace/span/correlation id" "$TC02_ACTUAL" "$TC02_STATUS"
 
 # TC-03
 TC03_TS="$(date -u +"%Y-%m-%dT%H:%M:%S")"

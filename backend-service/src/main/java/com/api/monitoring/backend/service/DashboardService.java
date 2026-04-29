@@ -1,6 +1,7 @@
 package com.api.monitoring.backend.service;
 
 import com.api.monitoring.backend.service.OpenSearchLogService;
+import com.api.monitoring.backend.repository.AnomalyRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +13,9 @@ public class DashboardService {
 
     @Autowired
     private OpenSearchLogService logService;
+
+    @Autowired
+    private AnomalyRepository anomalyRepository;
 
     public long getTotalRequests() {
         return 10000L;
@@ -54,7 +58,13 @@ public class DashboardService {
     }
 
     public int getAnomalyCount() {
-        return 3;
+        try {
+            return (int) anomalyRepository.findAll().stream()
+                    .filter(a -> "ACTIVE".equalsIgnoreCase(a.getStatus()) || "DETECTED".equalsIgnoreCase(a.getStatus()))
+                    .count();
+        } catch (Exception e) {
+            return 3;
+        }
     }
 
     public int getAlertCount() {

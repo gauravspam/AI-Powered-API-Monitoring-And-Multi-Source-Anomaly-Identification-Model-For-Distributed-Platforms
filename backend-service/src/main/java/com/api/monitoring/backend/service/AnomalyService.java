@@ -293,9 +293,7 @@ public class AnomalyService {
             if (anomaly == null)
                 return false;
 
-            anomaly.setStatus("RESOLVED");
-            anomaly.setResolvedAt(java.time.LocalDateTime.now());
-            anomaly.setResolvedBy("system");
+            anomaly.resolve();
 
             anomalyRepository.save(anomaly);
             return true;
